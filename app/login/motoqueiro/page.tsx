@@ -3,13 +3,14 @@
 import { useState } from 'react'
 import { supabase } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
-import { Bike, Phone, Lock, AlertCircle } from 'lucide-react'
+import { Bike, Phone, Lock, AlertCircle, Eye, EyeOff } from 'lucide-react'
 
 export default function RiderLogin() {
   const [phone, setPhone] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const router = useRouter()
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -17,22 +18,37 @@ export default function RiderLogin() {
     setLoading(true)
     setError('')
 
-    const { data: rider, error } = await supabase
-      .from('riders')
-      .select('*')
-      .eq('phone', phone)
-      .single()
-
-    if (error || !rider) {
-      setError('Motoqueiro não encontrado')
+    if (!phone || !password) {
+      setError('Preencha todos os campos')
       setLoading(false)
       return
     }
 
+    console.log('Tentando login com:', phone)
+
+    const { data: rider, error } = await supabase
+      .from('riders')
+      .select('*, plate:plates(plate_number)')
+      .eq('phone', phone)
+      .single()
+
+    if (error || !rider) {
+      console.error('Erro:', error)
+      setError('Motoqueiro não encontrado. Verifique o telefone.')
+      setLoading(false)
+      return
+    }
+
+    console.log('Motoqueiro encontrado:', rider.name)
+
     if (rider.password_hash === password) {
       localStorage.setItem('rider_id', rider.id)
       localStorage.setItem('rider_name', rider.name)
+      localStorage.setItem('rider_phone', rider.phone)
       localStorage.setItem('rider_plate_id', rider.plate_id || '')
+      localStorage.setItem('rider_plate_name', rider.plate?.plate_number || '')
+      
+      console.log('Login bem sucedido, redirecionando...')
       router.push('/dashboard/motoqueiro')
     } else {
       setError('Senha incorreta')
@@ -41,11 +57,11 @@ export default function RiderLogin() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-orange-500 to-red-600 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-gradient-to-br from-amber-500 to-red-600 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-8">
         <div className="flex flex-col items-center mb-8">
-          <div className="bg-orange-100 p-4 rounded-full mb-4">
-            <Bike className="w-12 h-12 text-orange-600" />
+          <div className="bg-amber-100 p-4 rounded-full mb-4">
+            <Bike className="w-12 h-12 text-amber-600" />
           </div>
           <h1 className="text-2xl font-bold text-gray-900">MeuPiloto!</h1>
           <p className="text-gray-600">Acesso Motoqueiro</p>
@@ -62,7 +78,7 @@ export default function RiderLogin() {
                 type="tel"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
-                className="pl-10 w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                className="pl-10 w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
                 placeholder="923456001"
                 required
               />
@@ -76,13 +92,20 @@ export default function RiderLogin() {
             <div className="relative">
               <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
               <input
-                type="password"
+                type={showPassword ? 'text' : 'password'}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="pl-10 w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                className="pl-10 pr-10 w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
                 placeholder="senha123"
                 required
               />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+              >
+                {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+              </button>
             </div>
           </div>
 
@@ -96,12 +119,20 @@ export default function RiderLogin() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-orange-600 text-white py-3 rounded-lg font-semibold hover:bg-orange-700 transition disabled:opacity-50"
+            className="w-full bg-amber-600 text-white py-3 rounded-lg font-semibold hover:bg-amber-700 transition disabled:opacity-50 flex items-center justify-center gap-2"
           >
-            {loading ? 'Entrando...' : 'Entrar'}
+            {loading ? (
+              <>
+                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                Entrando...
+              </>
+            ) : (
+              'Entrar'
+            )}
           </button>
         </form>
 
+       
       </div>
     </div>
   )

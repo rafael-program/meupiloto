@@ -3,53 +3,32 @@
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
-import { 
-  ArrowLeft, 
-  Phone, 
-  User, 
-  CheckCircle, 
-  XCircle, 
-  Navigation,
-  Star,
-  Wifi,
-  WifiOff,
-  Clock,
-  MapPin,
-  CreditCard,
-  Shield,
-  Award
-} from 'lucide-react'
-import type { Plate, Boss, Rider } from '@/types'
+import { ArrowLeft, Phone, User, CheckCircle, XCircle, Navigation } from 'lucide-react'
 
 export default function PlateRiders() {
   const { id } = useParams()
   const router = useRouter()
-  const [plate, setPlate] = useState<Plate | null>(null)
-  const [riders, setRiders] = useState<Rider[]>([])
+  const [plate, setPlate] = useState<any>(null)
+  const [riders, setRiders] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
-  const [selectedRider, setSelectedRider] = useState<Rider | null>(null)
-  const [showOrderModal, setShowOrderModal] = useState(false)
+  const [showForm, setShowForm] = useState(false)
+  const [selectedRider, setSelectedRider] = useState<any>(null)
+  const [formData, setFormData] = useState({
+    customerName: '',
+    customerPhone: '',
+    pickupAddress: '',
+    dropoffAddress: '',
+    price: 1000
+  })
 
   useEffect(() => {
     loadPlateAndRiders()
-    
-    const subscription = supabase
-      .channel('public:riders')
-      .on('postgres_changes', 
-        { event: 'UPDATE', schema: 'public', table: 'riders', filter: `plate_id=eq.${id}` },
-        () => loadPlateAndRiders()
-      )
-      .subscribe()
-
-    return () => {
-      subscription.unsubscribe()
-    }
   }, [id])
 
   const loadPlateAndRiders = async () => {
     const { data: plateData } = await supabase
       .from('plates')
-      .select('*, boss:bosses(*)')
+      .select('*')
       .eq('id', id)
       .single()
 
@@ -65,338 +44,187 @@ export default function PlateRiders() {
     setLoading(false)
   }
 
-  const openOrderModal = (rider: Rider) => {
+  const handleOpenForm = (rider: any) => {
     setSelectedRider(rider)
-    setShowOrderModal(true)
+    setShowForm(true)
   }
 
-  const createOrder = async (orderData: {
-    customerName: string
-    customerPhone: string
-    pickupAddress: string
-    dropoffAddress: string
-    price: number
-  }) => {
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    
     if (!selectedRider) return
 
+    // Inserir com todos os campos necessários
     const { error } = await supabase
       .from('orders')
       .insert({
         rider_id: selectedRider.id,
         plate_id: id as string,
-        customer_name: orderData.customerName,
-        customer_phone: orderData.customerPhone,
-        pickup_address: orderData.pickupAddress,
-        dropoff_address: orderData.dropoffAddress,
-        price: orderData.price,
+        customer_name: formData.customerName,
+        customer_phone: formData.customerPhone,
+        pickup_address: formData.pickupAddress,
+        dropoff_address: formData.dropoffAddress,
+        price: formData.price,
         status: 'pending',
-        client_name: orderData.customerName,
-        client_phone: orderData.customerPhone,
-        pickup_location: orderData.pickupAddress,
-        destination: orderData.dropoffAddress
+        // Campos adicionais para evitar erro de null
+        client_name: formData.customerName,
+        client_phone: formData.customerPhone,
+        pickup_location: formData.pickupAddress,
+        destination: formData.dropoffAddress
       })
 
     if (error) {
+      console.error('Erro detalhado:', error)
       alert('Erro ao criar pedido: ' + error.message)
     } else {
-      setShowOrderModal(false)
       alert(`✅ Pedido enviado para ${selectedRider.name}! Ele irá te ligar em breve.`)
+      setShowForm(false)
+      setFormData({
+        customerName: '',
+        customerPhone: '',
+        pickupAddress: '',
+        dropoffAddress: '',
+        price: 1000
+      })
       router.push('/')
     }
   }
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-amber-50 to-red-50">
+      <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-amber-500 mx-auto mb-4"></div>
-          <p className="text-gray-600">Carregando motoqueiros...</p>
+          <p>Carregando...</p>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-white border-b sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto px-4 py-3">
-          <div className="flex items-center gap-3">
-            <button 
-              onClick={() => router.back()} 
-              className="p-2 hover:bg-gray-100 rounded-full transition"
-            >
-              <ArrowLeft className="w-5 h-5 text-gray-600" />
-            </button>
-            <div>
-              <h1 className="text-xl font-bold text-gray-900">{plate?.plate_number}</h1>
-              <p className="text-xs text-gray-500">Escolha seu motoqueiro</p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Estatísticas da Placa */}
-      <div className="bg-gradient-to-r from-amber-500 to-red-500 text-white p-4">
+    <div className="min-h-screen bg-gray-100">
+      <div className="bg-white shadow-sm p-4 sticky top-0 z-10">
         <div className="max-w-7xl mx-auto">
-          <div className="flex justify-around">
-            <div className="text-center">
-              <div className="text-2xl font-bold">{riders.length}</div>
-              <div className="text-xs opacity-90">Motoqueiros</div>
-            </div>
-            <div className="text-center">
-              <div className="text-2xl font-bold">{riders.filter(r => r.is_online).length}</div>
-              <div className="text-xs opacity-90">Online agora</div>
-            </div>
-            <div className="text-center">
-              <div className="text-2xl font-bold">24/7</div>
-              <div className="text-xs opacity-90">Disponível</div>
-            </div>
-          </div>
+          <button onClick={() => router.back()} className="flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-4">
+            <ArrowLeft className="w-5 h-5" />
+            Voltar
+          </button>
+          <h1 className="text-2xl font-bold text-gray-900">{plate?.plate_number}</h1>
+          <p className="text-gray-600 text-sm">Escolha seu motoqueiro</p>
         </div>
       </div>
 
-      {/* Lista de Motoqueiros */}
-      <div className="max-w-2xl mx-auto px-4 py-6">
+      <div className="max-w-7xl mx-auto p-4">
         <div className="space-y-4">
           {riders.map((rider) => (
-            <div 
-              key={rider.id} 
-              className={`bg-white rounded-xl shadow-sm hover:shadow-md transition-all duration-300 overflow-hidden ${
-                !rider.is_online ? 'opacity-75' : ''
-              }`}
-            >
-              {/* Status Bar */}
-              <div className={`h-1 ${rider.is_online ? 'bg-green-500' : 'bg-gray-300'}`}></div>
-              
-              <div className="p-4">
-                <div className="flex items-start gap-4">
-                  {/* Avatar */}
-                  <div className="relative">
-                    {rider.photo_url ? (
-                      <img 
-                        src={rider.photo_url} 
-                        alt={rider.name}
-                        className="w-16 h-16 rounded-full object-cover border-2 border-amber-300"
-                      />
-                    ) : (
-                      <div className="w-16 h-16 bg-gradient-to-br from-amber-400 to-red-500 rounded-full flex items-center justify-center">
-                        <User className="w-8 h-8 text-white" />
-                      </div>
-                    )}
-                    {rider.is_online && (
-                      <div className="absolute bottom-0 right-0 w-4 h-4 bg-green-500 border-2 border-white rounded-full"></div>
-                    )}
-                  </div>
-
-                  {/* Informações */}
-                  <div className="flex-1">
-                    <div className="flex items-center justify-between mb-2">
-                      <div>
-                        <h3 className="font-bold text-gray-900">{rider.name}</h3>
-                        <div className="flex items-center gap-2 mt-1">
-                          {rider.is_online ? (
-                            <span className="flex items-center gap-1 text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">
-                              <Wifi className="w-3 h-3" />
-                              Online
-                            </span>
-                          ) : (
-                            <span className="flex items-center gap-1 text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">
-                              <WifiOff className="w-3 h-3" />
-                              Offline
-                            </span>
-                          )}
-                          <span className="text-xs text-gray-400">BI: {rider.bi}</span>
-                        </div>
-                      </div>
-                      
-                      {/* Botão Pedir */}
-                      <button
-                        onClick={() => openOrderModal(rider)}
-                        disabled={!rider.is_online}
-                        className={`px-5 py-2.5 rounded-xl font-semibold flex items-center gap-2 transition-all ${
-                          rider.is_online
-                            ? 'bg-amber-500 text-white hover:bg-amber-600 shadow-md hover:shadow-lg'
-                            : 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                        }`}
-                      >
-                        <Navigation className="w-4 h-4" />
-                        Pedir
-                      </button>
+            <div key={rider.id} className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-lg transition">
+              <div className="p-4 flex items-center gap-4">
+                <div className="flex-shrink-0">
+                  {rider.photo_url ? (
+                    <img src={rider.photo_url} alt={rider.name} className="w-16 h-16 rounded-full object-cover border-2 border-amber-300" />
+                  ) : (
+                    <div className="w-16 h-16 bg-gradient-to-br from-amber-400 to-red-500 rounded-full flex items-center justify-center">
+                      <User className="w-8 h-8 text-white" />
                     </div>
-
-                    {/* Detalhes adicionais */}
-                    <div className="flex items-center gap-4 text-xs text-gray-500 mt-3 pt-3 border-t">
-                      <div className="flex items-center gap-1">
-                        <Phone className="w-3 h-3" />
-                        {rider.phone}
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <Award className="w-3 h-3" />
-                        4.8 ★
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <Clock className="w-3 h-3" />
-                        {Math.floor(Math.random() * 10) + 1} min
-                      </div>
-                    </div>
-                  </div>
+                  )}
                 </div>
+
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-1">
+                    <h3 className="font-semibold text-lg">{rider.name}</h3>
+                    {rider.is_online ? (
+                      <span className="flex items-center gap-1 bg-green-100 text-green-700 px-2 py-1 rounded-full text-xs">
+                        <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                        Online
+                      </span>
+                    ) : (
+                      <span className="flex items-center gap-1 bg-gray-100 text-gray-500 px-2 py-1 rounded-full text-xs">
+                        <XCircle className="w-3 h-3" />
+                        Offline
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-gray-500 text-sm">BI: {rider.bi}</p>
+                  <p className="text-gray-500 text-sm flex items-center gap-1">
+                    <Phone className="w-3 h-3" />
+                    {rider.phone}
+                  </p>
+                </div>
+
+                <button
+                  onClick={() => handleOpenForm(rider)}
+                  disabled={!rider.is_online}
+                  className={`px-6 py-3 rounded-xl font-semibold flex items-center gap-2 transition ${
+                    rider.is_online
+                      ? 'bg-amber-500 text-white hover:bg-amber-600 shadow-md'
+                      : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                  }`}
+                >
+                  <Navigation className="w-4 h-4" />
+                  Pedir Moto
+                </button>
               </div>
             </div>
           ))}
 
           {riders.length === 0 && (
-            <div className="text-center py-12 bg-white rounded-xl">
-              <User className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-              <p className="text-gray-500">Nenhum motoqueiro cadastrado nesta placa</p>
+            <div className="bg-white rounded-xl p-12 text-center text-gray-500">
+              <User className="w-16 h-16 mx-auto mb-4 text-gray-300" />
+              <p>Nenhum motoqueiro cadastrado nesta placa</p>
             </div>
           )}
         </div>
       </div>
 
-      {/* Modal de Pedido */}
-      {showOrderModal && selectedRider && (
-        <OrderModal 
-          rider={selectedRider}
-          onClose={() => setShowOrderModal(false)}
-          onSubmit={createOrder}
-        />
-      )}
-    </div>
-  )
-}
-
-// Componente do Modal de Pedido
-function OrderModal({ 
-  rider, 
-  onClose, 
-  onSubmit 
-}: { 
-  rider: Rider
-  onClose: () => void
-  onSubmit: (data: any) => void
-}) {
-  const [formData, setFormData] = useState({
-    customerName: '',
-    customerPhone: '',
-    pickupAddress: '',
-    dropoffAddress: '',
-    price: 1000
-  })
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    onSubmit(formData)
-  }
-
-  return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl max-w-md w-full max-h-[90vh] overflow-y-auto">
-        {/* Header do Modal */}
-        <div className="bg-gradient-to-r from-amber-500 to-red-500 p-4 rounded-t-2xl">
-          <div className="flex items-center gap-3">
-            {rider.photo_url ? (
-              <img src={rider.photo_url} alt={rider.name} className="w-12 h-12 rounded-full border-2 border-white" />
-            ) : (
-              <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center">
-                <User className="w-6 h-6 text-white" />
+      {/* Modal */}
+      {showForm && selectedRider && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex',
+          alignItems: 'center', justifyContent: 'center', zIndex: 9999
+        }}>
+          <div style={{ backgroundColor: 'white', borderRadius: '1rem', maxWidth: '28rem', width: '90%', maxHeight: '90vh', overflow: 'auto' }}>
+            <div style={{ background: 'linear-gradient(135deg, #f59e0b, #ef4444)', padding: '1rem', borderRadius: '1rem 1rem 0 0', color: 'white' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <h3 style={{ fontWeight: 'bold' }}>Solicitar Corrida</h3>
+                <button onClick={() => setShowForm(false)} style={{ background: 'none', border: 'none', color: 'white', fontSize: '1.25rem', cursor: 'pointer' }}>✕</button>
               </div>
-            )}
-            <div className="flex-1 text-white">
-              <h3 className="font-bold">Solicitar Corrida</h3>
-              <p className="text-sm opacity-90">Motoqueiro: {rider.name}</p>
+              <p style={{ fontSize: '0.875rem', opacity: 0.8, marginTop: '0.25rem' }}>Motoqueiro: {selectedRider.name}</p>
             </div>
-            <button onClick={onClose} className="text-white/80 hover:text-white">
-              ✕
-            </button>
+
+            <form onSubmit={handleSubmit} style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: '500', marginBottom: '0.25rem' }}>Seu nome</label>
+                <input type="text" required value={formData.customerName} onChange={(e) => setFormData({...formData, customerName: e.target.value})} style={{ width: '100%', padding: '0.5rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} placeholder="Digite seu nome" />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: '500', marginBottom: '0.25rem' }}>Seu telefone</label>
+                <input type="tel" required value={formData.customerPhone} onChange={(e) => setFormData({...formData, customerPhone: e.target.value})} style={{ width: '100%', padding: '0.5rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} placeholder="923456789" />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: '500', marginBottom: '0.25rem' }}>Endereço de origem</label>
+                <input type="text" required value={formData.pickupAddress} onChange={(e) => setFormData({...formData, pickupAddress: e.target.value})} style={{ width: '100%', padding: '0.5rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} placeholder="Onde você está?" />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: '500', marginBottom: '0.25rem' }}>Endereço de destino</label>
+                <input type="text" required value={formData.dropoffAddress} onChange={(e) => setFormData({...formData, dropoffAddress: e.target.value})} style={{ width: '100%', padding: '0.5rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} placeholder="Para onde você vai?" />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: '500', marginBottom: '0.25rem' }}>Valor da corrida (Kz)</label>
+                <input type="number" required value={formData.price} onChange={(e) => setFormData({...formData, price: parseInt(e.target.value)})} style={{ width: '100%', padding: '0.5rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} placeholder="1000" />
+              </div>
+
+              <button type="submit" style={{ width: '100%', background: '#f59e0b', color: 'white', padding: '0.75rem', border: 'none', borderRadius: '0.75rem', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
+                <Navigation size={16} /> Confirmar Pedido
+              </button>
+            </form>
           </div>
         </div>
-
-        {/* Formulário */}
-        <form onSubmit={handleSubmit} className="p-5 space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Seu nome
-            </label>
-            <input
-              type="text"
-              required
-              value={formData.customerName}
-              onChange={(e) => setFormData({...formData, customerName: e.target.value})}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
-              placeholder="Digite seu nome"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Seu telefone
-            </label>
-            <input
-              type="tel"
-              required
-              value={formData.customerPhone}
-              onChange={(e) => setFormData({...formData, customerPhone: e.target.value})}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
-              placeholder="923456789"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              <MapPin className="w-3 h-3 inline mr-1 text-green-600" />
-              Endereço de origem
-            </label>
-            <input
-              type="text"
-              required
-              value={formData.pickupAddress}
-              onChange={(e) => setFormData({...formData, pickupAddress: e.target.value})}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
-              placeholder="Onde você está?"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              <MapPin className="w-3 h-3 inline mr-1 text-red-600" />
-              Endereço de destino
-            </label>
-            <input
-              type="text"
-              required
-              value={formData.dropoffAddress}
-              onChange={(e) => setFormData({...formData, dropoffAddress: e.target.value})}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
-              placeholder="Para onde você vai?"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              <CreditCard className="w-3 h-3 inline mr-1" />
-              Valor da corrida (Kz)
-            </label>
-            <input
-              type="number"
-              required
-              value={formData.price}
-              onChange={(e) => setFormData({...formData, price: parseInt(e.target.value)})}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
-              placeholder="1000"
-            />
-          </div>
-
-          <button
-            type="submit"
-            className="w-full bg-amber-500 text-white py-3 rounded-xl font-semibold hover:bg-amber-600 transition flex items-center justify-center gap-2"
-          >
-            <Navigation className="w-4 h-4" />
-            Confirmar Pedido
-          </button>
-        </form>
-      </div>
+      )}
     </div>
   )
 }
