@@ -1,4 +1,4 @@
-// app/dashboard/chefe/page.tsx
+// app/dashboard/chefe/page.tsx - VERSÃO COMPLETA CORRIGIDA
 'use client'
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase/client'
@@ -7,7 +7,7 @@ import {
   Bike, Users, Plus, Edit, Trash2, LogOut, DollarSign,
   CheckCircle, XCircle, Search, UserPlus, CreditCard,
   Smartphone, Building, Copy, Check, TrendingUp, Settings, AlertCircle,
-  X
+  X, Camera
 } from 'lucide-react'
 
 export default function BossDashboard() {
@@ -126,12 +126,18 @@ export default function BossDashboard() {
     router.push('/login/chefe')
   }
 
+  const filteredRiders = riders.filter(rider =>
+    rider.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    rider.phone.includes(searchTerm) ||
+    rider.bi.toLowerCase().includes(searchTerm.toLowerCase())
+  )
+
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-amber-500 mx-auto mb-4"></div>
-          <p className="text-gray-600">Carregando dashboard...</p>
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#f3f4f6' }}>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ animation: 'spin 1s linear infinite', width: '3rem', height: '3rem', border: '2px solid #f59e0b', borderTopColor: 'transparent', borderRadius: '9999px', margin: '0 auto 1rem' }}></div>
+          <p style={{ color: '#6b7280' }}>Carregando dashboard...</p>
         </div>
       </div>
     )
@@ -139,42 +145,42 @@ export default function BossDashboard() {
 
   if (!plate) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center bg-white p-8 rounded-xl shadow-lg max-w-md">
-          <AlertCircle className="w-16 h-16 text-amber-500 mx-auto mb-4" />
-          <h2 className="text-xl font-bold text-gray-900 mb-2">Nenhuma placa encontrada</h2>
-          <p className="text-gray-600 mb-4">Execute o SQL para associar sua placa.</p>
-          <button onClick={handleLogout} className="bg-amber-500 text-white px-6 py-2 rounded-lg">Sair</button>
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#f3f4f6' }}>
+        <div style={{ textAlign: 'center', backgroundColor: 'white', padding: '2rem', borderRadius: '1rem', maxWidth: '28rem' }}>
+          <AlertCircle size={64} color="#f59e0b" style={{ margin: '0 auto 1rem' }} />
+          <h2 style={{ fontSize: '1.25rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>Nenhuma placa encontrada</h2>
+          <p style={{ marginBottom: '1rem' }}>Você não está associado a nenhuma placa.</p>
+          <button onClick={handleLogout} style={{ backgroundColor: '#f59e0b', color: 'white', padding: '0.5rem 1.5rem', border: 'none', borderRadius: '0.5rem', cursor: 'pointer' }}>Sair</button>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div style={{ minHeight: '100vh', backgroundColor: '#f3f4f6' }}>
       {/* Header */}
-      <div className="bg-white border-b sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto px-4 py-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="bg-gradient-to-r from-amber-500 to-red-500 p-2 rounded-lg">
-                <Bike className="w-6 h-6 text-white" />
+      <div style={{ backgroundColor: 'white', borderBottom: '1px solid #e5e7eb', position: 'sticky', top: 0, zIndex: 10 }}>
+        <div style={{ maxWidth: '1280px', margin: '0 auto', padding: '0.75rem 1rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <div style={{ background: 'linear-gradient(135deg, #f59e0b, #ef4444)', padding: '0.5rem', borderRadius: '0.5rem' }}>
+                <Bike size={24} color="white" />
               </div>
               <div>
-                <h1 className="text-xl font-bold text-gray-900">Dashboard Chefe</h1>
-                <p className="text-xs text-gray-500">{plate?.plate_number}</p>
+                <h1 style={{ fontSize: '1.25rem', fontWeight: 'bold' }}>Dashboard Chefe</h1>
+                <p style={{ fontSize: '0.75rem', color: '#6b7280' }}>{plate?.plate_number}</p>
               </div>
             </div>
-            <div className="flex items-center gap-3">
-              <button onClick={() => setShowConfigModal(true)} className="p-2 hover:bg-gray-100 rounded-full">
-                <Settings className="w-5 h-5 text-gray-600" />
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <button onClick={() => setShowConfigModal(true)} style={{ padding: '0.5rem', background: 'none', border: 'none', cursor: 'pointer', borderRadius: '9999px' }}>
+                <Settings size={20} color="#4b5563" />
               </button>
-              <div className="text-right">
-                <p className="text-sm font-medium text-gray-900">{boss?.name}</p>
-                <p className="text-xs text-gray-500">{boss?.phone}</p>
+              <div style={{ textAlign: 'right' }}>
+                <p style={{ fontSize: '0.875rem', fontWeight: '500' }}>{boss?.name}</p>
+                <p style={{ fontSize: '0.75rem', color: '#6b7280' }}>{boss?.phone}</p>
               </div>
-              <button onClick={handleLogout} className="p-2 hover:bg-gray-100 rounded-full">
-                <LogOut className="w-5 h-5 text-gray-600" />
+              <button onClick={handleLogout} style={{ padding: '0.5rem', background: 'none', border: 'none', cursor: 'pointer', borderRadius: '9999px' }}>
+                <LogOut size={20} color="#4b5563" />
               </button>
             </div>
           </div>
@@ -182,85 +188,85 @@ export default function BossDashboard() {
       </div>
 
       {/* Cards */}
-      <div className="max-w-7xl mx-auto px-4 py-6">
-        <div className="grid grid-cols-5 gap-4">
-          <div className="bg-white rounded-xl p-4 shadow-sm">
-            <p className="text-xs text-gray-500">Motoqueiros</p>
-            <p className="text-2xl font-bold">{stats.totalRiders} / {stats.maxRiders}</p>
-            <p className="text-xs text-green-600">{stats.availableSlots} vagas</p>
+      <div style={{ maxWidth: '1280px', margin: '0 auto', padding: '1.5rem 1rem' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '1rem' }}>
+          <div style={{ backgroundColor: 'white', borderRadius: '0.75rem', padding: '1rem' }}>
+            <p style={{ fontSize: '0.75rem', color: '#6b7280' }}>Motoqueiros</p>
+            <p style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>{stats.totalRiders} / {stats.maxRiders}</p>
+            <p style={{ fontSize: '0.75rem', color: '#059669' }}>{stats.availableSlots} vagas</p>
           </div>
-          <div className="bg-white rounded-xl p-4 shadow-sm">
-            <p className="text-xs text-gray-500">Online</p>
-            <p className="text-2xl font-bold text-green-600">{stats.onlineNow}</p>
+          <div style={{ backgroundColor: 'white', borderRadius: '0.75rem', padding: '1rem' }}>
+            <p style={{ fontSize: '0.75rem', color: '#6b7280' }}>Online</p>
+            <p style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#059669' }}>{stats.onlineNow}</p>
           </div>
-          <div className="bg-white rounded-xl p-4 shadow-sm">
-            <p className="text-xs text-gray-500">Ativos</p>
-            <p className="text-2xl font-bold text-blue-600">{stats.activeRiders}</p>
+          <div style={{ backgroundColor: 'white', borderRadius: '0.75rem', padding: '1rem' }}>
+            <p style={{ fontSize: '0.75rem', color: '#6b7280' }}>Ativos</p>
+            <p style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#2563eb' }}>{stats.activeRiders}</p>
           </div>
-          <div className="bg-white rounded-xl p-4 shadow-sm">
-            <p className="text-xs text-gray-500">Taxa/Motoqueiro</p>
-            <p className="text-2xl font-bold text-amber-600">{stats.feePerRider} Kz</p>
+          <div style={{ backgroundColor: 'white', borderRadius: '0.75rem', padding: '1rem' }}>
+            <p style={{ fontSize: '0.75rem', color: '#6b7280' }}>Taxa/Motoqueiro</p>
+            <p style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#d97706' }}>{stats.feePerRider} Kz</p>
           </div>
-          <div className="bg-gradient-to-r from-amber-500 to-red-500 rounded-xl p-4 text-white">
-            <p className="text-xs opacity-80">Total Semanal</p>
-            <p className="text-2xl font-bold">{stats.weeklyPayment.toLocaleString()} Kz</p>
+          <div style={{ background: 'linear-gradient(135deg, #f59e0b, #ef4444)', borderRadius: '0.75rem', padding: '1rem', color: 'white' }}>
+            <p style={{ fontSize: '0.75rem', opacity: 0.8 }}>Total Semanal</p>
+            <p style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>{stats.weeklyPayment.toLocaleString()} Kz</p>
           </div>
         </div>
       </div>
 
       {/* Botões */}
-      <div className="max-w-7xl mx-auto px-4 mb-6 flex gap-3">
-        <button onClick={() => setShowAddRider(true)} className="flex items-center gap-2 px-4 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600">
-          <UserPlus className="w-4 h-4" /> Novo Motoqueiro
+      <div style={{ maxWidth: '1280px', margin: '0 auto', padding: '0 1rem 1.5rem', display: 'flex', gap: '0.75rem' }}>
+        <button onClick={() => setShowAddRider(true)} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem 1rem', backgroundColor: '#f59e0b', color: 'white', border: 'none', borderRadius: '0.5rem', cursor: 'pointer' }}>
+          <UserPlus size={16} /> Novo Motoqueiro
         </button>
-        <button onClick={() => setShowPaymentModal(true)} className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600">
-          <CreditCard className="w-4 h-4" /> Pagar Taxa ({stats.weeklyPayment.toLocaleString()} Kz)
+        <button onClick={() => setShowPaymentModal(true)} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem 1rem', backgroundColor: '#10b981', color: 'white', border: 'none', borderRadius: '0.5rem', cursor: 'pointer' }}>
+          <CreditCard size={16} /> Pagar Taxa ({stats.weeklyPayment.toLocaleString()} Kz)
         </button>
       </div>
 
       {/* Lista de Motoqueiros */}
-      <div className="max-w-7xl mx-auto px-4 pb-8">
-        <div className="bg-white rounded-xl shadow-sm">
-          <div className="p-4 border-b flex justify-between items-center">
-            <h2 className="font-semibold">Motoqueiros ({stats.totalRiders})</h2>
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-              <input type="text" placeholder="Buscar..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-9 pr-4 py-2 border rounded-lg text-sm w-64" />
+      <div style={{ maxWidth: '1280px', margin: '0 auto', padding: '0 1rem 2rem' }}>
+        <div style={{ backgroundColor: 'white', borderRadius: '0.75rem' }}>
+          <div style={{ padding: '1rem', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <h2 style={{ fontWeight: '600' }}>Motoqueiros ({stats.totalRiders})</h2>
+            <div style={{ position: 'relative' }}>
+              <Search size={16} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: '#9ca3af' }} />
+              <input type="text" placeholder="Buscar..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} style={{ padding: '0.5rem 0.5rem 0.5rem 2rem', border: '1px solid #d1d5db', borderRadius: '0.5rem', width: '16rem' }} />
             </div>
           </div>
-          <div className="divide-y">
-            {riders.filter(r => r.name.toLowerCase().includes(searchTerm.toLowerCase())).map((rider) => (
-              <div key={rider.id} className="p-4 flex items-center justify-between hover:bg-gray-50">
-                <div className="flex items-center gap-3">
+          <div>
+            {filteredRiders.map((rider) => (
+              <div key={rider.id} style={{ padding: '1rem', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                   {rider.photo_url ? (
-                    <img src={rider.photo_url} alt={rider.name} className="w-10 h-10 rounded-full object-cover" />
+                    <img src={rider.photo_url} alt={rider.name} style={{ width: '2.5rem', height: '2.5rem', borderRadius: '9999px', objectFit: 'cover' }} />
                   ) : (
-                    <div className="w-10 h-10 bg-amber-100 rounded-full flex items-center justify-center">
-                      <Bike className="w-5 h-5 text-amber-600" />
+                    <div style={{ width: '2.5rem', height: '2.5rem', backgroundColor: '#fef3c7', borderRadius: '9999px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <Bike size={20} color="#d97706" />
                     </div>
                   )}
                   <div>
-                    <p className="font-medium">{rider.name}</p>
-                    <p className="text-xs text-gray-500">{rider.phone} • BI: {rider.bi}</p>
-                    {rider.is_online && <span className="text-xs text-green-600">● Online</span>}
+                    <p style={{ fontWeight: '500' }}>{rider.name}</p>
+                    <p style={{ fontSize: '0.75rem', color: '#6b7280' }}>{rider.phone} • BI: {rider.bi}</p>
+                    {rider.is_online && <span style={{ fontSize: '0.75rem', color: '#059669' }}>● Online</span>}
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className={`px-2 py-1 rounded-full text-xs ${rider.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <span style={{ padding: '0.25rem 0.5rem', borderRadius: '9999px', fontSize: '0.75rem', backgroundColor: rider.status === 'active' ? '#d1fae5' : '#fee2e2', color: rider.status === 'active' ? '#065f46' : '#991b1b' }}>
                     {rider.status === 'active' ? 'Ativo' : 'Inativo'}
                   </span>
-                  <button onClick={() => { setSelectedRider(rider); setShowEditRider(true) }} className="p-2 text-blue-500 hover:bg-blue-50 rounded-lg">
-                    <Edit className="w-4 h-4" />
+                  <button onClick={() => { setSelectedRider(rider); setShowEditRider(true) }} style={{ padding: '0.5rem', background: 'none', border: 'none', cursor: 'pointer', color: '#3b82f6', borderRadius: '0.5rem' }}>
+                    <Edit size={16} />
                   </button>
-                  <button onClick={() => deleteRider(rider.id)} className="p-2 text-red-500 hover:bg-red-50 rounded-lg">
-                    <Trash2 className="w-4 h-4" />
+                  <button onClick={() => deleteRider(rider.id)} style={{ padding: '0.5rem', background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444', borderRadius: '0.5rem' }}>
+                    <Trash2 size={16} />
                   </button>
                 </div>
               </div>
             ))}
             {riders.length === 0 && (
-              <div className="p-8 text-center text-gray-500">
-                <Users className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+              <div style={{ padding: '2rem', textAlign: 'center', color: '#6b7280' }}>
+                <Users size={48} style={{ margin: '0 auto 0.75rem', color: '#d1d5db' }} />
                 <p>Nenhum motoqueiro cadastrado</p>
               </div>
             )}
@@ -357,18 +363,18 @@ function AddRiderModal({ plateId, onClose, onSuccess }: any) {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl max-w-md w-full">
-        <div className="bg-gradient-to-r from-amber-500 to-red-500 p-4 rounded-t-2xl flex justify-between text-white">
-          <h3 className="font-bold">Novo Motoqueiro</h3>
-          <button onClick={onClose} className="text-white/80 hover:text-white">✕</button>
+    <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 }}>
+      <div style={{ backgroundColor: 'white', borderRadius: '1rem', maxWidth: '28rem', width: '90%' }}>
+        <div style={{ background: 'linear-gradient(135deg, #f59e0b, #ef4444)', padding: '1rem', borderRadius: '1rem 1rem 0 0', display: 'flex', justifyContent: 'space-between', color: 'white' }}>
+          <h3 style={{ fontWeight: 'bold' }}>Novo Motoqueiro</h3>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer', fontSize: '1.25rem' }}>✕</button>
         </div>
-        <form onSubmit={handleSubmit} className="p-5 space-y-4">
-          <input type="text" required placeholder="Nome completo" value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} className="w-full p-3 border rounded-lg" />
-          <input type="tel" required placeholder="Telefone" value={formData.phone} onChange={(e) => setFormData({...formData, phone: e.target.value})} className="w-full p-3 border rounded-lg" />
-          <input type="text" required placeholder="BI" value={formData.bi} onChange={(e) => setFormData({...formData, bi: e.target.value})} className="w-full p-3 border rounded-lg" />
-          <input type="text" placeholder="Senha" value={formData.password} onChange={(e) => setFormData({...formData, password: e.target.value})} className="w-full p-3 border rounded-lg bg-gray-50" />
-          <button type="submit" disabled={loading} className="w-full bg-amber-500 text-white py-3 rounded-lg font-semibold">{loading ? 'Cadastrando...' : 'Cadastrar'}</button>
+        <form onSubmit={handleSubmit} style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          <input type="text" required placeholder="Nome completo" value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} />
+          <input type="tel" required placeholder="Telefone" value={formData.phone} onChange={(e) => setFormData({...formData, phone: e.target.value})} style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} />
+          <input type="text" required placeholder="BI" value={formData.bi} onChange={(e) => setFormData({...formData, bi: e.target.value})} style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} />
+          <input type="text" placeholder="Senha" value={formData.password} onChange={(e) => setFormData({...formData, password: e.target.value})} style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem', backgroundColor: '#f9fafb' }} />
+          <button type="submit" disabled={loading} style={{ backgroundColor: '#f59e0b', color: 'white', padding: '0.75rem', borderRadius: '0.5rem', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}>{loading ? 'Cadastrando...' : 'Cadastrar'}</button>
         </form>
       </div>
     </div>
@@ -398,18 +404,18 @@ function EditRiderModal({ rider, onClose, onSuccess }: any) {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl max-w-md w-full">
-        <div className="bg-gradient-to-r from-blue-500 to-blue-600 p-4 rounded-t-2xl flex justify-between text-white">
-          <h3 className="font-bold">Editar Motoqueiro</h3>
-          <button onClick={onClose}>✕</button>
+    <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 }}>
+      <div style={{ backgroundColor: 'white', borderRadius: '1rem', maxWidth: '28rem', width: '90%' }}>
+        <div style={{ background: 'linear-gradient(135deg, #3b82f6, #2563eb)', padding: '1rem', borderRadius: '1rem 1rem 0 0', display: 'flex', justifyContent: 'space-between', color: 'white' }}>
+          <h3 style={{ fontWeight: 'bold' }}>Editar Motoqueiro</h3>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer', fontSize: '1.25rem' }}>✕</button>
         </div>
-        <form onSubmit={handleSubmit} className="p-5 space-y-4">
-          <input type="text" required placeholder="Nome" value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} className="w-full p-3 border rounded-lg" />
-          <input type="tel" required placeholder="Telefone" value={formData.phone} onChange={(e) => setFormData({...formData, phone: e.target.value})} className="w-full p-3 border rounded-lg" />
-          <input type="text" required placeholder="BI" value={formData.bi} onChange={(e) => setFormData({...formData, bi: e.target.value})} className="w-full p-3 border rounded-lg" />
-          <input type="text" placeholder="Nova Senha (opcional)" value={formData.password} onChange={(e) => setFormData({...formData, password: e.target.value})} className="w-full p-3 border rounded-lg" />
-          <button type="submit" disabled={loading} className="w-full bg-blue-500 text-white py-3 rounded-lg font-semibold">{loading ? 'Salvando...' : 'Salvar'}</button>
+        <form onSubmit={handleSubmit} style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          <input type="text" required placeholder="Nome" value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} />
+          <input type="tel" required placeholder="Telefone" value={formData.phone} onChange={(e) => setFormData({...formData, phone: e.target.value})} style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} />
+          <input type="text" required placeholder="BI" value={formData.bi} onChange={(e) => setFormData({...formData, bi: e.target.value})} style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} />
+          <input type="text" placeholder="Nova Senha (opcional)" value={formData.password} onChange={(e) => setFormData({...formData, password: e.target.value})} style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} />
+          <button type="submit" disabled={loading} style={{ backgroundColor: '#3b82f6', color: 'white', padding: '0.75rem', borderRadius: '0.5rem', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}>{loading ? 'Salvando...' : 'Salvar'}</button>
         </form>
       </div>
     </div>
@@ -488,27 +494,27 @@ Obrigado por utilizar o MeuPiloto! 🚀`
 
   if (showReceipt && paymentData) {
     return (
-      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-        <div className="bg-white rounded-2xl max-w-md w-full">
-          <div className="bg-gradient-to-r from-green-500 to-green-600 p-4 rounded-t-2xl flex justify-between text-white">
-            <h3 className="font-bold">✅ Comprovante</h3>
-            <button onClick={onClose}>✕</button>
+      <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 }}>
+        <div style={{ backgroundColor: 'white', borderRadius: '1rem', maxWidth: '28rem', width: '90%' }}>
+          <div style={{ background: 'linear-gradient(135deg, #10b981, #059669)', padding: '1rem', borderRadius: '1rem 1rem 0 0', display: 'flex', justifyContent: 'space-between', color: 'white' }}>
+            <h3 style={{ fontWeight: 'bold' }}>✅ Comprovante</h3>
+            <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer', fontSize: '1.25rem' }}>✕</button>
           </div>
-          <div className="p-5 space-y-4">
-            <div className="text-center">
-              <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto">
-                <CheckCircle className="w-8 h-8 text-green-600" />
+          <div style={{ padding: '1.25rem' }}>
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ width: '4rem', height: '4rem', backgroundColor: '#d1fae5', borderRadius: '9999px', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1rem' }}>
+                <CheckCircle size={32} color="#059669" />
               </div>
-              <h2 className="text-xl font-bold mt-2">Pagamento Confirmado!</h2>
+              <h2 style={{ fontSize: '1.25rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>Pagamento Confirmado!</h2>
             </div>
-            <div className="bg-gray-50 rounded-lg p-4 space-y-2">
-              <div className="flex justify-between"><span>Placa:</span><span className="font-semibold">{paymentData.plateName}</span></div>
-              <div className="flex justify-between"><span>Motoqueiros:</span><span>{paymentData.totalRiders}</span></div>
-              <div className="flex justify-between"><span>Taxa por Motoqueiro:</span><span>{paymentData.feePerRider.toLocaleString()} Kz</span></div>
-              <div className="flex justify-between border-t pt-2"><span>Total:</span><span className="font-bold text-green-600">{paymentData.amount.toLocaleString()} Kz</span></div>
+            <div style={{ backgroundColor: '#f9fafb', borderRadius: '0.5rem', padding: '1rem', margin: '1rem 0' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}><span>Placa:</span><span style={{ fontWeight: 'bold' }}>{paymentData.plateName}</span></div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}><span>Motoqueiros:</span><span>{paymentData.totalRiders}</span></div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}><span>Taxa/Motoqueiro:</span><span>{paymentData.feePerRider.toLocaleString()} Kz</span></div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #e5e7eb', paddingTop: '0.5rem', marginTop: '0.5rem' }}><span>Total:</span><span style={{ fontWeight: 'bold', color: '#059669' }}>{paymentData.amount.toLocaleString()} Kz</span></div>
             </div>
-            <button onClick={sendToWhatsApp} className="w-full bg-green-500 text-white py-3 rounded-lg font-semibold flex items-center justify-center gap-2">📱 Enviar via WhatsApp</button>
-            <button onClick={onSuccess} className="w-full bg-gray-100 text-gray-700 py-3 rounded-lg font-semibold">Fechar</button>
+            <button onClick={sendToWhatsApp} style={{ width: '100%', backgroundColor: '#10b981', color: 'white', padding: '0.75rem', borderRadius: '0.5rem', border: 'none', cursor: 'pointer', fontWeight: 'bold', marginBottom: '0.5rem' }}>📱 Enviar via WhatsApp</button>
+            <button onClick={onSuccess} style={{ width: '100%', backgroundColor: '#f3f4f6', color: '#374151', padding: '0.75rem', borderRadius: '0.5rem', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}>Fechar</button>
           </div>
         </div>
       </div>
@@ -516,65 +522,63 @@ Obrigado por utilizar o MeuPiloto! 🚀`
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto">
-      <div className="bg-white rounded-2xl max-w-lg w-full">
-        <div className="bg-gradient-to-r from-green-500 to-green-600 p-4 rounded-t-2xl flex justify-between text-white">
-          <h3 className="font-bold">Pagar Taxa Semanal</h3>
-          <button onClick={onClose}>✕</button>
+    <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50, overflow: 'auto' }}>
+      <div style={{ backgroundColor: 'white', borderRadius: '1rem', maxWidth: '32rem', width: '90%', maxHeight: '90vh', overflow: 'auto' }}>
+        <div style={{ background: 'linear-gradient(135deg, #10b981, #059669)', padding: '1rem', borderRadius: '1rem 1rem 0 0', display: 'flex', justifyContent: 'space-between', color: 'white', position: 'sticky', top: 0 }}>
+          <h3 style={{ fontWeight: 'bold' }}>Pagar Taxa Semanal</h3>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer', fontSize: '1.25rem' }}>✕</button>
         </div>
-        <form onSubmit={handleSubmit} className="p-5 space-y-6">
-          <div className="bg-gray-50 rounded-lg p-4 text-center">
-            <p className="text-sm text-gray-500">Total a Pagar</p>
-            <p className="text-3xl font-bold text-green-600">{amount.toLocaleString()} Kz</p>
+        <form onSubmit={handleSubmit} style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+          <div style={{ backgroundColor: '#f9fafb', borderRadius: '0.5rem', padding: '1rem', textAlign: 'center' }}>
+            <p style={{ fontSize: '0.875rem', color: '#6b7280' }}>Total a Pagar</p>
+            <p style={{ fontSize: '1.875rem', fontWeight: 'bold', color: '#059669' }}>{amount.toLocaleString()} Kz</p>
           </div>
-          <div className="bg-amber-50 rounded-lg p-3">
-            <p className="text-sm font-medium mb-2">📊 Detalhamento:</p>
-            <div className="space-y-1 text-sm">
-              <div className="flex justify-between"><span>Motoqueiros:</span><span>{totalRiders} / {maxRiders}</span></div>
-              <div className="flex justify-between"><span>Taxa por motoqueiro:</span><span>{feePerRider} Kz</span></div>
-              <div className="flex justify-between border-t pt-2 font-bold"><span>Total:</span><span>{amount.toLocaleString()} Kz</span></div>
+          <div style={{ backgroundColor: '#fffbeb', borderRadius: '0.5rem', padding: '0.75rem' }}>
+            <p style={{ fontSize: '0.875rem', fontWeight: '500', marginBottom: '0.5rem' }}>📊 Detalhamento:</p>
+            <div style={{ fontSize: '0.875rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Motoqueiros:</span><span>{totalRiders} / {maxRiders}</span></div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.25rem' }}><span>Taxa por motoqueiro:</span><span>{feePerRider} Kz</span></div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #fde68a', paddingTop: '0.5rem', marginTop: '0.5rem', fontWeight: 'bold' }}><span>Total:</span><span>{amount.toLocaleString()} Kz</span></div>
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <button type="button" onClick={() => setPaymentMethod('unitel')} className={`p-3 rounded-lg border-2 ${paymentMethod === 'unitel' ? 'border-green-500 bg-green-50' : 'border-gray-200'}`}>
-              <Smartphone className="w-5 h-5 mx-auto text-green-600" />
-              <span className="text-xs">Unitel Money</span>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+            <button type="button" onClick={() => setPaymentMethod('unitel')} style={{ padding: '0.75rem', borderRadius: '0.5rem', border: `2px solid ${paymentMethod === 'unitel' ? '#10b981' : '#e5e7eb'}`, backgroundColor: paymentMethod === 'unitel' ? '#f0fdf4' : 'white', cursor: 'pointer' }}>
+              <Smartphone size={20} style={{ margin: '0 auto 0.25rem', color: '#059669' }} />
+              <span style={{ fontSize: '0.75rem' }}>Unitel Money</span>
             </button>
-            <button type="button" onClick={() => setPaymentMethod('iban')} className={`p-3 rounded-lg border-2 ${paymentMethod === 'iban' ? 'border-blue-500 bg-blue-50' : 'border-gray-200'}`}>
-              <Building className="w-5 h-5 mx-auto text-blue-600" />
-              <span className="text-xs">IBAN</span>
+            <button type="button" onClick={() => setPaymentMethod('iban')} style={{ padding: '0.75rem', borderRadius: '0.5rem', border: `2px solid ${paymentMethod === 'iban' ? '#3b82f6' : '#e5e7eb'}`, backgroundColor: paymentMethod === 'iban' ? '#eff6ff' : 'white', cursor: 'pointer' }}>
+              <Building size={20} style={{ margin: '0 auto 0.25rem', color: '#2563eb' }} />
+              <span style={{ fontSize: '0.75rem' }}>IBAN</span>
             </button>
           </div>
           {paymentMethod === 'unitel' && (
-            <div className="border rounded-lg p-4">
-              <div className="flex justify-between items-center">
+            <div style={{ border: '1px solid #e5e7eb', borderRadius: '0.5rem', padding: '1rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span>Número:</span>
-                <div className="flex gap-2">
-                  <span className="font-mono">{paymentInfo.unitelMoney.number}</span>
-                  <button type="button" onClick={() => copyToClipboard(paymentInfo.unitelMoney.number)}>
-                    {copied ? <Check className="w-4 h-4 text-green-600" /> : <Copy className="w-4 h-4" />}
+                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                  <span style={{ fontFamily: 'monospace' }}>{paymentInfo.unitelMoney.number}</span>
+                  <button type="button" onClick={() => copyToClipboard(paymentInfo.unitelMoney.number)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
+                    {copied ? <Check size={16} color="#059669" /> : <Copy size={16} />}
                   </button>
                 </div>
               </div>
-              <div className="flex justify-between mt-2"><span>Nome:</span><span>{paymentInfo.unitelMoney.name}</span></div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.5rem' }}><span>Nome:</span><span>{paymentInfo.unitelMoney.name}</span></div>
             </div>
           )}
           {paymentMethod === 'iban' && (
-            <div className="border rounded-lg p-4">
-              <div className="space-y-2">
-                <div className="flex justify-between"><span>Banco:</span><span>{paymentInfo.iban.bank}</span></div>
-                <div className="flex justify-between items-center">
-                  <span>IBAN:</span>
-                  <div className="flex gap-2">
-                    <span className="font-mono text-xs">{paymentInfo.iban.account}</span>
-                    <button type="button" onClick={() => copyToClipboard(paymentInfo.iban.account)}><Copy className="w-4 h-4" /></button>
-                  </div>
+            <div style={{ border: '1px solid #e5e7eb', borderRadius: '0.5rem', padding: '1rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Banco:</span><span>{paymentInfo.iban.bank}</span></div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.5rem' }}>
+                <span>IBAN:</span>
+                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                  <span style={{ fontFamily: 'monospace', fontSize: '0.75rem' }}>{paymentInfo.iban.account}</span>
+                  <button type="button" onClick={() => copyToClipboard(paymentInfo.iban.account)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><Copy size={16} /></button>
                 </div>
-                <div className="flex justify-between"><span>Beneficiário:</span><span>{paymentInfo.iban.beneficiary}</span></div>
               </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.5rem' }}><span>Beneficiário:</span><span>{paymentInfo.iban.beneficiary}</span></div>
             </div>
           )}
-          <button type="submit" disabled={loading} className="w-full bg-green-500 text-white py-3 rounded-lg font-semibold">
+          <button type="submit" disabled={loading} style={{ backgroundColor: '#10b981', color: 'white', padding: '0.75rem', borderRadius: '0.5rem', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}>
             {loading ? 'Processando...' : 'Confirmar Pagamento'}
           </button>
         </form>
@@ -596,28 +600,26 @@ function PlateConfigModal({ plate, onClose, onSuccess }: any) {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl max-w-md w-full">
-        <div className="bg-gradient-to-r from-amber-500 to-red-500 p-4 rounded-t-2xl flex justify-between text-white">
-          <h3 className="font-bold">Configurar Placa</h3>
-          <button onClick={onClose}>✕</button>
+    <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 }}>
+      <div style={{ backgroundColor: 'white', borderRadius: '1rem', maxWidth: '28rem', width: '90%' }}>
+        <div style={{ background: 'linear-gradient(135deg, #f59e0b, #ef4444)', padding: '1rem', borderRadius: '1rem 1rem 0 0', display: 'flex', justifyContent: 'space-between', color: 'white' }}>
+          <h3 style={{ fontWeight: 'bold' }}>Configurar Placa</h3>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer', fontSize: '1.25rem' }}>✕</button>
         </div>
-        <form onSubmit={handleSubmit} className="p-5 space-y-4">
+        <form onSubmit={handleSubmit} style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Número máximo de motoqueiros</label>
-            <input type="number" required value={formData.max_riders} onChange={(e) => setFormData({...formData, max_riders: parseInt(e.target.value)})} className="w-full p-3 border rounded-lg" />
+            <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: '500', marginBottom: '0.25rem' }}>Número máximo de motoqueiros</label>
+            <input type="number" required value={formData.max_riders} onChange={(e) => setFormData({...formData, max_riders: parseInt(e.target.value)})} style={{ width: '100%', padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Taxa por motoqueiro (Kz)</label>
-            <input type="number" required value={formData.fee_per_rider} onChange={(e) => setFormData({...formData, fee_per_rider: parseInt(e.target.value)})} className="w-full p-3 border rounded-lg" />
+            <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: '500', marginBottom: '0.25rem' }}>Taxa por motoqueiro (Kz)</label>
+            <input type="number" required value={formData.fee_per_rider} onChange={(e) => setFormData({...formData, fee_per_rider: parseInt(e.target.value)})} style={{ width: '100%', padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} />
           </div>
-          <div className="bg-amber-50 rounded-lg p-3">
-            <p className="text-sm font-medium mb-2">💰 Resumo:</p>
-            <p className="text-sm">{formData.max_riders} motoqueiros × {formData.fee_per_rider} Kz = <strong>{(formData.max_riders * formData.fee_per_rider).toLocaleString()} Kz/semana</strong></p>
+          <div style={{ backgroundColor: '#fffbeb', borderRadius: '0.5rem', padding: '0.75rem' }}>
+            <p style={{ fontSize: '0.875rem', fontWeight: '500', marginBottom: '0.5rem' }}>💰 Resumo:</p>
+            <p style={{ fontSize: '0.875rem' }}>{formData.max_riders} motoqueiros × {formData.fee_per_rider} Kz = <strong>{(formData.max_riders * formData.fee_per_rider).toLocaleString()} Kz/semana</strong></p>
           </div>
-          <button type="submit" disabled={loading} className="w-full bg-amber-500 text-white py-3 rounded-lg font-semibold">
-            {loading ? 'Salvando...' : 'Salvar Configuração'}
-          </button>
+          <button type="submit" disabled={loading} style={{ backgroundColor: '#f59e0b', color: 'white', padding: '0.75rem', borderRadius: '0.5rem', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}>{loading ? 'Salvando...' : 'Salvar Configuração'}</button>
         </form>
       </div>
     </div>
