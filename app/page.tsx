@@ -2,117 +2,37 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase/client'
-import { Bike, Search, Users, Wifi, WifiOff, Star, MapPin } from 'lucide-react'
+import { Bike, Users, MapPin, Search, Star, Wifi, WifiOff, Shield, UserCog, User } from 'lucide-react'
 import Link from 'next/link'
 
-type Plate = {
-  id: string
-  plate_number: string
-  boss_id: string | null
-  weekly_fee: number
-  is_active: boolean
-  created_at: string
-}
-
-type Boss = {
-  id: string
-  name: string
-  email: string
-  phone: string
-}
-
-type Rider = {
-  id: string
-  name: string
-  phone: string
-  bi: string
-  is_online: boolean
-  plate_id: string | null
-}
-
-type PlateWithDetails = Plate & {
-  boss?: Boss | null
-  riders?: Rider[]
-  online_count: number
-  total_riders: number
-}
-
 export default function Home() {
-  const [plates, setPlates] = useState<PlateWithDetails[]>([])
-  const [filteredPlates, setFilteredPlates] = useState<PlateWithDetails[]>([])
+  const [plates, setPlates] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [favorites, setFavorites] = useState<string[]>([])
 
   useEffect(() => {
     loadPlates()
-    // Carregar favoritos do localStorage
     const savedFavorites = localStorage.getItem('favoritePlates')
     if (savedFavorites) {
       setFavorites(JSON.parse(savedFavorites))
     }
   }, [])
 
-  useEffect(() => {
-    // Filtrar placas baseado no termo de busca
-    if (searchTerm === '') {
-      setFilteredPlates(plates)
-    } else {
-      const filtered = plates.filter(plate =>
-        plate.plate_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        plate.boss?.name?.toLowerCase().includes(searchTerm.toLowerCase())
-      )
-      setFilteredPlates(filtered)
-    }
-  }, [searchTerm, plates])
-
   const loadPlates = async () => {
-    try {
-      const { data: platesData, error: platesError } = await supabase
-        .from('plates')
-        .select('*')
-        .eq('is_active', true)
-
-      if (platesError) throw platesError
-
-      if (!platesData || platesData.length === 0) {
-        setPlates([])
-        setFilteredPlates([])
-        setLoading(false)
-        return
-      }
-
-      const { data: bossesData } = await supabase
-        .from('bosses')
-        .select('*')
-
-      const { data: ridersData } = await supabase
-        .from('riders')
-        .select('*')
-        .eq('status', 'active')
-
-      const platesWithDetails = platesData.map(plate => {
-        const boss = bossesData?.find(b => b.id === plate.boss_id)
-        const riders = ridersData?.filter(r => r.plate_id === plate.id) || []
-        const online_count = riders.filter(r => r.is_online === true).length
-        const total_riders = riders.length
-
-        return {
-          ...plate,
-          boss,
-          riders,
-          online_count,
-          total_riders
-        }
-      })
-
-      setPlates(platesWithDetails)
-      setFilteredPlates(platesWithDetails)
-    } catch (error) {
-      console.error('Erro ao carregar dados:', error)
-    } finally {
-      setLoading(false)
-    }
+    const { data } = await supabase
+      .from('plates')
+      .select('*, boss:bosses(*), riders:riders(*)')
+      .eq('is_active', true)
+    
+    const platesWithStats = (data || []).map(plate => ({
+      ...plate,
+      total_riders: plate.riders?.length || 0,
+      online_count: plate.riders?.filter((r: any) => r.is_online).length || 0
+    }))
+    
+    setPlates(platesWithStats)
+    setLoading(false)
   }
 
   const toggleFavorite = (plateId: string) => {
@@ -126,6 +46,14 @@ export default function Home() {
     localStorage.setItem('favoritePlates', JSON.stringify(newFavorites))
   }
 
+  const filteredPlates = plates.filter(plate =>
+    plate.plate_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    plate.boss?.name?.toLowerCase().includes(searchTerm.toLowerCase())
+  )
+
+  const favoritePlates = filteredPlates.filter(plate => favorites.includes(plate.id))
+  const normalPlates = filteredPlates.filter(plate => !favorites.includes(plate.id))
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-amber-50 to-red-50">
@@ -137,13 +65,9 @@ export default function Home() {
     )
   }
 
-  // Separar placas favoritas e normais
-  const favoritePlates = filteredPlates.filter(plate => favorites.includes(plate.id))
-  const normalPlates = filteredPlates.filter(plate => !favorites.includes(plate.id))
-
   return (
     <main className="min-h-screen bg-gray-50">
-      {/* Header estilo Instagram */}
+      {/* Header */}
       <div className="bg-white border-b sticky top-0 z-10">
         <div className="max-w-7xl mx-auto px-4 py-3">
           <div className="flex items-center justify-between">
@@ -152,7 +76,6 @@ export default function Home() {
               <h1 className="text-xl font-bold text-gray-900">MeuPiloto!</h1>
             </div>
             
-            {/* Barra de pesquisa */}
             <div className="relative max-w-md w-full">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
               <input
@@ -164,11 +87,32 @@ export default function Home() {
               />
             </div>
 
-            <div className="w-8"></div> {/* Espaçador */}
+            {/* Links de Acesso */}
+            <div className="flex items-center gap-2">
+              <Link href="/login/motoqueiro">
+                <button className="flex items-center gap-1 px-3 py-1.5 text-sm text-gray-600 hover:text-amber-600 transition rounded-lg hover:bg-gray-100">
+                  <User className="w-4 h-4" />
+                  Motoqueiro
+                </button>
+              </Link>
+              <Link href="/login/chefe">
+                <button className="flex items-center gap-1 px-3 py-1.5 text-sm text-gray-600 hover:text-amber-600 transition rounded-lg hover:bg-gray-100">
+                  <UserCog className="w-4 h-4" />
+                  Chefe
+                </button>
+              </Link>
+              <Link href="/login/admin">
+                <button className="flex items-center gap-1 px-3 py-1.5 text-sm text-gray-600 hover:text-amber-600 transition rounded-lg hover:bg-gray-100">
+                  <Shield className="w-4 h-4" />
+                  Proibido
+                </button>
+              </Link>
+            </div>
           </div>
         </div>
       </div>
 
+      {/* Conteúdo */}
       <div className="max-w-2xl mx-auto px-4 py-6">
         {/* Seção de Favoritos */}
         {favoritePlates.length > 0 && (
@@ -218,19 +162,10 @@ export default function Home() {
   )
 }
 
-// Componente Card da Placa (estilo Instagram/Facebook)
-function PlateCard({ 
-  plate, 
-  isFavorite, 
-  onToggleFavorite 
-}: { 
-  plate: PlateWithDetails
-  isFavorite: boolean
-  onToggleFavorite: () => void
-}) {
+// Componente Card da Placa
+function PlateCard({ plate, isFavorite, onToggleFavorite }: any) {
   return (
-    <div className="bg-white rounded-xl shadow-sm hover:shadow-md transition-shadow overflow-hidden">
-      {/* Cabeçalho do Card - estilo perfil */}
+    <div className="bg-white rounded-xl shadow-sm hover:shadow-md transition-all overflow-hidden">
       <div className="p-4 border-b flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 bg-gradient-to-r from-amber-500 to-red-500 rounded-full flex items-center justify-center">
@@ -249,20 +184,11 @@ function PlateCard({
             <p className="text-xs text-gray-500">Chefe: {plate.boss?.name || 'Não definido'}</p>
           </div>
         </div>
-        
-        {/* Botão de favorito */}
         <button onClick={onToggleFavorite} className="p-1">
-          <Star 
-            className={`w-5 h-5 transition-colors ${
-              isFavorite 
-                ? 'fill-amber-500 text-amber-500' 
-                : 'text-gray-400 hover:text-amber-500'
-            }`} 
-          />
+          <Star className={`w-5 h-5 transition-colors ${isFavorite ? 'fill-amber-500 text-amber-500' : 'text-gray-400 hover:text-amber-500'}`} />
         </button>
       </div>
 
-      {/* Estatísticas */}
       <div className="p-4">
         <div className="flex justify-around">
           <div className="text-center">
@@ -287,7 +213,6 @@ function PlateCard({
         </div>
       </div>
 
-      {/* Botão de ação */}
       <Link href={`/plate/${plate.id}`}>
         <button className="w-full py-3 bg-amber-500 hover:bg-amber-600 text-white font-semibold transition flex items-center justify-center gap-2">
           <MapPin className="w-4 h-4" />
