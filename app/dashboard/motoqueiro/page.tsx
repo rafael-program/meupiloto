@@ -535,101 +535,109 @@ export default function RiderDashboard() {
             </div>
             
             <div className="flex gap-2 items-center">
-              {/* Botão de Notificações Push */}
-              {isNotificationSupported() && pushPermission === 'default' && (
-                <button
-                  onClick={requestPushPermission}
-                  className="flex items-center gap-2 px-3 py-1.5 bg-blue-500 text-white text-sm rounded-full hover:bg-blue-600 transition"
-                >
-                  <Bell className="w-4 h-4" />
-                  Ativar Notificações
-                </button>
-              )}
-              {isNotificationSupported() && pushPermission === 'granted' && (
-                <div className="flex items-center gap-2 text-xs text-green-600 bg-green-50 px-3 py-1.5 rounded-full">
-                  <BellRing className="w-4 h-4" />
-                  Notificações ativas
-                </div>
-              )}
+  {/* Botão de Notificações Push */}
+  {isNotificationSupported() && pushPermission === 'default' && (
+    <button
+      onClick={requestPushPermission}
+      className="flex items-center gap-2 px-3 py-1.5 bg-blue-500 text-white text-sm rounded-full hover:bg-blue-600 transition"
+    >
+      <Bell className="w-4 h-4" />
+      Ativar Notificações
+    </button>
+  )}
+  {isNotificationSupported() && pushPermission === 'granted' && (
+    <div className="flex items-center gap-2 text-xs text-green-600 bg-green-50 px-3 py-1.5 rounded-full">
+      <BellRing className="w-4 h-4" />
+      Notificações ativas
+    </div>
+  )}
+  {isNotificationSupported() && pushPermission === 'denied' && (
+    <div className="flex items-center gap-2 text-xs text-red-500 bg-red-50 px-3 py-1.5 rounded-full">
+      <BellOff className="w-4 h-4" />
+      Notificações bloqueadas
+    </div>
+  )}
 
-              {/* Botão de Notificações do Sistema */}
-              <div className="relative">
-                <button
-                  onClick={() => setShowNotifications(!showNotifications)}
-                  className="relative p-2 hover:bg-gray-100 rounded-full transition"
-                >
-                  <Bell className="w-5 h-5 text-gray-600" />
-                  {unreadCount > 0 && (
-                    <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
-                      {unreadCount}
-                    </span>
-                  )}
-                </button>
-                
-                {showNotifications && (
-                  <div className="absolute right-0 top-12 w-80 bg-white rounded-xl shadow-lg border z-20">
-                    <div className="p-3 border-b flex justify-between items-center">
-                      <h3 className="font-semibold">Notificações</h3>
-                      {unreadCount > 0 && (
-                        <button 
-                          onClick={markAllAsRead}
-                          className="text-xs text-blue-500 hover:text-blue-700"
-                        >
-                          Marcar todas como lidas
-                        </button>
-                      )}
-                    </div>
-                    <div className="max-h-96 overflow-y-auto">
-                      {notifications.length === 0 ? (
-                        <p className="p-4 text-center text-gray-500">Sem notificações</p>
-                      ) : (
-                        notifications.map((notif) => (
-                          <div 
-                            key={notif.id} 
-                            className={`p-3 border-b hover:bg-gray-50 cursor-pointer transition ${!notif.is_read ? 'bg-blue-50' : ''}`}
-                            onClick={() => markNotificationAsRead(notif.id)}
-                          >
-                            <div className="flex items-start gap-2">
-                              {getNotificationIcon(notif.type)}
-                              <div className="flex-1">
-                                <p className="font-medium text-sm">{notif.title}</p>
-                                <p className="text-xs text-gray-500">{notif.message}</p>
-                                <p className="text-xs text-gray-400 mt-1">
-                                  {new Date(notif.created_at).toLocaleTimeString()}
-                                </p>
-                              </div>
-                              {!notif.is_read && (
-                                <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                              )}
-                            </div>
-                          </div>
-                        ))
-                      )}
-                    </div>
+  {/* Botão de Notificações do Sistema (sino) */}
+  <div className="relative">
+    <button
+      onClick={() => setShowNotifications(!showNotifications)}
+      className="relative p-2 hover:bg-gray-100 rounded-full transition"
+    >
+      <Bell className="w-5 h-5 text-gray-600" />
+      {unreadCount > 0 && (
+        <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+          {unreadCount}
+        </span>
+      )}
+    </button>
+    
+    {showNotifications && (
+      <div className="absolute right-0 top-12 w-80 bg-white rounded-xl shadow-lg border z-20">
+        <div className="p-3 border-b flex justify-between items-center">
+          <h3 className="font-semibold">Notificações</h3>
+          {unreadCount > 0 && (
+            <button 
+              onClick={markAllAsRead}
+              className="text-xs text-blue-500 hover:text-blue-700"
+            >
+              Marcar todas como lidas
+            </button>
+          )}
+        </div>
+        <div className="max-h-96 overflow-y-auto">
+          {notifications.length === 0 ? (
+            <p className="p-4 text-center text-gray-500">Sem notificações</p>
+          ) : (
+            notifications.map((notif) => (
+              <div 
+                key={notif.id} 
+                className={`p-3 border-b hover:bg-gray-50 cursor-pointer transition ${!notif.is_read ? 'bg-blue-50' : ''}`}
+                onClick={() => markNotificationAsRead(notif.id)}
+              >
+                <div className="flex items-start gap-2">
+                  {getNotificationIcon(notif.type)}
+                  <div className="flex-1">
+                    <p className="font-medium text-sm">{notif.title}</p>
+                    <p className="text-xs text-gray-500">{notif.message}</p>
+                    <p className="text-xs text-gray-400 mt-1">
+                      {new Date(notif.created_at).toLocaleTimeString()}
+                    </p>
                   </div>
-                )}
+                  {!notif.is_read && (
+                    <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                  )}
+                </div>
               </div>
+            ))
+          )}
+        </div>
+      </div>
+    )}
+  </div>
 
-              <button
-                onClick={toggleOnline}
-                className={`flex items-center gap-2 px-4 py-2 rounded-full font-semibold transition shadow-md ${
-                  isOnline 
-                    ? 'bg-green-500 text-white hover:bg-green-600' 
-                    : 'bg-gray-300 text-gray-700 hover:bg-gray-400'
-                }`}
-              >
-                <Power className="w-4 h-4" />
-                {isOnline ? 'Online' : 'Offline'}
-              </button>
-              
-              <button
-                onClick={handleLogout}
-                className="flex items-center gap-2 px-4 py-2 rounded-full font-semibold transition bg-red-500 text-white hover:bg-red-600 shadow-md"
-              >
-                <LogOut className="w-4 h-4" />
-                Sair
-              </button>
-            </div>
+  {/* Botão Online/Offline */}
+  <button
+    onClick={toggleOnline}
+    className={`flex items-center gap-2 px-4 py-2 rounded-full font-semibold transition shadow-md ${
+      isOnline 
+        ? 'bg-green-500 text-white hover:bg-green-600' 
+        : 'bg-gray-300 text-gray-700 hover:bg-gray-400'
+    }`}
+  >
+    <Power className="w-4 h-4" />
+    {isOnline ? 'Online' : 'Offline'}
+  </button>
+  
+  {/* Botão Sair */}
+  <button
+    onClick={handleLogout}
+    className="flex items-center gap-2 px-4 py-2 rounded-full font-semibold transition bg-red-500 text-white hover:bg-red-600 shadow-md"
+  >
+    <LogOut className="w-4 h-4" />
+    Sair
+  </button>
+</div>
           </div>
 
           {/* Cards de Estatísticas */}
