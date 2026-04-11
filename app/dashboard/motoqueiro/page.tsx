@@ -21,6 +21,12 @@ import {
   BellRing,
   BellOff
 } from 'lucide-react'
+import { 
+  requestNotificationPermission, 
+  getNotificationPermissionStatus,
+  isNotificationSupported,
+  registerServiceWorker
+} from '@/lib/notifications'
 
 export default function RiderDashboard() {
   const [isOnline, setIsOnline] = useState(false)
@@ -32,6 +38,7 @@ export default function RiderDashboard() {
   const [notifications, setNotifications] = useState<any[]>([])
   const [showNotifications, setShowNotifications] = useState(false)
   const [unreadCount, setUnreadCount] = useState(0)
+  const [pushPermission, setPushPermission] = useState<string>('default')
   const [stats, setStats] = useState({
     totalEarnings: 0,
     totalRides: 0,
@@ -52,6 +59,12 @@ export default function RiderDashboard() {
       return
     }
     
+    // Verificar permissão de notificação
+    if (isNotificationSupported()) {
+      setPushPermission(Notification.permission)
+      registerServiceWorker()
+    }
+    
     loadRider(riderId)
     loadPendingOrders(riderId)
     loadCompletedOrders(riderId)
@@ -63,14 +76,22 @@ export default function RiderDashboard() {
     
     channelRef.current = subscribeToOrders(riderId)
     
-    if (Notification.permission === 'default') {
-      Notification.requestPermission()
-    }
+    // Perguntar sobre notificações após 5 segundos
+    const timer = setTimeout(() => {
+      if (isNotificationSupported() && Notification.permission === 'default') {
+        const ask = confirm('🔔 Quer receber notificações de novos pedidos mesmo com o app fechado?')
+        if (ask) {
+          requestNotificationPermission()
+          setPushPermission('granted')
+        }
+      }
+    }, 5000)
     
     return () => {
       if (channelRef.current) {
         supabase.removeChannel(channelRef.current)
       }
+      clearTimeout(timer)
     }
   }, [])
 
@@ -80,9 +101,27 @@ export default function RiderDashboard() {
     }
   }
 
-  const showBrowserNotification = (title: string, body: string) => {
-    if (Notification.permission === 'granted') {
-      new Notification(title, { body, icon: '/icon.png' })
+  const sendPushNotification = (title: string, body: string) => {
+    if (!isNotificationSupported()) return
+    if (Notification.permission !== 'granted') return
+
+    try {
+      const notification = new Notification(title, {
+        body: body,
+        icon: '/icon-192.png',
+        badge: '/icon-192.png',
+        
+        requireInteraction: true,
+      })
+      
+      notification.onclick = () => {
+        window.focus()
+        notification.close()
+      }
+      
+      setTimeout(() => notification.close(), 15000)
+    } catch (error) {
+      console.error('Erro na notificação push:', error)
     }
   }
 
@@ -192,7 +231,7 @@ export default function RiderDashboard() {
       setNotifications(prev => [data, ...prev])
       setUnreadCount(prev => prev + 1)
       playSound()
-      showBrowserNotification(title, message)
+      sendPushNotification(title, message)
     }
   }
 
@@ -213,6 +252,7 @@ export default function RiderDashboard() {
           'Você está online e disponível para receber pedidos',
           'info'
         )
+        sendPushNotification('MeuPiloto! - Online', 'Você está online e disponível para receber pedidos')
       } else {
         await addNotification(
           'Status Offline',
@@ -238,17 +278,26 @@ export default function RiderDashboard() {
           const newOrder = payload.new as any
           setPendingOrders((prev) => [newOrder, ...prev])
           
-          await addNotification(
-            'Novo Pedido! 🚀',
-            `${newOrder.customer_name || 'Cliente'} solicitou uma corrida de ${newOrder.price?.toLocaleString()} Kz`,
-            'order'
-          )
+          const message = `${newOrder.customer_name || 'Cliente'} solicitou uma corrida de ${newOrder.price?.toLocaleString()} Kz`
           
+          await addNotification('Novo Pedido! 🚀', message, 'order')
           playSound()
-          showBrowserNotification(
-            'MeuPiloto! - Novo Pedido',
-            `${newOrder.customer_name || 'Cliente'} - ${newOrder.price?.toLocaleString()} Kz`
-          )
+          
+          // Notificação push mesmo com app fechado
+          if (Notification.permission === 'granted') {
+            const notification = new Notification('🏍️ MeuPiloto! - Novo Pedido', {
+              body: `${newOrder.customer_name || 'Cliente'} - ${newOrder.price?.toLocaleString()} Kz`,
+              icon: '/icon-192.png',
+              badge: '/icon-192.png',
+              
+              requireInteraction: true,
+            })
+            
+            notification.onclick = () => {
+              window.focus()
+              notification.close()
+            }
+          }
         }
       )
       .on(
@@ -300,6 +349,18 @@ export default function RiderDashboard() {
       .subscribe()
     
     return channel
+  }
+
+  const requestPushPermission = async () => {
+    const granted = await requestNotificationPermission()
+    setPushPermission(granted ? 'granted' : 'denied')
+    if (granted) {
+      await addNotification(
+        'Notificações Ativadas ✅',
+        'Você receberá notificações mesmo com o app fechado!',
+        'success'
+      )
+    }
   }
 
   const acceptOrder = async (order: any) => {
@@ -474,7 +535,24 @@ export default function RiderDashboard() {
             </div>
             
             <div className="flex gap-2 items-center">
-              {/* Botão de Notificações */}
+              {/* Botão de Notificações Push */}
+              {isNotificationSupported() && pushPermission === 'default' && (
+                <button
+                  onClick={requestPushPermission}
+                  className="flex items-center gap-2 px-3 py-1.5 bg-blue-500 text-white text-sm rounded-full hover:bg-blue-600 transition"
+                >
+                  <Bell className="w-4 h-4" />
+                  Ativar Notificações
+                </button>
+              )}
+              {isNotificationSupported() && pushPermission === 'granted' && (
+                <div className="flex items-center gap-2 text-xs text-green-600 bg-green-50 px-3 py-1.5 rounded-full">
+                  <BellRing className="w-4 h-4" />
+                  Notificações ativas
+                </div>
+              )}
+
+              {/* Botão de Notificações do Sistema */}
               <div className="relative">
                 <button
                   onClick={() => setShowNotifications(!showNotifications)}
