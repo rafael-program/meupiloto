@@ -7,7 +7,7 @@ import {
   Bike, Users, Plus, Edit, Trash2, LogOut, DollarSign,
   CheckCircle, XCircle, Search, UserPlus, CreditCard,
   Smartphone, Building, Copy, Check, TrendingUp, Settings, AlertCircle,
-  X, Camera
+  X, Camera, Loader2
 } from 'lucide-react'
 
 export default function BossDashboard() {
@@ -334,25 +334,79 @@ export default function BossDashboard() {
 }
 
 // Modal de Adicionar Motoqueiro
+// No app/dashboard/chefe/page.tsx, atualize o AddRiderModal:
+
 function AddRiderModal({ plateId, onClose, onSuccess }: any) {
-  const [formData, setFormData] = useState({ name: '', phone: '', bi: '', password: 'senha123' })
+  const [formData, setFormData] = useState({
+    name: '',
+    phone: '',
+    bi: '',
+    password: 'senha123'
+  })
+  const [photoUrl, setPhotoUrl] = useState<string>('')
   const [loading, setLoading] = useState(false)
+  const [uploadingPhoto, setUploadingPhoto] = useState(false)
+
+  const handlePhotoUpload = async (file: File) => {
+    setUploadingPhoto(true)
+
+    // Validar tipo
+    if (!file.type.startsWith('image/')) {
+      alert('Por favor, selecione uma imagem válida')
+      setUploadingPhoto(false)
+      return
+    }
+
+    // Validar tamanho (max 2MB)
+    if (file.size > 2 * 1024 * 1024) {
+      alert('A imagem deve ter no máximo 2MB')
+      setUploadingPhoto(false)
+      return
+    }
+
+    const fileExt = file.name.split('.').pop()
+    const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`
+    const filePath = `riders/${fileName}`
+
+    const { error: uploadError } = await supabase.storage
+      .from('rider-photos')
+      .upload(filePath, file)
+
+    if (uploadError) {
+      alert('Erro ao fazer upload da foto')
+      setUploadingPhoto(false)
+      return
+    }
+
+    const { data: { publicUrl } } = supabase.storage
+      .from('rider-photos')
+      .getPublicUrl(filePath)
+
+    setPhotoUrl(publicUrl)
+    setUploadingPhoto(false)
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
 
+    const insertData: any = {
+      name: formData.name,
+      phone: formData.phone,
+      bi: formData.bi,
+      plate_id: plateId,
+      password_hash: formData.password,
+      status: 'active',
+      is_online: false
+    }
+
+    if (photoUrl) {
+      insertData.photo_url = photoUrl
+    }
+
     const { error } = await supabase
       .from('riders')
-      .insert({
-        name: formData.name,
-        phone: formData.phone,
-        bi: formData.bi,
-        plate_id: plateId,
-        password_hash: formData.password,
-        status: 'active',
-        is_online: false
-      })
+      .insert(insertData)
 
     if (!error) {
       onSuccess()
@@ -363,18 +417,99 @@ function AddRiderModal({ plateId, onClose, onSuccess }: any) {
   }
 
   return (
-    <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 }}>
-      <div style={{ backgroundColor: 'white', borderRadius: '1rem', maxWidth: '28rem', width: '90%' }}>
-        <div style={{ background: 'linear-gradient(135deg, #f59e0b, #ef4444)', padding: '1rem', borderRadius: '1rem 1rem 0 0', display: 'flex', justifyContent: 'space-between', color: 'white' }}>
-          <h3 style={{ fontWeight: 'bold' }}>Novo Motoqueiro</h3>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer', fontSize: '1.25rem' }}>✕</button>
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto">
+      <div className="bg-white rounded-2xl max-w-md w-full">
+        <div className="bg-gradient-to-r from-amber-500 to-red-500 p-4 rounded-t-2xl flex justify-between text-white">
+          <h3 className="font-bold">Novo Motoqueiro</h3>
+          <button onClick={onClose} className="text-white/80 hover:text-white">✕</button>
         </div>
-        <form onSubmit={handleSubmit} style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          <input type="text" required placeholder="Nome completo" value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} />
-          <input type="tel" required placeholder="Telefone" value={formData.phone} onChange={(e) => setFormData({...formData, phone: e.target.value})} style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} />
-          <input type="text" required placeholder="BI" value={formData.bi} onChange={(e) => setFormData({...formData, bi: e.target.value})} style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} />
-          <input type="text" placeholder="Senha" value={formData.password} onChange={(e) => setFormData({...formData, password: e.target.value})} style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem', backgroundColor: '#f9fafb' }} />
-          <button type="submit" disabled={loading} style={{ backgroundColor: '#f59e0b', color: 'white', padding: '0.75rem', borderRadius: '0.5rem', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}>{loading ? 'Cadastrando...' : 'Cadastrar'}</button>
+        <form onSubmit={handleSubmit} className="p-5 space-y-4">
+          {/* Upload de Foto */}
+          <div className="flex flex-col items-center">
+            <div className="relative">
+              {photoUrl ? (
+                <div className="relative">
+                  <img 
+                    src={photoUrl} 
+                    alt="Preview" 
+                    className="w-24 h-24 rounded-full object-cover border-4 border-amber-300"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setPhotoUrl('')}
+                    className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              ) : (
+                <label className="cursor-pointer">
+                  <div className="w-24 h-24 bg-gray-100 rounded-full flex flex-col items-center justify-center border-2 border-dashed border-gray-300 hover:border-amber-500 transition">
+                    {uploadingPhoto ? (
+                      <Loader2 className="w-8 h-8 text-amber-500 animate-spin" />
+                    ) : (
+                      <>
+                        <Camera className="w-8 h-8 text-gray-400" />
+                        <span className="text-xs text-gray-500 mt-1">Foto</span>
+                      </>
+                    )}
+                  </div>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0]
+                      if (file) handlePhotoUpload(file)
+                    }}
+                    className="hidden"
+                    disabled={uploadingPhoto}
+                  />
+                </label>
+              )}
+            </div>
+            <p className="text-xs text-gray-400 mt-2">
+              Clique para adicionar foto (max 2MB)
+            </p>
+          </div>
+
+          <input
+            type="text"
+            required
+            placeholder="Nome completo"
+            value={formData.name}
+            onChange={(e) => setFormData({...formData, name: e.target.value})}
+            className="w-full p-3 border rounded-lg"
+          />
+          <input
+            type="tel"
+            required
+            placeholder="Telefone"
+            value={formData.phone}
+            onChange={(e) => setFormData({...formData, phone: e.target.value})}
+            className="w-full p-3 border rounded-lg"
+          />
+          <input
+            type="text"
+            required
+            placeholder="BI"
+            value={formData.bi}
+            onChange={(e) => setFormData({...formData, bi: e.target.value})}
+            className="w-full p-3 border rounded-lg"
+          />
+          <input
+            type="text"
+            placeholder="Senha"
+            value={formData.password}
+            onChange={(e) => setFormData({...formData, password: e.target.value})}
+            className="w-full p-3 border rounded-lg bg-gray-50"
+          />
+          <button
+            type="submit"
+            disabled={loading || uploadingPhoto}
+            className="w-full bg-amber-500 text-white py-3 rounded-lg font-semibold hover:bg-amber-600 transition disabled:opacity-50"
+          >
+            {loading ? 'Cadastrando...' : 'Cadastrar Motoqueiro'}
+          </button>
         </form>
       </div>
     </div>
