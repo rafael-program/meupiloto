@@ -336,6 +336,7 @@ export default function BossDashboard() {
 // Modal de Adicionar Motoqueiro
 // No app/dashboard/chefe/page.tsx, atualize o AddRiderModal:
 
+// Modal de Adicionar Motoqueiro (com CSS inline)
 function AddRiderModal({ plateId, onClose, onSuccess }: any) {
   const [formData, setFormData] = useState({
     name: '',
@@ -350,14 +351,12 @@ function AddRiderModal({ plateId, onClose, onSuccess }: any) {
   const handlePhotoUpload = async (file: File) => {
     setUploadingPhoto(true)
 
-    // Validar tipo
     if (!file.type.startsWith('image/')) {
       alert('Por favor, selecione uma imagem válida')
       setUploadingPhoto(false)
       return
     }
 
-    // Validar tamanho (max 2MB)
     if (file.size > 2 * 1024 * 1024) {
       alert('A imagem deve ter no máximo 2MB')
       setUploadingPhoto(false)
@@ -417,40 +416,77 @@ function AddRiderModal({ plateId, onClose, onSuccess }: any) {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto">
-      <div className="bg-white rounded-2xl max-w-md w-full">
-        <div className="bg-gradient-to-r from-amber-500 to-red-500 p-4 rounded-t-2xl flex justify-between text-white">
-          <h3 className="font-bold">Novo Motoqueiro</h3>
-          <button onClick={onClose} className="text-white/80 hover:text-white">✕</button>
+    <div style={{
+      position: 'fixed',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      backgroundColor: 'rgba(0,0,0,0.5)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: 50,
+      overflow: 'auto'
+    }}>
+      <div style={{
+        backgroundColor: 'white',
+        borderRadius: '1rem',
+        maxWidth: '28rem',
+        width: '90%',
+        maxHeight: '90vh',
+        overflow: 'auto'
+      }}>
+        <div style={{
+          background: 'linear-gradient(135deg, #f59e0b, #ef4444)',
+          padding: '1rem',
+          borderRadius: '1rem 1rem 0 0',
+          display: 'flex',
+          justifyContent: 'space-between',
+          color: 'white'
+        }}>
+          <h3 style={{ fontWeight: 'bold' }}>Novo Motoqueiro</h3>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer', fontSize: '1.25rem' }}>✕</button>
         </div>
-        <form onSubmit={handleSubmit} className="p-5 space-y-4">
+        <form onSubmit={handleSubmit} style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
           {/* Upload de Foto */}
-          <div className="flex flex-col items-center">
-            <div className="relative">
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+            <div style={{ position: 'relative' }}>
               {photoUrl ? (
-                <div className="relative">
+                <div style={{ position: 'relative' }}>
                   <img 
                     src={photoUrl} 
                     alt="Preview" 
-                    className="w-24 h-24 rounded-full object-cover border-4 border-amber-300"
+                    style={{ width: '6rem', height: '6rem', borderRadius: '9999px', objectFit: 'cover', border: '4px solid #fcd34d' }}
                   />
                   <button
                     type="button"
                     onClick={() => setPhotoUrl('')}
-                    className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600"
+                    style={{ position: 'absolute', top: '-0.5rem', right: '-0.5rem', backgroundColor: '#ef4444', color: 'white', borderRadius: '9999px', padding: '0.25rem', border: 'none', cursor: 'pointer' }}
                   >
-                    <X className="w-4 h-4" />
+                    <X size={16} />
                   </button>
                 </div>
               ) : (
-                <label className="cursor-pointer">
-                  <div className="w-24 h-24 bg-gray-100 rounded-full flex flex-col items-center justify-center border-2 border-dashed border-gray-300 hover:border-amber-500 transition">
+                <label style={{ cursor: 'pointer' }}>
+                  <div style={{
+                    width: '6rem',
+                    height: '6rem',
+                    backgroundColor: '#f3f4f6',
+                    borderRadius: '9999px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    border: '2px dashed #d1d5db',
+                    transition: 'all 0.2s'
+                  }}>
                     {uploadingPhoto ? (
-                      <Loader2 className="w-8 h-8 text-amber-500 animate-spin" />
+                      <Loader2 size={32} style={{ color: '#f59e0b', animation: 'spin 1s linear infinite' }} />
                     ) : (
                       <>
-                        <Camera className="w-8 h-8 text-gray-400" />
-                        <span className="text-xs text-gray-500 mt-1">Foto</span>
+                        <Camera size={32} style={{ color: '#9ca3af' }} />
+                        <span style={{ fontSize: '0.75rem', color: '#6b7280', marginTop: '0.25rem' }}>Foto</span>
                       </>
                     )}
                   </div>
@@ -461,15 +497,13 @@ function AddRiderModal({ plateId, onClose, onSuccess }: any) {
                       const file = e.target.files?.[0]
                       if (file) handlePhotoUpload(file)
                     }}
-                    className="hidden"
+                    style={{ display: 'none' }}
                     disabled={uploadingPhoto}
                   />
                 </label>
               )}
             </div>
-            <p className="text-xs text-gray-400 mt-2">
-              Clique para adicionar foto (max 2MB)
-            </p>
+            <p style={{ fontSize: '0.75rem', color: '#9ca3af', marginTop: '0.5rem' }}>Clique para adicionar foto (max 2MB)</p>
           </div>
 
           <input
@@ -478,7 +512,7 @@ function AddRiderModal({ plateId, onClose, onSuccess }: any) {
             placeholder="Nome completo"
             value={formData.name}
             onChange={(e) => setFormData({...formData, name: e.target.value})}
-            className="w-full p-3 border rounded-lg"
+            style={{ width: '100%', padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }}
           />
           <input
             type="tel"
@@ -486,7 +520,7 @@ function AddRiderModal({ plateId, onClose, onSuccess }: any) {
             placeholder="Telefone"
             value={formData.phone}
             onChange={(e) => setFormData({...formData, phone: e.target.value})}
-            className="w-full p-3 border rounded-lg"
+            style={{ width: '100%', padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }}
           />
           <input
             type="text"
@@ -494,19 +528,29 @@ function AddRiderModal({ plateId, onClose, onSuccess }: any) {
             placeholder="BI"
             value={formData.bi}
             onChange={(e) => setFormData({...formData, bi: e.target.value})}
-            className="w-full p-3 border rounded-lg"
+            style={{ width: '100%', padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }}
           />
           <input
             type="text"
             placeholder="Senha"
             value={formData.password}
             onChange={(e) => setFormData({...formData, password: e.target.value})}
-            className="w-full p-3 border rounded-lg bg-gray-50"
+            style={{ width: '100%', padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem', backgroundColor: '#f9fafb' }}
           />
           <button
             type="submit"
             disabled={loading || uploadingPhoto}
-            className="w-full bg-amber-500 text-white py-3 rounded-lg font-semibold hover:bg-amber-600 transition disabled:opacity-50"
+            style={{
+              width: '100%',
+              backgroundColor: '#f59e0b',
+              color: 'white',
+              padding: '0.75rem',
+              borderRadius: '0.5rem',
+              border: 'none',
+              cursor: 'pointer',
+              fontWeight: 'bold',
+              opacity: (loading || uploadingPhoto) ? 0.5 : 1
+            }}
           >
             {loading ? 'Cadastrando...' : 'Cadastrar Motoqueiro'}
           </button>
@@ -517,18 +561,77 @@ function AddRiderModal({ plateId, onClose, onSuccess }: any) {
 }
 
 // Modal de Editar Motoqueiro
+// Modal de Editar Motoqueiro (com upload de foto)
 function EditRiderModal({ rider, onClose, onSuccess }: any) {
-  const [formData, setFormData] = useState({ name: rider.name, phone: rider.phone, bi: rider.bi, password: '' })
+  const [formData, setFormData] = useState({
+    name: rider.name,
+    phone: rider.phone,
+    bi: rider.bi,
+    password: ''
+  })
+  const [photoUrl, setPhotoUrl] = useState<string>(rider.photo_url || '')
   const [loading, setLoading] = useState(false)
+  const [uploadingPhoto, setUploadingPhoto] = useState(false)
+
+  const handlePhotoUpload = async (file: File) => {
+    setUploadingPhoto(true)
+
+    if (!file.type.startsWith('image/')) {
+      alert('Por favor, selecione uma imagem válida')
+      setUploadingPhoto(false)
+      return
+    }
+
+    if (file.size > 2 * 1024 * 1024) {
+      alert('A imagem deve ter no máximo 2MB')
+      setUploadingPhoto(false)
+      return
+    }
+
+    const fileExt = file.name.split('.').pop()
+    const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`
+    const filePath = `riders/${fileName}`
+
+    const { error: uploadError } = await supabase.storage
+      .from('rider-photos')
+      .upload(filePath, file)
+
+    if (uploadError) {
+      alert('Erro ao fazer upload da foto')
+      setUploadingPhoto(false)
+      return
+    }
+
+    const { data: { publicUrl } } = supabase.storage
+      .from('rider-photos')
+      .getPublicUrl(filePath)
+
+    setPhotoUrl(publicUrl)
+    setUploadingPhoto(false)
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
 
-    const updateData: any = { name: formData.name, phone: formData.phone, bi: formData.bi }
-    if (formData.password) updateData.password_hash = formData.password
+    const updateData: any = {
+      name: formData.name,
+      phone: formData.phone,
+      bi: formData.bi
+    }
 
-    const { error } = await supabase.from('riders').update(updateData).eq('id', rider.id)
+    if (formData.password) {
+      updateData.password_hash = formData.password
+    }
+
+    if (photoUrl && photoUrl !== rider.photo_url) {
+      updateData.photo_url = photoUrl
+    }
+
+    const { error } = await supabase
+      .from('riders')
+      .update(updateData)
+      .eq('id', rider.id)
 
     if (!error) {
       onSuccess()
@@ -539,18 +642,155 @@ function EditRiderModal({ rider, onClose, onSuccess }: any) {
   }
 
   return (
-    <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 }}>
-      <div style={{ backgroundColor: 'white', borderRadius: '1rem', maxWidth: '28rem', width: '90%' }}>
-        <div style={{ background: 'linear-gradient(135deg, #3b82f6, #2563eb)', padding: '1rem', borderRadius: '1rem 1rem 0 0', display: 'flex', justifyContent: 'space-between', color: 'white' }}>
+    <div style={{
+      position: 'fixed',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      backgroundColor: 'rgba(0,0,0,0.5)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: 50
+    }}>
+      <div style={{
+        backgroundColor: 'white',
+        borderRadius: '1rem',
+        maxWidth: '28rem',
+        width: '90%',
+        maxHeight: '90vh',
+        overflow: 'auto'
+      }}>
+        <div style={{
+          background: 'linear-gradient(135deg, #3b82f6, #2563eb)',
+          padding: '1rem',
+          borderRadius: '1rem 1rem 0 0',
+          display: 'flex',
+          justifyContent: 'space-between',
+          color: 'white'
+        }}>
           <h3 style={{ fontWeight: 'bold' }}>Editar Motoqueiro</h3>
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer', fontSize: '1.25rem' }}>✕</button>
         </div>
         <form onSubmit={handleSubmit} style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          <input type="text" required placeholder="Nome" value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} />
-          <input type="tel" required placeholder="Telefone" value={formData.phone} onChange={(e) => setFormData({...formData, phone: e.target.value})} style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} />
-          <input type="text" required placeholder="BI" value={formData.bi} onChange={(e) => setFormData({...formData, bi: e.target.value})} style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} />
-          <input type="text" placeholder="Nova Senha (opcional)" value={formData.password} onChange={(e) => setFormData({...formData, password: e.target.value})} style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} />
-          <button type="submit" disabled={loading} style={{ backgroundColor: '#3b82f6', color: 'white', padding: '0.75rem', borderRadius: '0.5rem', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}>{loading ? 'Salvando...' : 'Salvar'}</button>
+          {/* Upload de Foto */}
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+            <div style={{ position: 'relative' }}>
+              {photoUrl ? (
+                <div style={{ position: 'relative' }}>
+                  <img
+                    src={photoUrl}
+                    alt="Preview"
+                    style={{ width: '6rem', height: '6rem', borderRadius: '9999px', objectFit: 'cover', border: '4px solid #93c5fd' }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setPhotoUrl('')}
+                    style={{
+                      position: 'absolute',
+                      top: '-0.5rem',
+                      right: '-0.5rem',
+                      backgroundColor: '#ef4444',
+                      color: 'white',
+                      borderRadius: '9999px',
+                      padding: '0.25rem',
+                      border: 'none',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+              ) : (
+                <label style={{ cursor: 'pointer' }}>
+                  <div style={{
+                    width: '6rem',
+                    height: '6rem',
+                    backgroundColor: '#f3f4f6',
+                    borderRadius: '9999px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    border: '2px dashed #d1d5db',
+                    transition: 'all 0.2s'
+                  }}>
+                    {uploadingPhoto ? (
+                      <Loader2 size={32} style={{ color: '#3b82f6', animation: 'spin 1s linear infinite' }} />
+                    ) : (
+                      <>
+                        <Camera size={32} style={{ color: '#9ca3af' }} />
+                        <span style={{ fontSize: '0.75rem', color: '#6b7280', marginTop: '0.25rem' }}>Foto</span>
+                      </>
+                    )}
+                  </div>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0]
+                      if (file) handlePhotoUpload(file)
+                    }}
+                    style={{ display: 'none' }}
+                    disabled={uploadingPhoto}
+                  />
+                </label>
+              )}
+            </div>
+            <p style={{ fontSize: '0.75rem', color: '#9ca3af', marginTop: '0.5rem' }}>
+              Clique na foto para trocar (max 2MB)
+            </p>
+          </div>
+
+          <input
+            type="text"
+            required
+            placeholder="Nome"
+            value={formData.name}
+            onChange={(e) => setFormData({...formData, name: e.target.value})}
+            style={{ width: '100%', padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }}
+          />
+          <input
+            type="tel"
+            required
+            placeholder="Telefone"
+            value={formData.phone}
+            onChange={(e) => setFormData({...formData, phone: e.target.value})}
+            style={{ width: '100%', padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }}
+          />
+          <input
+            type="text"
+            required
+            placeholder="BI"
+            value={formData.bi}
+            onChange={(e) => setFormData({...formData, bi: e.target.value})}
+            style={{ width: '100%', padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }}
+          />
+          <input
+            type="text"
+            placeholder="Nova Senha (opcional)"
+            value={formData.password}
+            onChange={(e) => setFormData({...formData, password: e.target.value})}
+            style={{ width: '100%', padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }}
+          />
+          <button
+            type="submit"
+            disabled={loading || uploadingPhoto}
+            style={{
+              width: '100%',
+              backgroundColor: '#3b82f6',
+              color: 'white',
+              padding: '0.75rem',
+              borderRadius: '0.5rem',
+              border: 'none',
+              cursor: 'pointer',
+              fontWeight: 'bold',
+              opacity: (loading || uploadingPhoto) ? 0.5 : 1
+            }}
+          >
+            {loading ? 'Salvando...' : 'Salvar Alterações'}
+          </button>
         </form>
       </div>
     </div>
