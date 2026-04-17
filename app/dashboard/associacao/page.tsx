@@ -172,12 +172,36 @@ export default function AssociationDashboard() {
 
   const deleteItem = async (table: string, id: string, name: string) => {
     if (confirm(`Tem certeza que deseja excluir ${name}?`)) {
-      const { error } = await supabase.from(table).delete().eq('id', id)
-      if (!error) {
+      try {
+        // Se for uma placa, verificar motoqueiros associados
+        if (table === 'plates') {
+          const { data: riders, error: ridersError } = await supabase
+            .from('riders')
+            .select('id')
+            .eq('plate_id', id)
+          
+          if (ridersError) throw ridersError
+          
+          if (riders && riders.length > 0) {
+            if (!confirm(`Esta placa tem ${riders.length} motoqueiro(s) associado(s). Excluir também os motoqueiros?`)) {
+              return
+            }
+            await supabase.from('riders').delete().eq('plate_id', id)
+          }
+        }
+        
+        // Se for um chefe, desassociar das placas
+        if (table === 'bosses') {
+          await supabase.from('plates').update({ boss_id: null }).eq('boss_id', id)
+        }
+        
+        const { error } = await supabase.from(table).delete().eq('id', id)
+        if (error) throw error
+        
         const associationId = localStorage.getItem('association_id')
         if (associationId) loadAllData(associationId)
-      } else {
-        alert('Erro ao excluir: ' + error.message)
+      } catch (err: any) {
+        alert('Erro ao excluir: ' + err.message)
       }
     }
   }
@@ -239,7 +263,10 @@ export default function AssociationDashboard() {
       maxHeight: '90vh',
       overflow: 'auto',
       boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)'
-    }
+    },
+    input: { width: '100%', padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem', fontSize: '0.875rem' },
+    label: { display: 'block', fontSize: '0.875rem', fontWeight: '500', marginBottom: '0.25rem', color: '#374151' },
+    select: { width: '100%', padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem', backgroundColor: 'white', fontSize: '0.875rem' }
   }
 
   if (loading) {
@@ -545,7 +572,7 @@ export default function AssociationDashboard() {
         )}
       </div>
 
-      {/* Modal Adicionar Placa - CENTRALIZADO */}
+      {/* Modal Adicionar Placa - ATUALIZADO COM TODOS OS CAMPOS */}
       {showAddPlate && (
         <div style={styles.modalOverlay} onClick={() => setShowAddPlate(false)}>
           <div style={styles.modalContent} onClick={(e) => e.stopPropagation()}>
@@ -556,6 +583,7 @@ export default function AssociationDashboard() {
                 const formData = new FormData(e.currentTarget)
                 const plate_number = formData.get('plate_number') as string
                 const weekly_fee = parseInt(formData.get('weekly_fee') as string)
+                const boss_id = formData.get('boss_id') as string
                 const max_riders = parseInt(formData.get('max_riders') as string)
                 const associationId = localStorage.getItem('association_id')
                 
@@ -563,26 +591,89 @@ export default function AssociationDashboard() {
                   plate_number,
                   weekly_fee,
                   max_riders,
+                  boss_id: boss_id || null,
                   fee_per_rider: 300,
                   total_weekly_fee: max_riders * 300,
                   association_id: associationId,
                   is_active: true,
                   created_at: new Date().toISOString()
                 })
+                
                 if (!error) {
                   setShowAddPlate(false)
-                  const associationId = localStorage.getItem('association_id')
-                  if (associationId) loadAllData(associationId)
+                  const associationIdReload = localStorage.getItem('association_id')
+                  if (associationIdReload) loadAllData(associationIdReload)
                 } else {
                   alert('Erro: ' + error.message)
                 }
               }} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                <input type="text" name="plate_number" placeholder="Nome da Placa" required style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} />
-                <input type="number" name="weekly_fee" placeholder="Taxa Semanal" defaultValue="75000" required style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} />
-                <input type="number" name="max_riders" placeholder="Máximo de Motoqueiros" defaultValue="20" required style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} />
+                
+                {/* Nome da Placa */}
+                <div>
+                  <label style={styles.label}>Nome da Placa *</label>
+                  <input 
+                    type="text" 
+                    name="plate_number" 
+                    placeholder="Ex: PLACA-001" 
+                    required 
+                    style={styles.input} 
+                  />
+                </div>
+                
+                {/* Taxa Semanal */}
+                <div>
+                  <label style={styles.label}>Taxa Semanal (Kz) *</label>
+                  <input 
+                    type="number" 
+                    name="weekly_fee" 
+                    placeholder="75000" 
+                    defaultValue="75000" 
+                    required 
+                    style={styles.input} 
+                  />
+                </div>
+                
+                {/* Chefe da Placa */}
+                <div>
+                  <label style={styles.label}>Chefe da Placa</label>
+                  <select name="boss_id" style={styles.select}>
+                    <option value="">Selecione um chefe (opcional)</option>
+                    {bosses.map(boss => (
+                      <option key={boss.id} value={boss.id}>
+                        {boss.name} {boss.plate?.plate_number ? `- ${boss.plate.plate_number}` : ''}
+                      </option>
+                    ))}
+                  </select>
+                  <p style={{ fontSize: '0.75rem', color: '#6b7280', marginTop: '0.25rem' }}>
+                    Selecione um chefe para associar a esta placa
+                  </p>
+                </div>
+                
+                {/* Número de Motoqueiros */}
+                <div>
+                  <label style={styles.label}>Número Máximo de Motoqueiros *</label>
+                  <input 
+                    type="number" 
+                    name="max_riders" 
+                    placeholder="20" 
+                    defaultValue="20" 
+                    required 
+                    min="1"
+                    max="100"
+                    style={styles.input} 
+                  />
+                  <p style={{ fontSize: '0.75rem', color: '#6b7280', marginTop: '0.25rem' }}>
+                    Quantos motoqueiros podem trabalhar com esta placa
+                  </p>
+                </div>
+                
                 <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1rem' }}>
-                  <button type="button" onClick={() => setShowAddPlate(false)} style={{ flex: 1, padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem', cursor: 'pointer' }}>Cancelar</button>
-                  <button type="submit" style={{ flex: 1, padding: '0.75rem', backgroundColor: '#2563eb', color: 'white', border: 'none', borderRadius: '0.5rem', cursor: 'pointer' }}>Cadastrar</button>
+                  <button type="button" onClick={() => setShowAddPlate(false)} style={{ flex: 1, padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem', cursor: 'pointer', backgroundColor: 'white' }}>
+                    Cancelar
+                  </button>
+                  <button type="submit" style={{ flex: 1, padding: '0.75rem', backgroundColor: '#2563eb', color: 'white', border: 'none', borderRadius: '0.5rem', cursor: 'pointer', fontWeight: 'bold' }}>
+                    Cadastrar Placa
+                  </button>
                 </div>
               </form>
             </div>
@@ -590,7 +681,7 @@ export default function AssociationDashboard() {
         </div>
       )}
 
-      {/* Modal Adicionar Chefe - CENTRALIZADO */}
+      {/* Modal Adicionar Chefe */}
       {showAddBoss && (
         <div style={styles.modalOverlay} onClick={() => setShowAddBoss(false)}>
           <div style={styles.modalContent} onClick={(e) => e.stopPropagation()}>
@@ -628,17 +719,17 @@ export default function AssociationDashboard() {
                 const associationIdReload = localStorage.getItem('association_id')
                 if (associationIdReload) loadAllData(associationIdReload)
               }} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                <input type="text" name="name" placeholder="Nome completo" required style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} />
-                <input type="email" name="email" placeholder="Email" required style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} />
-                <input type="tel" name="phone" placeholder="Telefone" required style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} />
-                <input type="text" name="password" placeholder="Senha (opcional)" style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} />
-                <select name="plate_id" style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }}>
+                <input type="text" name="name" placeholder="Nome completo" required style={styles.input} />
+                <input type="email" name="email" placeholder="Email" required style={styles.input} />
+                <input type="tel" name="phone" placeholder="Telefone" required style={styles.input} />
+                <input type="text" name="password" placeholder="Senha (opcional)" style={styles.input} />
+                <select name="plate_id" style={styles.select}>
                   <option value="">Nenhuma placa</option>
                   {plates.map(plate => <option key={plate.id} value={plate.id}>{plate.plate_number}</option>)}
                 </select>
                 <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1rem' }}>
-                  <button type="button" onClick={() => setShowAddBoss(false)} style={{ flex: 1, padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem', cursor: 'pointer' }}>Cancelar</button>
-                  <button type="submit" style={{ flex: 1, padding: '0.75rem', backgroundColor: '#2563eb', color: 'white', border: 'none', borderRadius: '0.5rem', cursor: 'pointer' }}>Cadastrar</button>
+                  <button type="button" onClick={() => setShowAddBoss(false)} style={{ flex: 1, padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem', cursor: 'pointer', backgroundColor: 'white' }}>Cancelar</button>
+                  <button type="submit" style={{ flex: 1, padding: '0.75rem', backgroundColor: '#2563eb', color: 'white', border: 'none', borderRadius: '0.5rem', cursor: 'pointer', fontWeight: 'bold' }}>Cadastrar</button>
                 </div>
               </form>
             </div>
@@ -646,7 +737,7 @@ export default function AssociationDashboard() {
         </div>
       )}
 
-      {/* Modal Adicionar Motoqueiro - CENTRALIZADO */}
+      {/* Modal Adicionar Motoqueiro */}
       {showAddRider && (
         <div style={styles.modalOverlay} onClick={() => setShowAddRider(false)}>
           <div style={styles.modalContent} onClick={(e) => e.stopPropagation()}>
@@ -682,17 +773,17 @@ export default function AssociationDashboard() {
                   alert('Erro ao cadastrar motoqueiro: ' + error.message)
                 }
               }} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                <input type="text" name="name" placeholder="Nome completo" required style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} />
-                <input type="tel" name="phone" placeholder="Telefone" required style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} />
-                <input type="text" name="bi" placeholder="BI" required style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} />
-                <input type="text" name="password" placeholder="Senha (opcional)" style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} />
-                <select name="plate_id" style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }}>
+                <input type="text" name="name" placeholder="Nome completo" required style={styles.input} />
+                <input type="tel" name="phone" placeholder="Telefone" required style={styles.input} />
+                <input type="text" name="bi" placeholder="BI" required style={styles.input} />
+                <input type="text" name="password" placeholder="Senha (opcional)" style={styles.input} />
+                <select name="plate_id" style={styles.select}>
                   <option value="">Nenhuma placa</option>
                   {plates.map(plate => <option key={plate.id} value={plate.id}>{plate.plate_number}</option>)}
                 </select>
                 <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1rem' }}>
-                  <button type="button" onClick={() => setShowAddRider(false)} style={{ flex: 1, padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem', cursor: 'pointer' }}>Cancelar</button>
-                  <button type="submit" style={{ flex: 1, padding: '0.75rem', backgroundColor: '#2563eb', color: 'white', border: 'none', borderRadius: '0.5rem', cursor: 'pointer' }}>Cadastrar</button>
+                  <button type="button" onClick={() => setShowAddRider(false)} style={{ flex: 1, padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem', cursor: 'pointer', backgroundColor: 'white' }}>Cancelar</button>
+                  <button type="submit" style={{ flex: 1, padding: '0.75rem', backgroundColor: '#2563eb', color: 'white', border: 'none', borderRadius: '0.5rem', cursor: 'pointer', fontWeight: 'bold' }}>Cadastrar</button>
                 </div>
               </form>
             </div>
