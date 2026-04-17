@@ -19,7 +19,11 @@ import {
   Wallet,
   Star,
   BellRing,
-  BellOff
+  BellOff,
+  Camera,
+  Loader2,
+  Edit,
+  X
 } from 'lucide-react'
 import { 
   requestNotificationPermission, 
@@ -43,6 +47,7 @@ export default function RiderDashboard() {
     totalRides: 0,
     rating: 4.8
   })
+  const [showEditProfile, setShowEditProfile] = useState(false)
   const router = useRouter()
   const channelRef = useRef<any>(null)
   const audioRef = useRef<HTMLAudioElement | null>(null)
@@ -58,7 +63,6 @@ export default function RiderDashboard() {
       return
     }
     
-    // Verificar permissão de notificação
     if (isNotificationSupported()) {
       setPushPermission(Notification.permission)
       registerServiceWorker()
@@ -75,7 +79,6 @@ export default function RiderDashboard() {
     
     channelRef.current = subscribeToOrders(riderId)
     
-    // Perguntar sobre notificações após 5 segundos
     const timer = setTimeout(() => {
       if (isNotificationSupported() && Notification.permission === 'default') {
         const ask = confirm('🔔 Quer receber notificações de novos pedidos mesmo com o app fechado?')
@@ -281,7 +284,6 @@ export default function RiderDashboard() {
           await addNotification('Novo Pedido! 🚀', message, 'order')
           playSound()
           
-          // Notificação push mesmo com app fechado
           if (Notification.permission === 'granted') {
             const notification = new Notification('🏍️ MeuPiloto! - Novo Pedido', {
               body: `${newOrder.customer_name || 'Cliente'} - ${newOrder.price?.toLocaleString()} Kz`,
@@ -532,6 +534,15 @@ export default function RiderDashboard() {
             </div>
             
             <div className="flex gap-2 items-center">
+              {/* Botão Editar Perfil */}
+              <button
+                onClick={() => setShowEditProfile(true)}
+                className="flex items-center gap-2 px-4 py-2 rounded-full font-semibold transition bg-blue-500 text-white hover:bg-blue-600 shadow-md"
+              >
+                <Edit className="w-4 h-4" />
+                Editar Perfil
+              </button>
+
               {/* Botão de Notificações Push */}
               {isNotificationSupported() && pushPermission === 'default' && (
                 <button
@@ -612,7 +623,7 @@ export default function RiderDashboard() {
                   </div>
                 )}
               </div>
-
+          
               {/* Botão Online/Offline */}
               <button
                 onClick={toggleOnline}
@@ -701,7 +712,7 @@ export default function RiderDashboard() {
         </div>
       </div>
 
-      {/* Conteúdo */}
+      {/* Conteúdo - mantém o mesmo de antes */}
       <div className="max-w-7xl mx-auto p-4">
         {activeTab === 'pending' ? (
           <>
@@ -818,6 +829,208 @@ export default function RiderDashboard() {
             )}
           </>
         )}
+      </div>
+
+      {/* Modal de Editar Perfil */}
+      {showEditProfile && rider && (
+        <EditProfileModal
+          rider={rider}
+          onClose={() => setShowEditProfile(false)}
+          onSuccess={() => {
+            setShowEditProfile(false)
+            const riderId = localStorage.getItem('rider_id')
+            if (riderId) loadRider(riderId)
+          }}
+        />
+      )}
+    </div>
+  )
+}
+
+// Componente Modal de Editar Perfil
+function EditProfileModal({ rider, onClose, onSuccess }: any) {
+  const [formData, setFormData] = useState({
+    name: rider.name,
+    phone: rider.phone,
+    bi: rider.bi,
+    password: ''
+  })
+  const [photoFile, setPhotoFile] = useState<File | null>(null)
+  const [photoPreview, setPhotoPreview] = useState<string | null>(rider.photo_url)
+  const [loading, setLoading] = useState(false)
+  const [uploadingPhoto, setUploadingPhoto] = useState(false)
+
+  const handlePhotoUpload = async (file: File): Promise<string | null> => {
+    setUploadingPhoto(true)
+    
+    if (!file.type.startsWith('image/')) {
+      alert('Por favor, selecione uma imagem válida')
+      setUploadingPhoto(false)
+      return null
+    }
+
+    if (file.size > 2 * 1024 * 1024) {
+      alert('A imagem deve ter no máximo 2MB')
+      setUploadingPhoto(false)
+      return null
+    }
+
+    const fileExt = file.name.split('.').pop()
+    const fileName = `${rider.id}-${Date.now()}.${fileExt}`
+    const filePath = `riders/${fileName}`
+
+    const { error: uploadError } = await supabase.storage
+      .from('rider-photos')
+      .upload(filePath, file)
+
+    if (uploadError) {
+      alert('Erro ao fazer upload da foto: ' + uploadError.message)
+      setUploadingPhoto(false)
+      return null
+    }
+
+    const { data: { publicUrl } } = supabase.storage
+      .from('rider-photos')
+      .getPublicUrl(filePath)
+    
+    setUploadingPhoto(false)
+    return publicUrl
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setLoading(true)
+
+    const updateData: any = {
+      name: formData.name,
+      phone: formData.phone,
+      bi: formData.bi
+    }
+
+    if (formData.password) {
+      updateData.password_hash = formData.password
+    }
+
+    if (photoFile) {
+      const photoUrl = await handlePhotoUpload(photoFile)
+      if (photoUrl) updateData.photo_url = photoUrl
+    }
+
+    const { error } = await supabase
+      .from('riders')
+      .update(updateData)
+      .eq('id', rider.id)
+
+    if (!error) {
+      alert('✅ Perfil atualizado com sucesso!')
+      onSuccess()
+    } else {
+      alert('Erro ao atualizar: ' + error.message)
+    }
+    setLoading(false)
+  }
+
+  const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      setPhotoFile(file)
+      const reader = new FileReader()
+      reader.onloadend = () => setPhotoPreview(reader.result as string)
+      reader.readAsDataURL(file)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto">
+      <div className="bg-white rounded-2xl max-w-md w-full">
+        <div className="bg-gradient-to-r from-amber-500 to-red-500 p-4 rounded-t-2xl flex justify-between text-white">
+          <h3 className="font-bold">Editar Perfil</h3>
+          <button onClick={onClose} className="text-white/80 hover:text-white">✕</button>
+        </div>
+        <form onSubmit={handleSubmit} className="p-5 space-y-4">
+          {/* Upload de Foto */}
+          <div className="flex flex-col items-center">
+            <div className="relative">
+              {photoPreview ? (
+                <div className="relative">
+                  <img 
+                    src={photoPreview} 
+                    alt="Preview" 
+                    className="w-24 h-24 rounded-full object-cover border-4 border-amber-300"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => { setPhotoFile(null); setPhotoPreview(null) }}
+                    className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600"
+                  >
+                    <XCircle className="w-4 h-4" />
+                  </button>
+                </div>
+              ) : (
+                <label className="cursor-pointer">
+                  <div className="w-24 h-24 bg-gray-100 rounded-full flex flex-col items-center justify-center border-2 border-dashed border-gray-300 hover:border-amber-500 transition">
+                    {uploadingPhoto ? (
+                      <Loader2 className="w-8 h-8 text-amber-500 animate-spin" />
+                    ) : (
+                      <>
+                        <Camera className="w-8 h-8 text-gray-400" />
+                        <span className="text-xs text-gray-500 mt-1">Foto</span>
+                      </>
+                    )}
+                  </div>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handlePhotoChange}
+                    className="hidden"
+                    disabled={uploadingPhoto}
+                  />
+                </label>
+              )}
+            </div>
+            <p className="text-xs text-gray-400 mt-2">Clique para adicionar foto (max 2MB)</p>
+          </div>
+
+          <input
+            type="text"
+            required
+            placeholder="Nome completo"
+            value={formData.name}
+            onChange={(e) => setFormData({...formData, name: e.target.value})}
+            className="w-full p-3 border rounded-lg"
+          />
+          <input
+            type="tel"
+            required
+            placeholder="Telefone"
+            value={formData.phone}
+            onChange={(e) => setFormData({...formData, phone: e.target.value})}
+            className="w-full p-3 border rounded-lg"
+          />
+          <input
+            type="text"
+            required
+            placeholder="BI"
+            value={formData.bi}
+            onChange={(e) => setFormData({...formData, bi: e.target.value})}
+            className="w-full p-3 border rounded-lg"
+          />
+          <input
+            type="text"
+            placeholder="Nova Senha (opcional)"
+            value={formData.password}
+            onChange={(e) => setFormData({...formData, password: e.target.value})}
+            className="w-full p-3 border rounded-lg"
+          />
+          
+          <button
+            type="submit"
+            disabled={loading || uploadingPhoto}
+            className="w-full bg-amber-500 text-white py-3 rounded-lg font-semibold hover:bg-amber-600 transition disabled:opacity-50"
+          >
+            {loading ? 'Salvando...' : 'Salvar Alterações'}
+          </button>
+        </form>
       </div>
     </div>
   )
