@@ -1,8 +1,8 @@
-// app/page.tsx
+// app/page.tsx - Footer corrigido
 'use client'
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase/client'
-import { Bike, Users, MapPin, Search, Star, Wifi, WifiOff, Shield, UserCog, User, Building2 } from 'lucide-react'
+import { Bike, Users, MapPin, Search, Star, Wifi, WifiOff, Shield, UserCog, User, Building2, Sparkles } from 'lucide-react'
 import Link from 'next/link'
 
 export default function Home() {
@@ -54,63 +54,83 @@ export default function Home() {
   const favoritePlates = filteredPlates.filter(plate => favorites.includes(plate.id))
   const normalPlates = filteredPlates.filter(plate => !favorites.includes(plate.id))
 
+  const styles = {
+    container: { minHeight: '100vh', background: 'linear-gradient(135deg, #f9fafb 0%, #fff5ed 100%)' },
+    header: { backgroundColor: 'rgba(255,255,255,0.9)', backdropFilter: 'blur(8px)', borderBottom: '1px solid #f0f0f0', position: 'sticky' as const, top: 0, zIndex: 10 },
+    card: { backgroundColor: 'white', borderRadius: '16px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)', border: '1px solid #f0f0f0', overflow: 'hidden', transition: 'all 0.3s ease' },
+    button: { 
+      width: '100%', 
+      padding: '12px', 
+      background: 'linear-gradient(135deg, #f59e0b 0%, #ea580c 100%)',
+      color: 'white',
+      border: 'none',
+      fontWeight: 600,
+      fontSize: '14px',
+      cursor: 'pointer',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: '8px',
+      transition: 'all 0.3s ease'
+    }
+  }
+
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-amber-50 to-red-50">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-amber-500 mx-auto mb-4"></div>
-          <p className="text-gray-600">Carregando MeuPiloto!...</p>
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, #fffbeb, #fff0f0)' }}>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ animation: 'spin 1s linear infinite', width: '48px', height: '48px', border: '2px solid #f59e0b', borderTopColor: 'transparent', borderRadius: '50%', margin: '0 auto 16px' }}></div>
+          <p style={{ color: '#6b7280' }}>Carregando MeuPiloto!...</p>
         </div>
       </div>
     )
   }
 
   return (
-    <main className="min-h-screen bg-gray-50">
+    <main style={styles.container}>
       {/* Header */}
-      <div className="bg-white border-b sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto px-4 py-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Bike className="w-8 h-8 text-amber-500" />
-              <h1 className="text-xl font-bold text-gray-900">MeuPiloto!</h1>
+      <div style={styles.header}>
+        <div style={{ maxWidth: '1280px', margin: '0 auto', padding: '12px 16px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Bike size={32} color="#f59e0b" />
+              <div>
+                <h1 style={{ fontSize: '20px', fontWeight: 'bold', background: 'linear-gradient(135deg, #d97706, #ea580c)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>MeuPiloto!</h1>
+                <p style={{ fontSize: '10px', color: '#9ca3af' }}>Sua corrida com segurança</p>
+              </div>
             </div>
             
-            <div className="relative max-w-md w-full">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <div style={{ position: 'relative', flex: 1, maxWidth: '400px' }}>
+              <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#9ca3af' }} />
               <input
                 type="text"
                 placeholder="Pesquisar placa ou chefe..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 bg-gray-100 rounded-full text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+                style={{ width: '100%', padding: '8px 12px 8px 36px', backgroundColor: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: '9999px', fontSize: '14px', outline: 'none' }}
               />
             </div>
 
             {/* Links de Acesso */}
-            <div className="flex items-center gap-2">
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
               <Link href="/login/motoqueiro">
-                <button className="flex items-center gap-1 px-3 py-1.5 text-sm text-gray-600 hover:text-amber-600 transition rounded-lg hover:bg-gray-100">
-                  <User className="w-4 h-4" />
-                  Motoqueiro
+                <button style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '6px 12px', fontSize: '14px', color: '#6b7280', background: 'none', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>
+                  <User size={16} /> Motoqueiro
                 </button>
               </Link>
               <Link href="/login/chefe">
-                <button className="flex items-center gap-1 px-3 py-1.5 text-sm text-gray-600 hover:text-amber-600 transition rounded-lg hover:bg-gray-100">
-                  <UserCog className="w-4 h-4" />
-                  Chefe
+                <button style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '6px 12px', fontSize: '14px', color: '#6b7280', background: 'none', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>
+                  <UserCog size={16} /> Chefe
                 </button>
               </Link>
               <Link href="/login/associacao">
-                <button className="flex items-center gap-1 px-3 py-1.5 text-sm text-gray-600 hover:text-amber-600 transition rounded-lg hover:bg-gray-100">
-                  <Building2 className="w-4 h-4" />
-                  Associação
+                <button style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '6px 12px', fontSize: '14px', color: '#6b7280', background: 'none', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>
+                  <Building2 size={16} /> Associação
                 </button>
               </Link>
               <Link href="/login/admin">
-                <button className="flex items-center gap-1 px-3 py-1.5 text-sm text-gray-600 hover:text-amber-600 transition rounded-lg hover:bg-gray-100">
-                  <Shield className="w-4 h-4" />
-                  Admin
+                <button style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '6px 12px', fontSize: '14px', color: '#6b7280', background: 'none', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>
+                  <Shield size={16} /> Admin
                 </button>
               </Link>
             </div>
@@ -118,16 +138,30 @@ export default function Home() {
         </div>
       </div>
 
+      {/* Hero mini */}
+      <div style={{ textAlign: 'center', padding: '24px 16px', borderBottom: '1px solid #f0f0f0' }}>
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', backgroundColor: '#fef3c7', padding: '4px 12px', borderRadius: '9999px', marginBottom: '8px' }}>
+          <Sparkles size={12} color="#d97706" />
+          <span style={{ fontSize: '12px', color: '#d97706', fontWeight: 500 }}>Plataforma de Transporte</span>
+        </div>
+        <p style={{ fontSize: '14px', color: '#6b7280' }}>
+          {plates.length} placas ativas • {plates.reduce((acc, p) => acc + p.total_riders, 0)} motoqueiros
+        </p>
+      </div>
+
       {/* Conteúdo */}
-      <div className="max-w-2xl mx-auto px-4 py-6">
+      <div style={{ maxWidth: '672px', margin: '0 auto', padding: '24px 16px' }}>
         {/* Seção de Favoritos */}
         {favoritePlates.length > 0 && (
-          <div className="mb-8">
-            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3 flex items-center gap-2">
-              <Star className="w-4 h-4 fill-amber-500 text-amber-500" />
-              PLACAS FAVORITAS
-            </h2>
-            <div className="space-y-4">
+          <div style={{ marginBottom: '32px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+              <div style={{ width: '4px', height: '20px', background: 'linear-gradient(135deg, #f59e0b, #ea580c)', borderRadius: '4px' }}></div>
+              <h2 style={{ fontSize: '14px', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '1px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Star size={16} fill="#f59e0b" color="#f59e0b" />
+                PLACAS FAVORITAS
+              </h2>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               {favoritePlates.map((plate) => (
                 <PlateCard 
                   key={plate.id} 
@@ -142,10 +176,13 @@ export default function Home() {
 
         {/* Seção de Todas as Placas */}
         <div>
-          <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">
-            TODAS AS PLACAS
-          </h2>
-          <div className="space-y-4">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+            <div style={{ width: '4px', height: '20px', background: 'linear-gradient(135deg, #9ca3af, #6b7280)', borderRadius: '4px' }}></div>
+            <h2 style={{ fontSize: '14px', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '1px' }}>
+              TODAS AS PLACAS
+            </h2>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             {normalPlates.map((plate) => (
               <PlateCard 
                 key={plate.id} 
@@ -158,70 +195,111 @@ export default function Home() {
         </div>
 
         {filteredPlates.length === 0 && (
-          <div className="text-center py-12">
-            <Bike className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-            <p className="text-gray-500">Nenhuma placa encontrada</p>
+          <div style={{ textAlign: 'center', padding: '48px 0' }}>
+            <Bike size={64} color="#d1d5db" style={{ margin: '0 auto 16px' }} />
+            <p style={{ color: '#6b7280' }}>Nenhuma placa encontrada</p>
           </div>
         )}
       </div>
+
+      {/* Footer - CORRIGIDO */}
+      <footer style={{ borderTop: '1px solid #f0f0f0', marginTop: '32px', padding: '24px', textAlign: 'center' }}>
+        <p style={{ fontSize: '12px', color: '#9ca3af' }}>
+          © 2026 MeuPiloto! - Sua corrida com segurança - Rafael dev
+        </p>
+      </footer>
     </main>
   )
 }
 
 // Componente Card da Placa
 function PlateCard({ plate, isFavorite, onToggleFavorite }: any) {
+  const [isHovered, setIsHovered] = useState(false)
+
+  const cardStyle: React.CSSProperties = {
+    backgroundColor: 'white',
+    borderRadius: '16px',
+    boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+    border: '1px solid #f0f0f0',
+    overflow: 'hidden',
+    transition: 'all 0.3s ease'
+  }
+
+  const buttonStyle: React.CSSProperties = {
+    width: '100%',
+    padding: '12px',
+    background: isHovered ? 'linear-gradient(135deg, #d97706, #c2410c)' : 'linear-gradient(135deg, #f59e0b, #ea580c)',
+    color: 'white',
+    border: 'none',
+    fontWeight: 600,
+    fontSize: '14px',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '8px',
+    transition: 'all 0.3s ease'
+  }
+
   return (
-    <div className="bg-white rounded-xl shadow-sm hover:shadow-md transition-all overflow-hidden">
-      <div className="p-4 border-b flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-gradient-to-r from-amber-500 to-red-500 rounded-full flex items-center justify-center">
-            <Bike className="w-5 h-5 text-white" />
+    <div style={cardStyle}>
+      <div style={{ padding: '16px', borderBottom: '1px solid #f0f0f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div style={{ width: '40px', height: '40px', background: 'linear-gradient(135deg, #f59e0b, #ea580c)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Bike size={20} color="white" />
           </div>
           <div>
-            <div className="flex items-center gap-2">
-              <h3 className="font-bold text-gray-900">{plate.plate_number}</h3>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+              <h3 style={{ fontWeight: 'bold', color: '#111827' }}>{plate.plate_number}</h3>
               {plate.online_count > 0 && (
-                <span className="flex items-center gap-1 text-xs text-green-600">
-                  <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px', backgroundColor: '#ecfdf5', color: '#059669', padding: '2px 8px', borderRadius: '9999px' }}>
+                  <div style={{ width: '6px', height: '6px', backgroundColor: '#10b981', borderRadius: '50%' }}></div>
                   {plate.online_count} online
                 </span>
               )}
             </div>
-            <p className="text-xs text-gray-500">Chefe: {plate.boss?.name || 'Não definido'}</p>
+            <p style={{ fontSize: '12px', color: '#6b7280', marginTop: '4px' }}>Chefe: {plate.boss?.name || 'Não definido'}</p>
           </div>
         </div>
-        <button onClick={onToggleFavorite} className="p-1">
-          <Star className={`w-5 h-5 transition-colors ${isFavorite ? 'fill-amber-500 text-amber-500' : 'text-gray-400 hover:text-amber-500'}`} />
+        <button 
+          onClick={onToggleFavorite} 
+          style={{ padding: '4px', background: 'none', border: 'none', borderRadius: '50%', cursor: 'pointer' }}
+        >
+          <Star size={20} fill={isFavorite ? '#f59e0b' : 'none'} color={isFavorite ? '#f59e0b' : '#9ca3af'} />
         </button>
       </div>
 
-      <div className="p-4">
-        <div className="flex justify-around">
-          <div className="text-center">
-            <div className="flex items-center gap-1 justify-center text-gray-600">
-              <Users className="w-4 h-4" />
-              <span className="text-sm font-medium">{plate.total_riders}</span>
+      <div style={{ padding: '16px', backgroundColor: '#fafafa' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-around' }}>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', justifyContent: 'center', color: '#6b7280' }}>
+              <Users size={16} />
+              <span style={{ fontSize: '14px', fontWeight: 500, color: '#111827' }}>{plate.total_riders}</span>
             </div>
-            <p className="text-xs text-gray-400 mt-1">Motoqueiros</p>
+            <p style={{ fontSize: '12px', color: '#9ca3af', marginTop: '4px' }}>Motoqueiros</p>
           </div>
           
-          <div className="text-center">
-            <div className="flex items-center gap-1 justify-center">
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', justifyContent: 'center' }}>
               {plate.online_count > 0 ? (
-                <Wifi className="w-4 h-4 text-green-500" />
+                <Wifi size={16} color="#10b981" />
               ) : (
-                <WifiOff className="w-4 h-4 text-gray-400" />
+                <WifiOff size={16} color="#9ca3af" />
               )}
-              <span className="text-sm font-medium">{plate.online_count}</span>
+              <span style={{ fontSize: '14px', fontWeight: 500, color: '#111827' }}>{plate.online_count}</span>
             </div>
-            <p className="text-xs text-gray-400 mt-1">Online</p>
+            <p style={{ fontSize: '12px', color: '#9ca3af', marginTop: '4px' }}>Online</p>
           </div>
         </div>
       </div>
 
       <Link href={`/plate/${plate.id}`}>
-        <button className="w-full py-3 bg-amber-500 hover:bg-amber-600 text-white font-semibold transition flex items-center justify-center gap-2">
-          <MapPin className="w-4 h-4" />
+        <button 
+          style={buttonStyle}
+          onMouseEnter={() => setIsHovered(true)}
+          onMouseLeave={() => setIsHovered(false)}
+        >
+          <MapPin size={16} />
           Ver Motoqueiros
         </button>
       </Link>
