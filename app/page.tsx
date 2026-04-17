@@ -2,7 +2,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase/client'
-import { Bike, Users, MapPin, Search, Star, Wifi, WifiOff, Shield, UserCog, User } from 'lucide-react'
+import { Bike, Users, MapPin, Search, Star, Wifi, WifiOff, Shield, UserCog, User, Building2 } from 'lucide-react'
 import Link from 'next/link'
 
 export default function Home() {
@@ -101,10 +101,16 @@ export default function Home() {
                   Chefe
                 </button>
               </Link>
+              <Link href="/login/associacao">
+                <button className="flex items-center gap-1 px-3 py-1.5 text-sm text-gray-600 hover:text-amber-600 transition rounded-lg hover:bg-gray-100">
+                  <Building2 className="w-4 h-4" />
+                  Associação
+                </button>
+              </Link>
               <Link href="/login/admin">
                 <button className="flex items-center gap-1 px-3 py-1.5 text-sm text-gray-600 hover:text-amber-600 transition rounded-lg hover:bg-gray-100">
                   <Shield className="w-4 h-4" />
-                  Proibido
+                  Admin
                 </button>
               </Link>
             </div>

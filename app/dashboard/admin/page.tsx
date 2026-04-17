@@ -1,3 +1,4 @@
+// app/dashboard/admin/page.tsx
 'use client'
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase/client'
@@ -6,8 +7,20 @@ import {
   Shield, LogOut, Users, Bike, CreditCard, TrendingUp, 
   Plus, Edit, Trash2, Search, AlertCircle, Menu, X, 
   UserCog, Store, ClipboardList, RefreshCw, Phone,
-  DollarSign, Calendar, CheckCircle, XCircle
+  DollarSign, Calendar, CheckCircle, XCircle, Building2
 } from 'lucide-react'
+
+type Association = {
+  id: string
+  name: string
+  email: string
+  phone: string
+  password: string
+  address: string
+  logo_url: string
+  is_active: boolean
+  created_at: string
+}
 
 type Boss = {
   id: string
@@ -63,6 +76,7 @@ export default function AdminDashboard() {
   const router = useRouter()
   const [admin, setAdmin] = useState<any>(null)
   const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [associations, setAssociations] = useState<Association[]>([])
   const [bosses, setBosses] = useState<Boss[]>([])
   const [plates, setPlates] = useState<Plate[]>([])
   const [riders, setRiders] = useState<Rider[]>([])
@@ -70,9 +84,11 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<string>('dashboard')
   const [searchTerm, setSearchTerm] = useState('')
+  const [showAddAssociation, setShowAddAssociation] = useState(false)
   const [showAddBoss, setShowAddBoss] = useState(false)
   const [showAddPlate, setShowAddPlate] = useState(false)
   const [stats, setStats] = useState({
+    totalAssociations: 0,
     totalBosses: 0,
     totalPlates: 0,
     totalRiders: 0,
@@ -99,6 +115,10 @@ export default function AdminDashboard() {
 
   const loadAllData = async () => {
     setLoading(true)
+
+    // Carregar associações
+    const { data: associationsData } = await supabase.from('associations').select('*').order('created_at', { ascending: false })
+    setAssociations(associationsData || [])
 
     const { data: bossesData } = await supabase.from('bosses').select('*').order('created_at', { ascending: false })
     setBosses(bossesData || [])
@@ -130,6 +150,7 @@ export default function AdminDashboard() {
     const activePlates = platesData?.filter(p => p.is_active === true) || []
 
     setStats({
+      totalAssociations: associationsData?.length || 0,
       totalBosses: bossesData?.length || 0,
       totalPlates: platesData?.length || 0,
       totalRiders: ridersData?.length || 0,
@@ -165,6 +186,12 @@ export default function AdminDashboard() {
       window.location.href = `tel:${phone}`
     }
   }
+
+  const filteredAssociations = associations.filter(a => 
+    a.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+    a.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    a.phone.includes(searchTerm)
+  )
 
   const filteredBosses = bosses.filter(b => 
     b.name.toLowerCase().includes(searchTerm.toLowerCase()) || b.phone.includes(searchTerm)
@@ -247,6 +274,7 @@ export default function AdminDashboard() {
           <nav style={{ flex: 1, padding: '1rem 0' }}>
             {[
               { id: 'dashboard', label: 'Dashboard', icon: TrendingUp },
+              { id: 'associations', label: 'Associações', icon: Building2 },
               { id: 'orders', label: 'Pedidos', icon: ClipboardList },
               { id: 'plates', label: 'Placas', icon: Store },
               { id: 'bosses', label: 'Chefes', icon: UserCog },
@@ -294,6 +322,7 @@ export default function AdminDashboard() {
               <div>
                 <h1 style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#111827' }}>
                   {activeTab === 'dashboard' && 'Dashboard'}
+                  {activeTab === 'associations' && 'Associações'}
                   {activeTab === 'orders' && 'Pedidos'}
                   {activeTab === 'plates' && 'Placas'}
                   {activeTab === 'bosses' && 'Chefes'}
@@ -314,8 +343,15 @@ export default function AdminDashboard() {
                     style={{ padding: '0.5rem 0.5rem 0.5rem 2rem', border: '1px solid #e5e7eb', borderRadius: '0.5rem', width: '16rem' }}
                   />
                 </div>
-                {(activeTab === 'bosses' || activeTab === 'plates') && (
-                  <button onClick={() => activeTab === 'bosses' ? setShowAddBoss(true) : setShowAddPlate(true)} style={styles.buttonPrimary}>
+                {(activeTab === 'associations' || activeTab === 'bosses' || activeTab === 'plates') && (
+                  <button 
+                    onClick={() => {
+                      if (activeTab === 'associations') setShowAddAssociation(true)
+                      else if (activeTab === 'bosses') setShowAddBoss(true)
+                      else setShowAddPlate(true)
+                    }} 
+                    style={styles.buttonPrimary}
+                  >
                     <Plus size={16} /> Novo
                   </button>
                 )}
@@ -328,6 +364,7 @@ export default function AdminDashboard() {
         {activeTab === 'dashboard' && (
           <div style={{ padding: '1.5rem' }}>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
+              <div style={styles.card}><p style={{ fontSize: '0.75rem', color: '#6b7280' }}>Associações</p><p style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>{stats.totalAssociations}</p></div>
               <div style={styles.card}><p style={{ fontSize: '0.75rem', color: '#6b7280' }}>Placas</p><p style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>{stats.totalPlates}</p><p style={{ fontSize: '0.75rem', color: '#059669' }}>{stats.activePlates} ativas</p></div>
               <div style={styles.card}><p style={{ fontSize: '0.75rem', color: '#6b7280' }}>Chefes</p><p style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>{stats.totalBosses}</p></div>
               <div style={styles.card}><p style={{ fontSize: '0.75rem', color: '#6b7280' }}>Motoqueiros</p><p style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>{stats.totalRiders}</p><p style={{ fontSize: '0.75rem', color: '#059669' }}>{stats.onlineRiders} online</p></div>
@@ -340,7 +377,48 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* Pedidos - TABELA MODIFICADA COM MOTOQUEIRO E BOTÃO LIGAR */}
+        {/* Associações */}
+        {activeTab === 'associations' && (
+          <div style={{ padding: '1.5rem' }}>
+            <div style={{ backgroundColor: 'white', borderRadius: '0.75rem', overflow: 'auto' }}>
+              <table style={styles.table}>
+                <thead>
+                  <tr>
+                    <th style={styles.th}>Nome</th>
+                    <th style={styles.th}>Email</th>
+                    <th style={styles.th}>Telefone</th>
+                    <th style={styles.th}>Status</th>
+                    <th style={styles.th}>Ações</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredAssociations.map((assoc) => (
+                    <tr key={assoc.id}>
+                      <td style={styles.td}>{assoc.name}</td>
+                      <td style={styles.td}>{assoc.email}</td>
+                      <td style={styles.td}>{assoc.phone}</td>
+                      <td style={styles.td}>
+                        <span style={assoc.is_active ? styles.badgeActive : styles.badgeInactive}>
+                          {assoc.is_active ? 'Ativo' : 'Inativo'}
+                        </span>
+                      </td>
+                      <td style={styles.td}>
+                        <button onClick={() => deleteItem('associations', assoc.id, assoc.name)} style={styles.buttonDanger}>
+                          <Trash2 size={16} />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                  {filteredAssociations.length === 0 && (
+                    <tr><td colSpan={5} style={{ padding: '2rem', textAlign: 'center', color: '#6b7280' }}>Nenhuma associação encontrada</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* Pedidos */}
         {activeTab === 'orders' && (
           <div style={{ padding: '1.5rem' }}>
             <div style={{ backgroundColor: 'white', borderRadius: '0.75rem', overflow: 'auto' }}>
@@ -380,17 +458,9 @@ export default function AdminDashboard() {
                         {order.rider?.phone ? (
                           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                             <span>{order.rider.phone}</span>
-                            <button
-                              onClick={() => callRider(order.rider!.phone, order.rider!.name)}
-                              style={styles.buttonCall}
-                              title="Ligar para o motoqueiro"
-                            >
-                              <Phone size={12} /> Ligar
-                            </button>
+                            <button onClick={() => callRider(order.rider!.phone, order.rider!.name)} style={styles.buttonCall}><Phone size={12} /> Ligar</button>
                           </div>
-                        ) : (
-                          <span style={{ color: '#9ca3af' }}>-</span>
-                        )}
+                        ) : (<span style={{ color: '#9ca3af' }}>-</span>)}
                       </td>
                       <td style={styles.td}>{order.price?.toLocaleString()} Kz</td>
                       <td style={styles.td}>
@@ -401,21 +471,17 @@ export default function AdminDashboard() {
                         }}>
                           {order.status === 'completed' ? 'Concluído' : order.status === 'pending' ? 'Pendente' : order.status === 'accepted' ? 'Aceito' : 'Cancelado'}
                         </span>
-                      </td>
+                       </td>
                       <td style={styles.td}>{new Date(order.created_at).toLocaleDateString('pt-AO')}</td>
                       <td style={styles.td}>
                         <button onClick={() => deleteItem('orders', order.id, `pedido de ${order.customer_name}`)} style={styles.buttonDanger}>
                           <Trash2 size={16} />
                         </button>
-                      </td>
-                    </tr>
+                       </td>
+                     </tr>
                   ))}
                   {filteredOrders.length === 0 && (
-                    <tr>
-                      <td colSpan={8} style={{ padding: '2rem', textAlign: 'center', color: '#6b7280' }}>
-                        Nenhum pedido encontrado
-                      </td>
-                    </tr>
+                    <tr><td colSpan={8} style={{ padding: '2rem', textAlign: 'center', color: '#6b7280' }}>Nenhum pedido encontrado</td></tr>
                   )}
                 </tbody>
               </table>
@@ -492,9 +558,46 @@ export default function AdminDashboard() {
         )}
       </div>
 
-      {/* Modais simplificados */}
+      {/* Modais */}
+      {showAddAssociation && <AddAssociationModal onClose={() => setShowAddAssociation(false)} onSuccess={() => { setShowAddAssociation(false); loadAllData() }} />}
       {showAddBoss && <AddBossModal onClose={() => setShowAddBoss(false)} onSuccess={() => { setShowAddBoss(false); loadAllData() }} />}
       {showAddPlate && <AddPlateModal bosses={bosses} onClose={() => setShowAddPlate(false)} onSuccess={() => { setShowAddPlate(false); loadAllData() }} />}
+    </div>
+  )
+}
+
+// Modal de Adicionar Associação
+function AddAssociationModal({ onClose, onSuccess }: any) {
+  const [formData, setFormData] = useState({ name: '', email: '', phone: '', password: 'associacao123', address: '' })
+  const [loading, setLoading] = useState(false)
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault(); setLoading(true)
+    const { error } = await supabase.from('associations').insert({ 
+      ...formData, 
+      is_active: true,
+      created_at: new Date().toISOString() 
+    })
+    if (!error) onSuccess(); else alert('Erro: ' + error.message)
+    setLoading(false)
+  }
+
+  return (
+    <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 }}>
+      <div style={{ backgroundColor: 'white', borderRadius: '1rem', maxWidth: '28rem', width: '90%' }}>
+        <div style={{ background: 'linear-gradient(135deg, #4f46e5, #4338ca)', padding: '1rem', borderRadius: '1rem 1rem 0 0', display: 'flex', justifyContent: 'space-between', color: 'white' }}>
+          <h3 style={{ fontWeight: 'bold' }}>Nova Associação</h3>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer' }}>✕</button>
+        </div>
+        <form onSubmit={handleSubmit} style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          <input type="text" required placeholder="Nome da Associação" value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} />
+          <input type="email" required placeholder="Email" value={formData.email} onChange={(e) => setFormData({...formData, email: e.target.value})} style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} />
+          <input type="tel" required placeholder="Telefone" value={formData.phone} onChange={(e) => setFormData({...formData, phone: e.target.value})} style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} />
+          <input type="text" placeholder="Endereço" value={formData.address} onChange={(e) => setFormData({...formData, address: e.target.value})} style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} />
+          <input type="text" placeholder="Senha" value={formData.password} onChange={(e) => setFormData({...formData, password: e.target.value})} style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem', backgroundColor: '#f9fafb' }} />
+          <button type="submit" disabled={loading} style={{ backgroundColor: '#4f46e5', color: 'white', padding: '0.75rem', borderRadius: '0.5rem', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}>{loading ? 'Cadastrando...' : 'Cadastrar'}</button>
+        </form>
+      </div>
     </div>
   )
 }

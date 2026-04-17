@@ -1,3 +1,4 @@
+// app/dashboard/associacao/page.tsx
 'use client'
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase/client'
@@ -5,8 +6,8 @@ import { useRouter } from 'next/navigation'
 import { 
   Building2, LogOut, Users, Bike, Plus, Edit, Trash2, Search, 
   Menu, X, UserCog, Store, ClipboardList, RefreshCw, 
-  DollarSign, Calendar, Shield, Phone, Mail, MapPin,
-  TrendingUp  // ← Import adicionado
+  DollarSign, Calendar, Shield, Phone, Mail, MapPin, TrendingUp,
+  CreditCard
 } from 'lucide-react'
 
 type Association = {
@@ -14,7 +15,6 @@ type Association = {
   name: string
   email: string
   phone: string
-  password: string
   logo_url: string
   address: string
   created_at: string
@@ -58,6 +58,17 @@ type Rider = {
   plate?: { plate_number: string }
 }
 
+type Order = {
+  id: string
+  customer_name: string
+  customer_phone: string
+  price: number
+  status: string
+  created_at: string
+  rider_id: string
+  plate_id: string
+}
+
 export default function AssociationDashboard() {
   const router = useRouter()
   const [association, setAssociation] = useState<Association | null>(null)
@@ -65,6 +76,7 @@ export default function AssociationDashboard() {
   const [plates, setPlates] = useState<Plate[]>([])
   const [bosses, setBosses] = useState<Boss[]>([])
   const [riders, setRiders] = useState<Rider[]>([])
+  const [orders, setOrders] = useState<Order[]>([])
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<string>('dashboard')
   const [searchTerm, setSearchTerm] = useState('')
@@ -73,10 +85,13 @@ export default function AssociationDashboard() {
   const [showAddRider, setShowAddRider] = useState(false)
   const [stats, setStats] = useState({
     totalPlates: 0,
+    activePlates: 0,
     totalBosses: 0,
     totalRiders: 0,
-    activePlates: 0,
-    onlineRiders: 0
+    onlineRiders: 0,
+    totalOrders: 0,
+    totalRevenue: 0,
+    pendingOrders: 0
   })
 
   useEffect(() => {
@@ -101,7 +116,6 @@ export default function AssociationDashboard() {
   const loadAllData = async (associationId: string) => {
     setLoading(true)
 
-    // Carregar placas da associação
     const { data: platesData } = await supabase
       .from('plates')
       .select('*, boss:bosses(*)')
@@ -109,7 +123,6 @@ export default function AssociationDashboard() {
       .order('created_at', { ascending: false })
     setPlates(platesData || [])
 
-    // Carregar chefes da associação
     const { data: bossesData } = await supabase
       .from('bosses')
       .select('*, plate:plates(plate_number)')
@@ -117,7 +130,6 @@ export default function AssociationDashboard() {
       .order('created_at', { ascending: false })
     setBosses(bossesData || [])
 
-    // Carregar motoqueiros da associação
     const { data: ridersData } = await supabase
       .from('riders')
       .select('*, plate:plates(plate_number)')
@@ -125,15 +137,29 @@ export default function AssociationDashboard() {
       .order('created_at', { ascending: false })
     setRiders(ridersData || [])
 
+    const plateIds = platesData?.map(p => p.id) || []
+    const { data: ordersData } = await supabase
+      .from('orders')
+      .select('*')
+      .in('plate_id', plateIds)
+      .order('created_at', { ascending: false })
+    setOrders(ordersData || [])
+
     const activePlates = platesData?.filter(p => p.is_active === true) || []
     const onlineRiders = ridersData?.filter(r => r.is_online === true) || []
+    const completedOrders = ordersData?.filter(o => o.status === 'completed') || []
+    const totalRevenue = completedOrders.reduce((sum, o) => sum + (o.price || 0), 0)
+    const pendingOrders = ordersData?.filter(o => o.status === 'pending') || []
 
     setStats({
       totalPlates: platesData?.length || 0,
+      activePlates: activePlates.length,
       totalBosses: bossesData?.length || 0,
       totalRiders: ridersData?.length || 0,
-      activePlates: activePlates.length,
-      onlineRiders: onlineRiders.length
+      onlineRiders: onlineRiders.length,
+      totalOrders: ordersData?.length || 0,
+      totalRevenue,
+      pendingOrders: pendingOrders.length
     })
 
     setLoading(false)
@@ -156,6 +182,14 @@ export default function AssociationDashboard() {
     }
   }
 
+  const togglePlateStatus = async (plateId: string, currentStatus: boolean) => {
+    const { error } = await supabase.from('plates').update({ is_active: !currentStatus }).eq('id', plateId)
+    if (!error) {
+      const associationId = localStorage.getItem('association_id')
+      if (associationId) loadAllData(associationId)
+    }
+  }
+
   const filteredPlates = plates.filter(p => 
     p.plate_number.toLowerCase().includes(searchTerm.toLowerCase())
   )
@@ -169,155 +203,186 @@ export default function AssociationDashboard() {
     r.phone.includes(searchTerm) || r.bi.toLowerCase().includes(searchTerm.toLowerCase())
   )
 
+  const filteredOrders = orders.filter(o => 
+    o.customer_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    o.customer_phone?.includes(searchTerm)
+  )
+
+  const styles: Record<string, React.CSSProperties> = {
+    container: { minHeight: '100vh', backgroundColor: '#f3f4f6' },
+    card: { backgroundColor: 'white', borderRadius: '0.75rem', padding: '1rem', boxShadow: '0 1px 2px 0 rgba(0,0,0,0.05)', border: '1px solid #f3f4f6' },
+    table: { width: '100%', borderCollapse: 'collapse' as const },
+    th: { padding: '1rem 1.5rem', textAlign: 'left', fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase' as const, borderBottom: '1px solid #e5e7eb' },
+    td: { padding: '1rem 1.5rem', fontSize: '0.875rem', borderBottom: '1px solid #e5e7eb' },
+    buttonPrimary: { backgroundColor: '#2563eb', color: 'white', padding: '0.5rem 1rem', borderRadius: '0.5rem', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem' },
+    buttonDanger: { color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer', padding: '0.25rem' },
+    badgeActive: { backgroundColor: '#d1fae5', color: '#065f46', padding: '0.25rem 0.5rem', borderRadius: '9999px', fontSize: '0.75rem' },
+    badgeInactive: { backgroundColor: '#fee2e2', color: '#991b1b', padding: '0.25rem 0.5rem', borderRadius: '9999px', fontSize: '0.75rem' },
+    modalOverlay: {
+      position: 'fixed',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      backgroundColor: 'rgba(0, 0, 0, 0.5)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: 9999,
+      backdropFilter: 'blur(4px)'
+    },
+    modalContent: {
+      backgroundColor: 'white',
+      borderRadius: '1rem',
+      maxWidth: '28rem',
+      width: '90%',
+      maxHeight: '90vh',
+      overflow: 'auto',
+      boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)'
+    }
+  }
+
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Carregando dashboard...</p>
+      <div style={styles.container}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh' }}>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ animation: 'spin 1s linear infinite', width: '3rem', height: '3rem', border: '2px solid #2563eb', borderTopColor: 'transparent', borderRadius: '9999px', margin: '0 auto 1rem' }}></div>
+            <p style={{ color: '#6b7280' }}>Carregando dashboard...</p>
+          </div>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header Superior */}
-      <div className="bg-white/90 backdrop-blur-md sticky top-0 z-20 border-b border-gray-200 shadow-sm">
-        <div className="px-6 py-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <div className="flex items-center gap-2">
-                <Building2 className="w-8 h-8 text-blue-600" />
+    <div style={styles.container}>
+      {/* Header */}
+      <div style={{ backgroundColor: 'white', boxShadow: '0 1px 2px 0 rgba(0,0,0,0.05)', position: 'sticky', top: 0, zIndex: 10 }}>
+        <div style={{ padding: '1rem 1.5rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <Building2 size={32} color="#2563eb" />
                 <div>
-                  <h1 className="text-xl font-bold text-gray-900">{association?.name}</h1>
-                  <p className="text-xs text-gray-500">Associação</p>
+                  <h1 style={{ fontSize: '1.25rem', fontWeight: 'bold' }}>{association?.name}</h1>
+                  <p style={{ fontSize: '0.75rem', color: '#6b7280' }}>Associação</p>
                 </div>
               </div>
               
-              {/* Menu Desktop */}
-              <div className="hidden md:flex items-center gap-1 ml-6">
+              <div style={{ display: 'flex', gap: '0.25rem', flexWrap: 'wrap' }}>
                 {[
                   { id: 'dashboard', label: 'Dashboard', icon: TrendingUp },
                   { id: 'plates', label: 'Placas', icon: Store },
                   { id: 'bosses', label: 'Chefes', icon: UserCog },
-                  { id: 'riders', label: 'Motoqueiros', icon: Bike }
+                  { id: 'riders', label: 'Motoqueiros', icon: Bike },
+                  { id: 'orders', label: 'Pedidos', icon: ClipboardList }
                 ].map((item) => (
                   <button
                     key={item.id}
                     onClick={() => setActiveTab(item.id)}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-all ${
-                      activeTab === item.id 
-                        ? 'bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-md' 
-                        : 'text-gray-600 hover:bg-gray-100 hover:text-blue-600'
-                    }`}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem 1rem',
+                      borderRadius: '0.75rem', transition: 'all 0.2s',
+                      backgroundColor: activeTab === item.id ? '#2563eb' : 'transparent',
+                      color: activeTab === item.id ? 'white' : '#4b5563',
+                      border: 'none', cursor: 'pointer'
+                    }}
                   >
-                    <item.icon className="w-4 h-4" />
-                    <span className="text-sm font-medium">{item.label}</span>
+                    <item.icon size={18} />
+                    <span style={{ fontSize: '0.875rem', fontWeight: '500' }}>{item.label}</span>
                   </button>
                 ))}
               </div>
             </div>
 
-            <div className="flex items-center gap-3">
-              <button onClick={() => loadAllData(association?.id || '')} className="p-2 text-gray-500 hover:text-blue-600 transition-all rounded-lg hover:bg-gray-100">
-                <RefreshCw className="w-5 h-5" />
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+              <button onClick={() => {
+                const associationId = localStorage.getItem('association_id')
+                if (associationId) loadAllData(associationId)
+              }} style={{ padding: '0.5rem', color: '#6b7280', background: 'none', border: 'none', cursor: 'pointer' }}>
+                <RefreshCw size={20} />
               </button>
               
-              <div className="relative hidden md:block">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-                <input 
-                  type="text" 
-                  placeholder="Buscar..." 
-                  value={searchTerm} 
-                  onChange={(e) => setSearchTerm(e.target.value)} 
-                  className="pl-9 pr-4 py-2 border border-gray-200 rounded-xl text-sm w-64 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10"
+              <div style={{ position: 'relative' }}>
+                <Search size={16} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: '#9ca3af' }} />
+                <input
+                  type="text"
+                  placeholder="Buscar..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  style={{ padding: '0.5rem 0.5rem 0.5rem 2rem', border: '1px solid #e5e7eb', borderRadius: '0.5rem', width: '16rem' }}
                 />
               </div>
 
-              <div className="flex items-center gap-3 pl-3 border-l border-gray-200">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 bg-gradient-to-r from-blue-600 to-blue-700 rounded-full flex items-center justify-center shadow-md">
-                    <span className="text-white text-sm font-bold">{association?.name?.charAt(0) || 'A'}</span>
+              {(activeTab === 'bosses' || activeTab === 'plates' || activeTab === 'riders') && (
+                <button 
+                  onClick={() => {
+                    if (activeTab === 'bosses') setShowAddBoss(true)
+                    else if (activeTab === 'plates') setShowAddPlate(true)
+                    else setShowAddRider(true)
+                  }} 
+                  style={styles.buttonPrimary}
+                >
+                  <Plus size={16} /> Novo
+                </button>
+              )}
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', paddingLeft: '0.75rem', borderLeft: '1px solid #e5e7eb' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <div style={{ width: '2rem', height: '2rem', backgroundColor: '#2563eb', borderRadius: '9999px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <span style={{ color: 'white', fontSize: '0.875rem', fontWeight: 'bold' }}>{association?.name?.charAt(0) || 'A'}</span>
                   </div>
-                  <div className="hidden lg:block">
-                    <p className="text-sm font-medium text-gray-900">{association?.name}</p>
-                    <p className="text-xs text-gray-500">{association?.email}</p>
+                  <div style={{ display: 'none', '@media (min-width: 1024px)': { display: 'block' } } as any}>
+                    <p style={{ fontSize: '0.875rem', fontWeight: '500' }}>{association?.name}</p>
+                    <p style={{ fontSize: '0.75rem', color: '#6b7280' }}>{association?.email}</p>
                   </div>
                 </div>
-                <button onClick={handleLogout} className="p-2 text-gray-500 hover:text-red-500 transition rounded-lg hover:bg-red-50">
-                  <LogOut className="w-5 h-5" />
+                <button onClick={handleLogout} style={{ padding: '0.5rem', color: '#6b7280', background: 'none', border: 'none', cursor: 'pointer' }}>
+                  <LogOut size={20} />
                 </button>
               </div>
 
-              {/* Botão Menu Mobile */}
               <button 
                 onClick={() => setMobileMenuOpen(!mobileMenuOpen)} 
-                className="md:hidden p-2 text-gray-600 hover:bg-gray-100 rounded-lg"
+                style={{ display: 'none', '@media (max-width: 768px)': { display: 'block' } } as any}
               >
-                <Menu className="w-6 h-6" />
+                <Menu size={24} />
               </button>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Menu Mobile Dropdown */}
-      {mobileMenuOpen && (
-        <div className="md:hidden fixed inset-0 z-30 bg-black/50 backdrop-blur-sm" onClick={() => setMobileMenuOpen(false)}>
-          <div className="absolute top-16 left-0 right-0 bg-white rounded-b-2xl shadow-xl mx-4 overflow-hidden" onClick={(e) => e.stopPropagation()}>
-            <div className="p-2 space-y-1">
-              {[
-                { id: 'dashboard', label: 'Dashboard', icon: TrendingUp },
-                { id: 'plates', label: 'Placas', icon: Store },
-                { id: 'bosses', label: 'Chefes', icon: UserCog },
-                { id: 'riders', label: 'Motoqueiros', icon: Bike }
-              ].map((item) => (
-                <button
-                  key={item.id}
-                  onClick={() => {
-                    setActiveTab(item.id)
-                    setMobileMenuOpen(false)
-                  }}
-                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
-                    activeTab === item.id 
-                      ? 'bg-gradient-to-r from-blue-600 to-blue-700 text-white' 
-                      : 'text-gray-700 hover:bg-gray-100'
-                  }`}
-                >
-                  <item.icon className="w-5 h-5" />
-                  <span className="text-sm font-medium">{item.label}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      <div style={{ maxWidth: '1280px', margin: '0 auto', padding: '1.5rem' }}>
         {/* Dashboard */}
         {activeTab === 'dashboard' && (
           <div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-              <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
-                <p className="text-2xl font-bold text-gray-900">{stats.totalPlates}</p>
-                <p className="text-xs text-gray-500 mt-1">Placas</p>
-                <p className="text-xs text-green-600 mt-1">{stats.activePlates} ativas</p>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
+              <div style={styles.card}>
+                <p style={{ fontSize: '0.75rem', color: '#6b7280' }}>Placas</p>
+                <p style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>{stats.totalPlates}</p>
+                <p style={{ fontSize: '0.75rem', color: '#059669' }}>{stats.activePlates} ativas</p>
               </div>
-              <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
-                <p className="text-2xl font-bold text-gray-900">{stats.totalBosses}</p>
-                <p className="text-xs text-gray-500 mt-1">Chefes</p>
+              <div style={styles.card}>
+                <p style={{ fontSize: '0.75rem', color: '#6b7280' }}>Chefes</p>
+                <p style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>{stats.totalBosses}</p>
               </div>
-              <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
-                <p className="text-2xl font-bold text-gray-900">{stats.totalRiders}</p>
-                <p className="text-xs text-gray-500 mt-1">Motoqueiros</p>
-                <p className="text-xs text-green-600 mt-1">{stats.onlineRiders} online</p>
+              <div style={styles.card}>
+                <p style={{ fontSize: '0.75rem', color: '#6b7280' }}>Motoqueiros</p>
+                <p style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>{stats.totalRiders}</p>
+                <p style={{ fontSize: '0.75rem', color: '#059669' }}>{stats.onlineRiders} online</p>
               </div>
-              <div className="bg-gradient-to-r from-blue-600 to-blue-700 rounded-xl p-4 text-white">
-                <Building2 className="w-8 h-8 mb-2 opacity-75" />
-                <p className="text-sm opacity-80">Associação</p>
-                <p className="text-lg font-bold">{association?.name}</p>
+              <div style={styles.card}>
+                <p style={{ fontSize: '0.75rem', color: '#6b7280' }}>Pedidos</p>
+                <p style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>{stats.totalOrders}</p>
+                <p style={{ fontSize: '0.75rem', color: '#d97706' }}>{stats.pendingOrders} pendentes</p>
+              </div>
+              <div style={{ ...styles.card, background: 'linear-gradient(135deg, #2563eb, #1d4ed8)', color: 'white' }}>
+                <DollarSign size={24} style={{ marginBottom: '0.5rem', opacity: 0.8 }} />
+                <p style={{ fontSize: '0.75rem', opacity: 0.8 }}>Receita Total</p>
+                <p style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>{stats.totalRevenue.toLocaleString()} Kz</p>
               </div>
             </div>
           </div>
@@ -325,290 +390,315 @@ export default function AssociationDashboard() {
 
         {/* Placas */}
         {activeTab === 'plates' && (
-          <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-            <div className="p-4 border-b border-gray-200 flex justify-between items-center">
-              <h2 className="font-semibold text-gray-900">Placas da Associação</h2>
-              <button onClick={() => setShowAddPlate(true)} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
-                <Plus className="w-4 h-4" /> Nova Placa
-              </button>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-gray-50 border-b border-gray-200">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Placa</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Chefe</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Taxa</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Motoqueiros</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Status</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Ações</th>
+          <div style={{ backgroundColor: 'white', borderRadius: '0.75rem', overflow: 'auto' }}>
+            <table style={styles.table}>
+              <thead>
+                <tr>
+                  <th style={styles.th}>Placa</th>
+                  <th style={styles.th}>Chefe</th>
+                  <th style={styles.th}>Taxa</th>
+                  <th style={styles.th}>Motoqueiros</th>
+                  <th style={styles.th}>Status</th>
+                  <th style={styles.th}>Ações</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredPlates.map((plate) => (
+                  <tr key={plate.id}>
+                    <td style={styles.td}><div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}><Store size={16} color="#3b82f6" />{plate.plate_number}</div></td>
+                    <td style={styles.td}>{plate.boss?.name || '-'}</td>
+                    <td style={styles.td}>{plate.weekly_fee?.toLocaleString()} Kz</td>
+                    <td style={styles.td}>{riders.filter(r => r.plate_id === plate.id).length} / {plate.max_riders || 20}</td>
+                    <td style={styles.td}>
+                      <button onClick={() => togglePlateStatus(plate.id, plate.is_active)} style={plate.is_active ? styles.badgeActive : styles.badgeInactive}>
+                        {plate.is_active ? 'Ativo' : 'Inativo'}
+                      </button>
+                    </td>
+                    <td style={styles.td}>
+                      <button onClick={() => deleteItem('plates', plate.id, plate.plate_number)} style={styles.buttonDanger}>
+                        <Trash2 size={16} />
+                      </button>
+                    </td>
                   </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200">
-                  {filteredPlates.map((plate) => (
-                    <tr key={plate.id} className="hover:bg-gray-50">
-                      <td className="px-4 py-3 text-sm font-medium text-gray-900">{plate.plate_number}</td>
-                      <td className="px-4 py-3 text-sm text-gray-600">{plate.boss?.name || '-'}</td>
-                      <td className="px-4 py-3 text-sm text-gray-700">{plate.weekly_fee?.toLocaleString()} Kz</td>
-                      <td className="px-4 py-3 text-sm text-gray-700">{riders.filter(r => r.plate_id === plate.id).length} / {plate.max_riders || 20}</td>
-                      <td className="px-4 py-3">
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${plate.is_active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                          {plate.is_active ? 'Ativo' : 'Inativo'}
-                        </span>
-                       </td>
-                      <td className="px-4 py-3">
-                        <button onClick={() => deleteItem('plates', plate.id, plate.plate_number)} className="text-red-500 hover:text-red-700">
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                       </td>
-                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                ))}
+                {filteredPlates.length === 0 && (
+                  <tr><td colSpan={6} style={{ padding: '2rem', textAlign: 'center', color: '#6b7280' }}>Nenhuma placa encontrada</td></tr>
+                )}
+              </tbody>
+            </table>
           </div>
         )}
 
         {/* Chefes */}
         {activeTab === 'bosses' && (
-          <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-            <div className="p-4 border-b border-gray-200 flex justify-between items-center">
-              <h2 className="font-semibold text-gray-900">Chefes de Placa</h2>
-              <button onClick={() => setShowAddBoss(true)} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
-                <Plus className="w-4 h-4" /> Novo Chefe
-              </button>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-gray-50 border-b border-gray-200">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Nome</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Email</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Telefone</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Placa</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Ações</th>
+          <div style={{ backgroundColor: 'white', borderRadius: '0.75rem', overflow: 'auto' }}>
+            <table style={styles.table}>
+              <thead>
+                <tr>
+                  <th style={styles.th}>Nome</th>
+                  <th style={styles.th}>Email</th>
+                  <th style={styles.th}>Telefone</th>
+                  <th style={styles.th}>Placa</th>
+                  <th style={styles.th}>Ações</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredBosses.map((boss) => (
+                  <tr key={boss.id}>
+                    <td style={styles.td}>{boss.name}</td>
+                    <td style={styles.td}>{boss.email}</td>
+                    <td style={styles.td}>{boss.phone}</td>
+                    <td style={styles.td}>{boss.plate?.plate_number || '-'}</td>
+                    <td style={styles.td}>
+                      <button onClick={() => deleteItem('bosses', boss.id, boss.name)} style={styles.buttonDanger}>
+                        <Trash2 size={16} />
+                      </button>
+                    </td>
                   </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200">
-                  {filteredBosses.map((boss) => (
-                    <tr key={boss.id} className="hover:bg-gray-50">
-                      <td className="px-4 py-3 text-sm font-medium text-gray-900">{boss.name}</td>
-                      <td className="px-4 py-3 text-sm text-gray-600">{boss.email}</td>
-                      <td className="px-4 py-3 text-sm text-gray-600">{boss.phone}</td>
-                      <td className="px-4 py-3 text-sm text-gray-700">{boss.plate?.plate_number || '-'}</td>
-                      <td className="px-4 py-3">
-                        <button onClick={() => deleteItem('bosses', boss.id, boss.name)} className="text-red-500 hover:text-red-700">
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                       </td>
-                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                ))}
+                {filteredBosses.length === 0 && (
+                  <tr><td colSpan={5} style={{ padding: '2rem', textAlign: 'center', color: '#6b7280' }}>Nenhum chefe encontrado</td></tr>
+                )}
+              </tbody>
+            </table>
           </div>
         )}
 
         {/* Motoqueiros */}
         {activeTab === 'riders' && (
-          <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-            <div className="p-4 border-b border-gray-200 flex justify-between items-center">
-              <h2 className="font-semibold text-gray-900">Motoqueiros</h2>
-              <button onClick={() => setShowAddRider(true)} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
-                <Plus className="w-4 h-4" /> Novo Motoqueiro
-              </button>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-gray-50 border-b border-gray-200">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Nome</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Telefone</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">BI</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Placa</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Status</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Ações</th>
+          <div style={{ backgroundColor: 'white', borderRadius: '0.75rem', overflow: 'auto' }}>
+            <table style={styles.table}>
+              <thead>
+                <tr>
+                  <th style={styles.th}>Nome</th>
+                  <th style={styles.th}>Telefone</th>
+                  <th style={styles.th}>BI</th>
+                  <th style={styles.th}>Placa</th>
+                  <th style={styles.th}>Status</th>
+                  <th style={styles.th}>Ações</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredRiders.map((rider) => (
+                  <tr key={rider.id}>
+                    <td style={styles.td}>{rider.name}</td>
+                    <td style={styles.td}>{rider.phone}</td>
+                    <td style={styles.td}>{rider.bi}</td>
+                    <td style={styles.td}>{rider.plate?.plate_number || '-'}</td>
+                    <td style={styles.td}>
+                      <span style={rider.status === 'active' ? styles.badgeActive : styles.badgeInactive}>
+                        {rider.status === 'active' ? 'Ativo' : 'Inativo'}
+                      </span>
+                    </td>
+                    <td style={styles.td}>
+                      <button onClick={() => deleteItem('riders', rider.id, rider.name)} style={styles.buttonDanger}>
+                        <Trash2 size={16} />
+                      </button>
+                    </td>
                   </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200">
-                  {filteredRiders.map((rider) => (
-                    <tr key={rider.id} className="hover:bg-gray-50">
-                      <td className="px-4 py-3 text-sm font-medium text-gray-900">{rider.name}</td>
-                      <td className="px-4 py-3 text-sm text-gray-600">{rider.phone}</td>
-                      <td className="px-4 py-3 text-sm text-gray-600">{rider.bi}</td>
-                      <td className="px-4 py-3 text-sm text-gray-700">{rider.plate?.plate_number || '-'}</td>
-                      <td className="px-4 py-3">
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${rider.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                          {rider.status === 'active' ? 'Ativo' : 'Inativo'}
-                        </span>
-                       </td>
-                      <td className="px-4 py-3">
-                        <button onClick={() => deleteItem('riders', rider.id, rider.name)} className="text-red-500 hover:text-red-700">
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                       </td>
-                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                ))}
+                {filteredRiders.length === 0 && (
+                  <tr><td colSpan={6} style={{ padding: '2rem', textAlign: 'center', color: '#6b7280' }}>Nenhum motoqueiro encontrado</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* Pedidos */}
+        {activeTab === 'orders' && (
+          <div style={{ backgroundColor: 'white', borderRadius: '0.75rem', overflow: 'auto' }}>
+            <table style={styles.table}>
+              <thead>
+                <tr>
+                  <th style={styles.th}>Cliente</th>
+                  <th style={styles.th}>Telefone</th>
+                  <th style={styles.th}>Valor</th>
+                  <th style={styles.th}>Status</th>
+                  <th style={styles.th}>Data</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredOrders.map((order) => (
+                  <tr key={order.id}>
+                    <td style={styles.td}>{order.customer_name || '-'}</td>
+                    <td style={styles.td}>{order.customer_phone || '-'}</td>
+                    <td style={styles.td}>{order.price?.toLocaleString()} Kz</td>
+                    <td style={styles.td}>
+                      <span style={{
+                        padding: '0.25rem 0.5rem', borderRadius: '9999px', fontSize: '0.75rem',
+                        backgroundColor: order.status === 'completed' ? '#d1fae5' : order.status === 'pending' ? '#fef3c7' : '#dbeafe',
+                        color: order.status === 'completed' ? '#065f46' : order.status === 'pending' ? '#92400e' : '#1e40af'
+                      }}>
+                        {order.status === 'completed' ? 'Concluído' : order.status === 'pending' ? 'Pendente' : 'Aceito'}
+                      </span>
+                    </td>
+                    <td style={styles.td}>{new Date(order.created_at).toLocaleDateString('pt-AO')}</td>
+                  </tr>
+                ))}
+                {filteredOrders.length === 0 && (
+                  <tr><td colSpan={5} style={{ padding: '2rem', textAlign: 'center', color: '#6b7280' }}>Nenhum pedido encontrado</td></tr>
+                )}
+              </tbody>
+            </table>
           </div>
         )}
       </div>
 
-      {/* Modais */}
+      {/* Modal Adicionar Placa - CENTRALIZADO */}
       {showAddPlate && (
-        <AddPlateModal 
-          associationId={association?.id} 
-          onClose={() => setShowAddPlate(false)} 
-          onSuccess={() => { setShowAddPlate(false); loadAllData(association?.id || '') }} 
-        />
+        <div style={styles.modalOverlay} onClick={() => setShowAddPlate(false)}>
+          <div style={styles.modalContent} onClick={(e) => e.stopPropagation()}>
+            <div style={{ padding: '1.5rem' }}>
+              <h3 style={{ fontSize: '1.125rem', fontWeight: 'bold', marginBottom: '1rem' }}>Nova Placa</h3>
+              <form onSubmit={async (e) => {
+                e.preventDefault()
+                const formData = new FormData(e.currentTarget)
+                const plate_number = formData.get('plate_number') as string
+                const weekly_fee = parseInt(formData.get('weekly_fee') as string)
+                const max_riders = parseInt(formData.get('max_riders') as string)
+                const associationId = localStorage.getItem('association_id')
+                
+                const { error } = await supabase.from('plates').insert({
+                  plate_number,
+                  weekly_fee,
+                  max_riders,
+                  fee_per_rider: 300,
+                  total_weekly_fee: max_riders * 300,
+                  association_id: associationId,
+                  is_active: true,
+                  created_at: new Date().toISOString()
+                })
+                if (!error) {
+                  setShowAddPlate(false)
+                  const associationId = localStorage.getItem('association_id')
+                  if (associationId) loadAllData(associationId)
+                } else {
+                  alert('Erro: ' + error.message)
+                }
+              }} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                <input type="text" name="plate_number" placeholder="Nome da Placa" required style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} />
+                <input type="number" name="weekly_fee" placeholder="Taxa Semanal" defaultValue="75000" required style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} />
+                <input type="number" name="max_riders" placeholder="Máximo de Motoqueiros" defaultValue="20" required style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} />
+                <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1rem' }}>
+                  <button type="button" onClick={() => setShowAddPlate(false)} style={{ flex: 1, padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem', cursor: 'pointer' }}>Cancelar</button>
+                  <button type="submit" style={{ flex: 1, padding: '0.75rem', backgroundColor: '#2563eb', color: 'white', border: 'none', borderRadius: '0.5rem', cursor: 'pointer' }}>Cadastrar</button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
       )}
+
+      {/* Modal Adicionar Chefe - CENTRALIZADO */}
       {showAddBoss && (
-        <AddBossModal 
-          associationId={association?.id}
-          plates={plates}
-          onClose={() => setShowAddBoss(false)} 
-          onSuccess={() => { setShowAddBoss(false); loadAllData(association?.id || '') }} 
-        />
+        <div style={styles.modalOverlay} onClick={() => setShowAddBoss(false)}>
+          <div style={styles.modalContent} onClick={(e) => e.stopPropagation()}>
+            <div style={{ padding: '1.5rem' }}>
+              <h3 style={{ fontSize: '1.125rem', fontWeight: 'bold', marginBottom: '1rem' }}>Novo Chefe</h3>
+              <form onSubmit={async (e) => {
+                e.preventDefault()
+                const formData = new FormData(e.currentTarget)
+                const name = formData.get('name') as string
+                const email = formData.get('email') as string
+                const phone = formData.get('phone') as string
+                const password = (formData.get('password') as string) || 'senha123'
+                const plate_id = formData.get('plate_id') as string
+                const associationId = localStorage.getItem('association_id')
+                
+                const { data: newBoss, error: bossError } = await supabase.from('bosses').insert({
+                  name,
+                  email,
+                  phone,
+                  password,
+                  association_id: associationId,
+                  created_at: new Date().toISOString()
+                }).select().single()
+                
+                if (bossError) {
+                  alert('Erro ao criar chefe: ' + bossError.message)
+                  return
+                }
+                
+                if (plate_id && newBoss) {
+                  await supabase.from('plates').update({ boss_id: newBoss.id }).eq('id', plate_id)
+                }
+                
+                setShowAddBoss(false)
+                const associationIdReload = localStorage.getItem('association_id')
+                if (associationIdReload) loadAllData(associationIdReload)
+              }} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                <input type="text" name="name" placeholder="Nome completo" required style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} />
+                <input type="email" name="email" placeholder="Email" required style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} />
+                <input type="tel" name="phone" placeholder="Telefone" required style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} />
+                <input type="text" name="password" placeholder="Senha (opcional)" style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} />
+                <select name="plate_id" style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }}>
+                  <option value="">Nenhuma placa</option>
+                  {plates.map(plate => <option key={plate.id} value={plate.id}>{plate.plate_number}</option>)}
+                </select>
+                <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1rem' }}>
+                  <button type="button" onClick={() => setShowAddBoss(false)} style={{ flex: 1, padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem', cursor: 'pointer' }}>Cancelar</button>
+                  <button type="submit" style={{ flex: 1, padding: '0.75rem', backgroundColor: '#2563eb', color: 'white', border: 'none', borderRadius: '0.5rem', cursor: 'pointer' }}>Cadastrar</button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
       )}
+
+      {/* Modal Adicionar Motoqueiro - CENTRALIZADO */}
       {showAddRider && (
-        <AddRiderModal 
-          associationId={association?.id}
-          plates={plates}
-          onClose={() => setShowAddRider(false)} 
-          onSuccess={() => { setShowAddRider(false); loadAllData(association?.id || '') }} 
-        />
+        <div style={styles.modalOverlay} onClick={() => setShowAddRider(false)}>
+          <div style={styles.modalContent} onClick={(e) => e.stopPropagation()}>
+            <div style={{ padding: '1.5rem' }}>
+              <h3 style={{ fontSize: '1.125rem', fontWeight: 'bold', marginBottom: '1rem' }}>Novo Motoqueiro</h3>
+              <form onSubmit={async (e) => {
+                e.preventDefault()
+                const formData = new FormData(e.currentTarget)
+                const name = formData.get('name') as string
+                const phone = formData.get('phone') as string
+                const bi = formData.get('bi') as string
+                const password = (formData.get('password') as string) || 'senha123'
+                const plate_id = formData.get('plate_id') as string
+                const associationId = localStorage.getItem('association_id')
+                
+                const { error } = await supabase.from('riders').insert({
+                  name,
+                  phone,
+                  bi,
+                  password_hash: password,
+                  plate_id: plate_id || null,
+                  association_id: associationId,
+                  status: 'active',
+                  is_online: false,
+                  created_at: new Date().toISOString()
+                })
+                
+                if (!error) {
+                  setShowAddRider(false)
+                  const associationIdReload = localStorage.getItem('association_id')
+                  if (associationIdReload) loadAllData(associationIdReload)
+                } else {
+                  alert('Erro ao cadastrar motoqueiro: ' + error.message)
+                }
+              }} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                <input type="text" name="name" placeholder="Nome completo" required style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} />
+                <input type="tel" name="phone" placeholder="Telefone" required style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} />
+                <input type="text" name="bi" placeholder="BI" required style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} />
+                <input type="text" name="password" placeholder="Senha (opcional)" style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} />
+                <select name="plate_id" style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }}>
+                  <option value="">Nenhuma placa</option>
+                  {plates.map(plate => <option key={plate.id} value={plate.id}>{plate.plate_number}</option>)}
+                </select>
+                <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1rem' }}>
+                  <button type="button" onClick={() => setShowAddRider(false)} style={{ flex: 1, padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem', cursor: 'pointer' }}>Cancelar</button>
+                  <button type="submit" style={{ flex: 1, padding: '0.75rem', backgroundColor: '#2563eb', color: 'white', border: 'none', borderRadius: '0.5rem', cursor: 'pointer' }}>Cadastrar</button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
       )}
-    </div>
-  )
-}
-
-// Modais de Adição (simplificados)
-function AddPlateModal({ associationId, onClose, onSuccess }: any) {
-  const [formData, setFormData] = useState({ plate_number: '', weekly_fee: 75000, max_riders: 20, fee_per_rider: 300 })
-  const [loading, setLoading] = useState(false)
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault(); setLoading(true)
-    const { error } = await supabase.from('plates').insert({
-      plate_number: formData.plate_number,
-      weekly_fee: formData.weekly_fee,
-      max_riders: formData.max_riders,
-      fee_per_rider: formData.fee_per_rider,
-      total_weekly_fee: formData.max_riders * formData.fee_per_rider,
-      association_id: associationId,
-      is_active: true,
-      created_at: new Date().toISOString()
-    })
-    if (!error) onSuccess(); else alert('Erro: ' + error.message)
-    setLoading(false)
-  }
-
-  return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl max-w-md w-full">
-        <div className="bg-gradient-to-r from-blue-600 to-blue-700 p-4 rounded-t-2xl flex justify-between text-white">
-          <h3 className="font-bold">Nova Placa</h3>
-          <button onClick={onClose} className="hover:opacity-80">✕</button>
-        </div>
-        <form onSubmit={handleSubmit} className="p-5 space-y-4">
-          <input type="text" required placeholder="Nome da Placa" value={formData.plate_number} onChange={(e) => setFormData({...formData, plate_number: e.target.value})} className="w-full p-3 border rounded-xl" />
-          <input type="number" placeholder="Taxa Semanal" value={formData.weekly_fee} onChange={(e) => setFormData({...formData, weekly_fee: parseInt(e.target.value)})} className="w-full p-3 border rounded-xl" />
-          <input type="number" placeholder="Máximo de Motoqueiros" value={formData.max_riders} onChange={(e) => setFormData({...formData, max_riders: parseInt(e.target.value)})} className="w-full p-3 border rounded-xl" />
-          <button type="submit" disabled={loading} className="w-full bg-blue-600 text-white py-3 rounded-xl font-semibold">{loading ? 'Cadastrando...' : 'Cadastrar'}</button>
-        </form>
-      </div>
-    </div>
-  )
-}
-
-function AddBossModal({ associationId, plates, onClose, onSuccess }: any) {
-  const [formData, setFormData] = useState({ name: '', email: '', phone: '', password: 'senha123', plate_id: '' })
-  const [loading, setLoading] = useState(false)
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault(); setLoading(true)
-    const { error } = await supabase.from('bosses').insert({
-      name: formData.name,
-      email: formData.email,
-      phone: formData.phone,
-      password: formData.password,
-      association_id: associationId,
-      created_at: new Date().toISOString()
-    })
-    if (!error) {
-      if (formData.plate_id) {
-        await supabase.from('plates').update({ boss_id: (await supabase.from('bosses').select('id').eq('email', formData.email).single()).data?.id }).eq('id', formData.plate_id)
-      }
-      onSuccess()
-    } else { alert('Erro: ' + error.message) }
-    setLoading(false)
-  }
-
-  return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl max-w-md w-full">
-        <div className="bg-gradient-to-r from-blue-600 to-blue-700 p-4 rounded-t-2xl flex justify-between text-white">
-          <h3 className="font-bold">Novo Chefe</h3>
-          <button onClick={onClose} className="hover:opacity-80">✕</button>
-        </div>
-        <form onSubmit={handleSubmit} className="p-5 space-y-4">
-          <input type="text" required placeholder="Nome" value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} className="w-full p-3 border rounded-xl" />
-          <input type="email" required placeholder="Email" value={formData.email} onChange={(e) => setFormData({...formData, email: e.target.value})} className="w-full p-3 border rounded-xl" />
-          <input type="tel" required placeholder="Telefone" value={formData.phone} onChange={(e) => setFormData({...formData, phone: e.target.value})} className="w-full p-3 border rounded-xl" />
-          <input type="text" placeholder="Senha" value={formData.password} onChange={(e) => setFormData({...formData, password: e.target.value})} className="w-full p-3 border rounded-xl bg-gray-50" />
-          <select value={formData.plate_id} onChange={(e) => setFormData({...formData, plate_id: e.target.value})} className="w-full p-3 border rounded-xl">
-            <option value="">Nenhuma placa</option>
-            {plates.map((plate: any) => <option key={plate.id} value={plate.id}>{plate.plate_number}</option>)}
-          </select>
-          <button type="submit" disabled={loading} className="w-full bg-blue-600 text-white py-3 rounded-xl font-semibold">{loading ? 'Cadastrando...' : 'Cadastrar'}</button>
-        </form>
-      </div>
-    </div>
-  )
-}
-
-function AddRiderModal({ associationId, plates, onClose, onSuccess }: any) {
-  const [formData, setFormData] = useState({ name: '', phone: '', bi: '', password: 'senha123', plate_id: '' })
-  const [loading, setLoading] = useState(false)
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault(); setLoading(true)
-    const { error } = await supabase.from('riders').insert({
-      name: formData.name,
-      phone: formData.phone,
-      bi: formData.bi,
-      password_hash: formData.password,
-      plate_id: formData.plate_id || null,
-      association_id: associationId,
-      status: 'active',
-      is_online: false,
-      created_at: new Date().toISOString()
-    })
-    if (!error) onSuccess(); else alert('Erro: ' + error.message)
-    setLoading(false)
-  }
-
-  return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl max-w-md w-full">
-        <div className="bg-gradient-to-r from-blue-600 to-blue-700 p-4 rounded-t-2xl flex justify-between text-white">
-          <h3 className="font-bold">Novo Motoqueiro</h3>
-          <button onClick={onClose} className="hover:opacity-80">✕</button>
-        </div>
-        <form onSubmit={handleSubmit} className="p-5 space-y-4">
-          <input type="text" required placeholder="Nome" value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} className="w-full p-3 border rounded-xl" />
-          <input type="tel" required placeholder="Telefone" value={formData.phone} onChange={(e) => setFormData({...formData, phone: e.target.value})} className="w-full p-3 border rounded-xl" />
-          <input type="text" required placeholder="BI" value={formData.bi} onChange={(e) => setFormData({...formData, bi: e.target.value})} className="w-full p-3 border rounded-xl" />
-          <input type="text" placeholder="Senha" value={formData.password} onChange={(e) => setFormData({...formData, password: e.target.value})} className="w-full p-3 border rounded-xl bg-gray-50" />
-          <select value={formData.plate_id} onChange={(e) => setFormData({...formData, plate_id: e.target.value})} className="w-full p-3 border rounded-xl">
-            <option value="">Nenhuma placa</option>
-            {plates.map((plate: any) => <option key={plate.id} value={plate.id}>{plate.plate_number}</option>)}
-          </select>
-          <button type="submit" disabled={loading} className="w-full bg-blue-600 text-white py-3 rounded-xl font-semibold">{loading ? 'Cadastrando...' : 'Cadastrar'}</button>
-        </form>
-      </div>
     </div>
   )
 }
