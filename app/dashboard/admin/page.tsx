@@ -329,7 +329,7 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* Tabela de Pedidos com Informações do Motoqueiro */}
+        {/* Tabela de Pedidos */}
         {activeTab === 'orders' && (
           <div className="p-6">
             <div className="bg-white rounded-xl shadow-sm overflow-hidden">
@@ -347,80 +347,80 @@ export default function AdminDashboard() {
                       <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Ações</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y">
-                    {filteredOrders.map((order) => (
-                      <tr key={order.id} className="hover:bg-gray-50">
-                        <td className="px-4 py-3 text-sm font-medium">{order.customer_name || '-'}</td>
-                        <td className="px-4 py-3 text-sm">{order.customer_phone || '-'}</td>
-                        <td className="px-4 py-3">
-                          {order.rider ? (
-                            <div className="flex items-center gap-2">
-                              {order.rider.photo_url ? (
-                                <img src={order.rider.photo_url} className="w-6 h-6 rounded-full object-cover" />
-                              ) : (
-                                <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center">
-                                  <span className="text-blue-600 text-xs font-bold">{order.rider.name?.charAt(0)}</span>
-                                </div>
-                              )}
-                              <span className="text-sm">{order.rider.name}</span>
-                            </div>
-                          ) : (
-                            <span className="text-sm text-gray-400">Não atribuído</span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3">
-                          {order.rider ? (
-                            <div>
-                              <span className="text-sm">{order.rider.phone}</span>
-                              {order.rider.is_online ? (
-                                <span className="ml-2 text-xs text-green-600">● Online</span>
-                              ) : (
-                                <span className="ml-2 text-xs text-red-600">● Offline</span>
-                              )}
-                            </div>
-                          ) : (
-                            <span className="text-sm text-gray-400">-</span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3 text-sm font-semibold">{order.price?.toLocaleString()} Kz</td>
-                        <td className="px-4 py-3">
-                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                            order.status === 'completed' ? 'bg-green-100 text-green-700' :
-                            order.status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
-                            order.status === 'accepted' ? 'bg-blue-100 text-blue-700' :
-                            'bg-red-100 text-red-700'
-                          }`}>
-                            {order.status === 'completed' ? 'Concluído' :
-                             order.status === 'pending' ? 'Pendente' :
-                             order.status === 'accepted' ? 'Aceito' : 'Cancelado'}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-sm">{new Date(order.created_at).toLocaleDateString('pt-AO')}</td>
-                        <td className="px-4 py-3">
-  {order.rider && order.rider.phone && (
-    <button
-      onClick={() => callRider(order.rider!.phone, order.rider!.name)}
-      className={`flex items-center gap-1 px-3 py-1 text-sm rounded-lg transition ${
-        order.rider!.is_online 
-          ? 'bg-green-500 text-white hover:bg-green-600' 
-          : 'bg-orange-500 text-white hover:bg-orange-600'
-      }`}
-    >
-      <Phone className="w-4 h-4" />
-      Ligar
-    </button>
+                 <tbody className="divide-y">
+  {filteredOrders.map((order) => (
+    <tr key={order.id} className="hover:bg-gray-50">
+      <td className="px-4 py-3 text-sm font-medium">{order.customer_name || '-'}</td>
+      <td className="px-4 py-3 text-sm">{order.customer_phone || '-'}</td>
+      <td className="px-4 py-3">
+        {order.rider ? (
+          <div className="flex items-center gap-2">
+            {order.rider.photo_url ? (
+              <img src={order.rider.photo_url} className="w-6 h-6 rounded-full object-cover" />
+            ) : (
+              <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center">
+                <span className="text-blue-600 text-xs font-bold">{order.rider.name?.charAt(0)}</span>
+              </div>
+            )}
+            <span className="text-sm">{order.rider.name}</span>
+          </div>
+        ) : (
+          <span className="text-sm text-gray-400">Não atribuído</span>
+        )}
+      </td>
+      <td className="px-4 py-3">
+        {order.rider ? (
+          <div>
+            <span className="text-sm">{order.rider.phone}</span>
+            {order.rider.is_online ? (
+              <span className="ml-2 text-xs text-green-600">● Online</span>
+            ) : (
+              <span className="ml-2 text-xs text-red-600">● Offline</span>
+            )}
+          </div>
+        ) : (
+          <span className="text-sm text-gray-400">-</span>
+        )}
+      </td>
+      <td className="px-4 py-3 text-sm font-semibold">{order.price?.toLocaleString()} Kz</td>
+      <td className="px-4 py-3">
+        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+          order.status === 'completed' ? 'bg-green-100 text-green-700' :
+          order.status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
+          order.status === 'accepted' ? 'bg-blue-100 text-blue-700' :
+          'bg-red-100 text-red-700'
+        }`}>
+          {order.status === 'completed' ? 'Concluído' :
+           order.status === 'pending' ? 'Pendente' :
+           order.status === 'accepted' ? 'Aceito' : 'Cancelado'}
+        </span>
+      </td>
+      <td className="px-4 py-3 text-sm">{new Date(order.created_at).toLocaleDateString('pt-AO')}</td>
+      <td className="px-4 py-3">
+        {order.rider?.phone && (
+          <button
+            onClick={() => order.rider && callRider(order.rider.phone, order.rider.name)}
+            className={`flex items-center gap-1 px-3 py-1 text-sm rounded-lg transition ${
+              order.rider?.is_online 
+                ? 'bg-green-500 text-white hover:bg-green-600' 
+                : 'bg-orange-500 text-white hover:bg-orange-600'
+            }`}
+          >
+            <Phone className="w-4 h-4" />
+            Ligar
+          </button>
+        )}
+      </td>
+    </tr>
+  ))}
+  {filteredOrders.length === 0 && (
+    <tr>
+      <td colSpan={8} className="px-4 py-8 text-center text-gray-500">
+        Nenhum pedido encontrado
+      </td>
+    </tr>
   )}
-</td>
-                      </tr>
-                    ))}
-                    {filteredOrders.length === 0 && (
-                      <tr>
-                        <td colSpan={8} className="px-4 py-8 text-center text-gray-500">
-                          Nenhum pedido encontrado
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
+</tbody>
                 </table>
               </div>
             </div>
