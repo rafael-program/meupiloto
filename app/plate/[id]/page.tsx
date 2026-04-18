@@ -1,9 +1,28 @@
-// app/plate/[id]/page.tsx
 'use client'
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
-import { ArrowLeft, Phone, User, CheckCircle, XCircle, Navigation, Bike, MapPin, DollarSign, Clock, Star, Shield, Wifi } from 'lucide-react'
+import { ArrowLeft, Phone, User, XCircle, Navigation, Bike, Shield, Wifi, Clock } from 'lucide-react'
+import dynamic from 'next/dynamic'
+import 'leaflet/dist/leaflet.css'
+
+// Importar componentes do mapa dinamicamente
+const MapContainer = dynamic(
+  () => import('react-leaflet').then((mod) => mod.MapContainer),
+  { ssr: false }
+)
+const TileLayer = dynamic(
+  () => import('react-leaflet').then((mod) => mod.TileLayer),
+  { ssr: false }
+)
+const Marker = dynamic(
+  () => import('react-leaflet').then((mod) => mod.Marker),
+  { ssr: false }
+)
+const Popup = dynamic(
+  () => import('react-leaflet').then((mod) => mod.Popup),
+  { ssr: false }
+)
 
 export default function PlateRiders() {
   const { id } = useParams()
@@ -20,10 +39,219 @@ export default function PlateRiders() {
     dropoffAddress: '',
     price: 1000
   })
+  const [showWaitingModal, setShowWaitingModal] = useState(false)
+  const [orderId, setOrderId] = useState<string | null>(null)
+  const [timeLeft, setTimeLeft] = useState(900)
+  const [orderStatus, setOrderStatus] = useState<string>('pending')
+  const [showMap, setShowMap] = useState(false)
+  const [customerLocation, setCustomerLocation] = useState<{ lat: number; lng: number } | null>(null)
+  const [riderLocation, setRiderLocation] = useState<{ lat: number; lng: number } | null>(null)
 
   useEffect(() => {
     loadPlateAndRiders()
   }, [id])
+
+  // Carregar pedido ativo do localStorage ao iniciar
+  useEffect(() => {
+    const savedOrderId = localStorage.getItem('active_order_id')
+    const savedOrderStatus = localStorage.getItem('active_order_status')
+    const savedRiderName = localStorage.getItem('active_order_rider')
+    const savedCustomerLocation = localStorage.getItem('customer_location')
+    const savedPickupAddress = localStorage.getItem('pickup_address')
+    const savedDropoffAddress = localStorage.getItem('dropoff_address')
+    const savedPrice = localStorage.getItem('order_price')
+    const savedCustomerName = localStorage.getItem('customer_name')
+    const savedCustomerPhone = localStorage.getItem('customer_phone')
+    
+    if (savedOrderId && savedOrderStatus === 'accepted') {
+      setOrderId(savedOrderId)
+      setOrderStatus('accepted')
+      setShowMap(true)
+      if (savedRiderName) setSelectedRider({ name: savedRiderName })
+      if (savedCustomerLocation) setCustomerLocation(JSON.parse(savedCustomerLocation))
+      if (savedPickupAddress) setFormData(prev => ({ ...prev, pickupAddress: savedPickupAddress }))
+      if (savedDropoffAddress) setFormData(prev => ({ ...prev, dropoffAddress: savedDropoffAddress }))
+      if (savedPrice) setFormData(prev => ({ ...prev, price: parseInt(savedPrice) }))
+      if (savedCustomerName) setFormData(prev => ({ ...prev, customerName: savedCustomerName }))
+      if (savedCustomerPhone) setFormData(prev => ({ ...prev, customerPhone: savedCustomerPhone }))
+    } else if (savedOrderId && savedOrderStatus === 'pending') {
+      setOrderId(savedOrderId)
+      setOrderStatus('pending')
+      setShowWaitingModal(true)
+      if (savedRiderName) setSelectedRider({ name: savedRiderName })
+    }
+  }, [])
+
+  // Salvar estado no localStorage quando mudar
+  useEffect(() => {
+    if (orderId) {
+      localStorage.setItem('active_order_id', orderId)
+      localStorage.setItem('active_order_status', orderStatus)
+      if (selectedRider?.name) localStorage.setItem('active_order_rider', selectedRider.name)
+      if (customerLocation) localStorage.setItem('customer_location', JSON.stringify(customerLocation))
+      if (formData.pickupAddress) localStorage.setItem('pickup_address', formData.pickupAddress)
+      if (formData.dropoffAddress) localStorage.setItem('dropoff_address', formData.dropoffAddress)
+      if (formData.price) localStorage.setItem('order_price', formData.price.toString())
+      if (formData.customerName) localStorage.setItem('customer_name', formData.customerName)
+      if (formData.customerPhone) localStorage.setItem('customer_phone', formData.customerPhone)
+    } else {
+      localStorage.removeItem('active_order_id')
+      localStorage.removeItem('active_order_status')
+      localStorage.removeItem('active_order_rider')
+    }
+  }, [orderId, orderStatus, selectedRider, customerLocation, formData])
+
+  // Timer com verificação de status
+  useEffect(() => {
+    let timer: NodeJS.Timeout | null = null
+    
+    if (showWaitingModal && timeLeft > 0 && orderStatus === 'pending') {
+      timer = setInterval(() => {
+        setTimeLeft(prev => {
+          if (prev <= 1) {
+            if (timer) clearInterval(timer)
+            if (orderStatus === 'pending') {
+              alert('⏰ Tempo esgotado! O motoqueiro não respondeu a tempo.')
+              setShowWaitingModal(false)
+              setOrderId(null)
+              localStorage.removeItem('active_order_id')
+              localStorage.removeItem('active_order_status')
+            }
+            return 0
+          }
+          return prev - 1
+        })
+      }, 1000)
+    }
+
+    return () => {
+      if (timer) clearInterval(timer)
+    }
+  }, [showWaitingModal, timeLeft, orderStatus])
+
+  // SUBSCRIÇÃO EM TEMPO REAL - CORAÇÃO DO SISTEMA
+  useEffect(() => {
+    if (!orderId) return
+
+    console.log('📡 Iniciando subscription para pedido:', orderId)
+
+    // Primeiro, buscar o status atual do pedido
+    const fetchCurrentOrder = async () => {
+      const { data } = await supabase
+        .from('orders')
+        .select('status, rider_location')
+        .eq('id', orderId)
+        .single()
+      
+      if (data) {
+        console.log('📦 Status atual do pedido:', data.status)
+        if (data.status === 'accepted' && orderStatus !== 'accepted') {
+          setOrderStatus('accepted')
+          setShowWaitingModal(false)
+          setShowMap(true)
+          if (data.rider_location) {
+            try {
+              const location = JSON.parse(data.rider_location)
+              setRiderLocation(location)
+            } catch (e) {}
+          }
+        }
+      }
+    }
+    
+    fetchCurrentOrder()
+
+    // Subscription para mudanças em tempo real
+    const subscription = supabase
+      .channel(`order_updates_${orderId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'orders',
+          filter: `id=eq.${orderId}`
+        },
+        (payload) => {
+          const newStatus = payload.new.status
+          const newRiderLocation = payload.new.rider_location
+          
+          console.log('🔄 Pedido atualizado:', { 
+            id: orderId, 
+            novoStatus: newStatus, 
+            statusAnterior: orderStatus 
+          })
+          
+          setOrderStatus(newStatus)
+          localStorage.setItem('active_order_status', newStatus)
+          
+          if (newStatus === 'accepted') {
+            console.log('✅ Pedido ACEITO! Fechando modal e abrindo mapa...')
+            setShowWaitingModal(false)
+            setShowMap(true)
+            
+            if (newRiderLocation) {
+              try {
+                const location = JSON.parse(newRiderLocation)
+                setRiderLocation(location)
+              } catch (e) {
+                console.error('Erro ao parsear localização:', e)
+              }
+            }
+          } else if (newStatus === 'cancelled') {
+            console.log('❌ Pedido CANCELADO!')
+            setShowWaitingModal(false)
+            alert('❌ O pedido foi cancelado pelo motoqueiro.')
+            setOrderId(null)
+            localStorage.removeItem('active_order_id')
+            localStorage.removeItem('active_order_status')
+          }
+        }
+      )
+      .subscribe((status) => {
+        console.log('🔌 Status da subscription:', status)
+      })
+
+    return () => {
+      console.log('📡 Removendo subscription para pedido:', orderId)
+      subscription.unsubscribe()
+    }
+  }, [orderId])
+
+  // Subscription para localização do motoqueiro
+  useEffect(() => {
+    if (!orderId || !showMap) return
+
+    console.log('🗺️ Iniciando subscription de localização para pedido:', orderId)
+
+    const subscription = supabase
+      .channel(`rider_location_${orderId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'orders',
+          filter: `id=eq.${orderId}`
+        },
+        (payload) => {
+          if (payload.new.rider_location) {
+            try {
+              const location = JSON.parse(payload.new.rider_location)
+              console.log('📍 Localização do motoqueiro atualizada:', location)
+              setRiderLocation(location)
+            } catch (e) {
+              console.error('Erro ao parsear localização:', e)
+            }
+          }
+        }
+      )
+      .subscribe()
+
+    return () => {
+      subscription.unsubscribe()
+    }
+  }, [orderId, showMap])
 
   const loadPlateAndRiders = async () => {
     const { data: plateData } = await supabase
@@ -49,16 +277,36 @@ export default function PlateRiders() {
     setShowForm(true)
   }
 
+  const getCurrentLocation = (): Promise<GeolocationPosition> => {
+    return new Promise((resolve, reject) => {
+      if (!navigator.geolocation) {
+        reject(new Error('Geolocalização não suportada'))
+      } else {
+        navigator.geolocation.getCurrentPosition(resolve, reject)
+      }
+    })
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
     if (!selectedRider) return
 
-    // Calcular data de expiração (10 minutos a partir de agora)
-    const expiresAt = new Date()
-    expiresAt.setMinutes(expiresAt.getMinutes() + 10) // Alterado para 10 minutos
+    let customerLat = null
+    let customerLng = null
+    try {
+      const position = await getCurrentLocation()
+      customerLat = position.coords.latitude
+      customerLng = position.coords.longitude
+      setCustomerLocation({ lat: customerLat, lng: customerLng })
+    } catch (error) {
+      console.log('Não foi possível obter localização:', error)
+    }
 
-    const { error } = await supabase
+    const expiresAt = new Date()
+    expiresAt.setMinutes(expiresAt.getMinutes() + 15)
+
+    const { data: newOrder, error } = await supabase
       .from('orders')
       .insert({
         rider_id: selectedRider.id,
@@ -71,31 +319,33 @@ export default function PlateRiders() {
         status: 'pending',
         expires_at: expiresAt.toISOString(),
         notification_sent: false,
-        client_name: formData.customerName,
-        client_phone: formData.customerPhone,
-        pickup_location: formData.pickupAddress,
-        destination: formData.dropoffAddress,
-        created_at: new Date().toISOString()
+        created_at: new Date().toISOString(),
+        customer_lat: customerLat,
+        customer_lng: customerLng
       })
+      .select()
+      .single()
 
     if (error) {
       console.error('Erro detalhado:', error)
       alert('Erro ao criar pedido: ' + error.message)
     } else {
-      alert(`✅ Pedido enviado para ${selectedRider.name}! Ele tem 10 minutos para aceitar.`) // Mensagem atualizada
+      console.log('✅ Pedido criado com ID:', newOrder.id)
+      setOrderId(newOrder.id)
+      setOrderStatus('pending')
+      setTimeLeft(900)
       setShowForm(false)
-      setFormData({
-        customerName: '',
-        customerPhone: '',
-        pickupAddress: '',
-        dropoffAddress: '',
-        price: 1000
-      })
-      router.push('/')
+      setShowWaitingModal(true)
     }
   }
 
-  const styles = {
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60)
+    const secs = seconds % 60
+    return `${mins}:${secs.toString().padStart(2, '0')}`
+  }
+
+  const styles: Record<string, React.CSSProperties> = {
     container: { minHeight: '100vh', background: 'linear-gradient(135deg, #f9fafb 0%, #fff5ed 100%)' },
     header: { backgroundColor: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(8px)', borderBottom: '1px solid #f0f0f0', position: 'sticky' as const, top: 0, zIndex: 10 },
     card: { backgroundColor: 'white', borderRadius: '20px', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', border: '1px solid #f0f0f0', overflow: 'hidden', transition: 'all 0.3s ease' },
@@ -103,6 +353,15 @@ export default function PlateRiders() {
     buttonDisabled: { background: '#d1d5db', color: '#6b7280', padding: '12px 24px', borderRadius: '12px', border: 'none', fontWeight: 600, cursor: 'not-allowed', display: 'flex', alignItems: 'center', gap: '8px' },
     modalOverlay: { position: 'fixed' as const, top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, backdropFilter: 'blur(4px)' },
     modalContent: { backgroundColor: 'white', borderRadius: '24px', maxWidth: '480px', width: '90%', maxHeight: '90vh', overflow: 'auto', boxShadow: '0 20px 40px rgba(0,0,0,0.2)' },
+    waitingModalContent: { 
+      backgroundColor: 'white', 
+      borderRadius: '24px', 
+      maxWidth: '400px', 
+      width: '90%', 
+      textAlign: 'center' as const, 
+      padding: '32px', 
+      boxShadow: '0 20px 40px rgba(0,0,0,0.2)' 
+    },
     input: { width: '100%', padding: '12px', border: '1px solid #e5e7eb', borderRadius: '12px', fontSize: '14px', transition: 'all 0.3s ease' },
     label: { display: 'block', fontSize: '13px', fontWeight: 600, marginBottom: '6px', color: '#374151' }
   }
@@ -120,209 +379,212 @@ export default function PlateRiders() {
     )
   }
 
+  if (showMap && selectedRider) {
+    const center = riderLocation || customerLocation || { lat: -8.8383, lng: 13.2344 }
+    
+    return (
+      <div style={styles.container}>
+        <div style={styles.header}>
+          <div style={{ maxWidth: '1280px', margin: '0 auto', padding: '16px 24px' }}>
+            <button onClick={() => {
+              setShowMap(false)
+              setOrderId(null)
+              localStorage.removeItem('active_order_id')
+              localStorage.removeItem('active_order_status')
+              router.push('/')
+            }} style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#6b7280', background: 'none', border: 'none', cursor: 'pointer', marginBottom: '16px', fontSize: '14px' }}>
+              <ArrowLeft size={18} />
+              Voltar ao Início
+            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div style={{ width: '48px', height: '48px', background: 'linear-gradient(135deg, #f59e0b, #ea580c)', borderRadius: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Bike size={24} color="white" />
+              </div>
+              <div>
+                <h1 style={{ fontSize: '24px', fontWeight: 'bold', color: '#111827' }}>Motoqueiro a Caminho</h1>
+                <p style={{ fontSize: '14px', color: '#6b7280', marginTop: '4px' }}>{selectedRider?.name} está vindo até você</p>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div style={{ padding: '24px' }}>
+          <div style={{ backgroundColor: 'white', borderRadius: '20px', overflow: 'hidden', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
+            <div style={{ height: '500px', width: '100%' }}>
+              <MapContainer center={[center.lat, center.lng]} zoom={13} style={{ height: '100%', width: '100%' }}>
+                <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution='&copy; OpenStreetMap contributors' />
+                {customerLocation && (
+                  <Marker position={[customerLocation.lat, customerLocation.lng]}>
+                    <Popup>Sua Localização</Popup>
+                  </Marker>
+                )}
+                {riderLocation && (
+                  <Marker position={[riderLocation.lat, riderLocation.lng]}>
+                    <Popup>🏍️ {selectedRider?.name}</Popup>
+                  </Marker>
+                )}
+              </MapContainer>
+            </div>
+          </div>
+          <div style={{ marginTop: '24px', backgroundColor: 'white', borderRadius: '20px', padding: '20px', border: '1px solid #f0f0f0' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+              <div style={{ flex: 1 }}>
+                <p style={{ fontSize: '13px', color: '#6b7280' }}>Status do Pedido</p>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
+                  <div style={{ width: '10px', height: '10px', backgroundColor: '#10b981', borderRadius: '50%', animation: 'pulse 1.5s infinite' }}></div>
+                  <span style={{ fontWeight: 500, color: '#10b981' }}>Motoqueiro aceitou! Está a caminho</span>
+                </div>
+              </div>
+              <div>
+                <p style={{ fontSize: '13px', color: '#6b7280' }}>Destino: {formData.dropoffAddress || 'Não informado'}</p>
+                <p style={{ fontSize: '15px', fontWeight: 'bold', color: '#059669' }}>Valor: {formData.price?.toLocaleString()} Kz</p>
+              </div>
+            </div>
+          </div>
+          <div style={{ marginTop: '16px', textAlign: 'center' }}>
+            <button onClick={() => {
+              setShowMap(false)
+              setOrderId(null)
+              localStorage.removeItem('active_order_id')
+              localStorage.removeItem('active_order_status')
+              router.push('/')
+            }} style={{ background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer', fontSize: '14px' }}>
+              ← Ir para página inicial
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (showWaitingModal) {
+    return (
+      <div style={styles.modalOverlay}>
+        <div style={styles.waitingModalContent}>
+          <div style={{ marginBottom: '24px' }}>
+            <div style={{ width: '80px', height: '80px', background: 'linear-gradient(135deg, #f59e0b, #ea580c)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+              <Clock size={40} color="white" />
+            </div>
+            <h2 style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '8px' }}>Aguardando Motoqueiro</h2>
+            <p style={{ color: '#6b7280', marginBottom: '16px' }}>
+              {selectedRider?.name} foi notificado sobre seu pedido
+            </p>
+          </div>
+
+          <div style={{ backgroundColor: '#fef3c7', borderRadius: '16px', padding: '16px', marginBottom: '24px' }}>
+            <p style={{ fontSize: '14px', color: '#92400e', marginBottom: '8px' }}>Tempo restante para resposta:</p>
+            <p style={{ fontSize: '36px', fontWeight: 'bold', color: '#d97706', fontFamily: 'monospace', margin: 0 }}>
+              {formatTime(timeLeft)}
+            </p>
+            <p style={{ fontSize: '12px', color: '#92400e', marginTop: '8px', marginBottom: 0 }}>
+              Se o motoqueiro não responder em 15 minutos, o pedido será cancelado automaticamente
+            </p>
+          </div>
+
+          <button 
+            onClick={() => {
+              setShowWaitingModal(false)
+              setOrderId(null)
+              localStorage.removeItem('active_order_id')
+              localStorage.removeItem('active_order_status')
+            }}
+            style={{ width: '100%', backgroundColor: '#ef4444', color: 'white', padding: '14px', borderRadius: '12px', border: 'none', fontWeight: 'bold', cursor: 'pointer' }}
+          >
+            Cancelar Pedido
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div style={styles.container}>
-      {/* Header */}
       <div style={styles.header}>
         <div style={{ maxWidth: '1280px', margin: '0 auto', padding: '16px 24px' }}>
-          <button 
-            onClick={() => router.back()} 
-            style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#6b7280', background: 'none', border: 'none', cursor: 'pointer', marginBottom: '16px', fontSize: '14px' }}
-          >
+          <button onClick={() => router.back()} style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#6b7280', background: 'none', border: 'none', cursor: 'pointer', marginBottom: '16px', fontSize: '14px' }}>
             <ArrowLeft size={18} />
             Voltar
           </button>
-          
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <div style={{ width: '48px', height: '48px', background: 'linear-gradient(135deg, #f59e0b, #ea580c)', borderRadius: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <Bike size={24} color="white" />
             </div>
             <div>
-              <h1 style={{ fontSize: '28px', fontWeight: 'bold', background: 'linear-gradient(135deg, #d97706, #ea580c)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
-                {plate?.plate_number}
-              </h1>
-              <p style={{ fontSize: '14px', color: '#6b7280', marginTop: '4px' }}>
-                {riders.filter(r => r.is_online).length} motoqueiros online • {riders.length} total
-              </p>
+              <h1 style={{ fontSize: '28px', fontWeight: 'bold' }}>{plate?.plate_number}</h1>
+              <p style={{ fontSize: '14px', color: '#6b7280', marginTop: '4px' }}>{riders.filter(r => r.is_online).length} motoqueiros online • {riders.length} total</p>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Conteúdo */}
       <div style={{ maxWidth: '1280px', margin: '0 auto', padding: '24px' }}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          {riders.map((rider, index) => (
-            <div 
-              key={rider.id} 
-              style={{ 
-                ...styles.card, 
-                transform: 'translateY(0)',
-                cursor: 'pointer'
-              }}
-              onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-4px)'}
-              onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0)'}
-            >
-              <div style={{ padding: '20px', display: 'flex', alignItems: 'center', gap: '20px', flexWrap: 'wrap' }}>
-                {/* Avatar */}
-                <div style={{ flexShrink: 0 }}>
-                  {rider.photo_url ? (
-                    <img src={rider.photo_url} alt={rider.name} style={{ width: '72px', height: '72px', borderRadius: '50%', objectFit: 'cover', border: '3px solid #f59e0b' }} />
+        {riders.map((rider) => (
+          <div key={rider.id} style={styles.card}>
+            <div style={{ padding: '20px', display: 'flex', alignItems: 'center', gap: '20px', flexWrap: 'wrap' }}>
+              <div style={{ flexShrink: 0 }}>
+                {rider.photo_url ? (
+                  <img src={rider.photo_url} alt={rider.name} style={{ width: '72px', height: '72px', borderRadius: '50%', objectFit: 'cover', border: '3px solid #f59e0b' }} />
+                ) : (
+                  <div style={{ width: '72px', height: '72px', background: 'linear-gradient(135deg, #f59e0b, #ea580c)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <User size={32} color="white" />
+                  </div>
+                )}
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', marginBottom: '8px' }}>
+                  <h3 style={{ fontSize: '18px', fontWeight: 'bold', color: '#111827' }}>{rider.name}</h3>
+                  {rider.is_online ? (
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: '#ecfdf5', color: '#059669', padding: '4px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: 500 }}>
+                      <Wifi size={12} />
+                      Online
+                    </span>
                   ) : (
-                    <div style={{ width: '72px', height: '72px', background: 'linear-gradient(135deg, #f59e0b, #ea580c)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <User size={32} color="white" />
-                    </div>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: '#f3f4f6', color: '#6b7280', padding: '4px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: 500 }}>
+                      <XCircle size={12} />
+                      Offline
+                    </span>
                   )}
                 </div>
-
-                {/* Informações */}
-                <div style={{ flex: 1 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', marginBottom: '8px' }}>
-                    <h3 style={{ fontSize: '18px', fontWeight: 'bold', color: '#111827' }}>{rider.name}</h3>
-                    {rider.is_online ? (
-                      <span style={{ display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: '#ecfdf5', color: '#059669', padding: '4px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: 500 }}>
-                        <Wifi size={12} />
-                        Online
-                      </span>
-                    ) : (
-                      <span style={{ display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: '#f3f4f6', color: '#6b7280', padding: '4px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: 500 }}>
-                        <XCircle size={12} />
-                        Offline
-                      </span>
-                    )}
-                  </div>
-                  
-                  <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', marginTop: '8px' }}>
-                    <p style={{ fontSize: '13px', color: '#6b7280', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      <Shield size={14} /> BI: {rider.bi}
-                    </p>
-                    <p style={{ fontSize: '13px', color: '#6b7280', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      <Phone size={14} /> {rider.phone}
-                    </p>
-                  </div>
+                <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', marginTop: '8px' }}>
+                  <p style={{ fontSize: '13px', color: '#6b7280', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <Shield size={14} /> BI: {rider.bi}
+                  </p>
+                  <p style={{ fontSize: '13px', color: '#6b7280', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <Phone size={14} /> {rider.phone}
+                  </p>
                 </div>
-
-                {/* Botão */}
-                <button
-                  onClick={() => handleOpenForm(rider)}
-                  disabled={!rider.is_online}
-                  style={rider.is_online ? styles.buttonPrimary : styles.buttonDisabled}
-                >
-                  <Navigation size={18} />
-                  Pedir Moto
-                </button>
               </div>
+              <button onClick={() => handleOpenForm(rider)} disabled={!rider.is_online} style={rider.is_online ? styles.buttonPrimary : styles.buttonDisabled}>
+                <Navigation size={18} />
+                Pedir Moto
+              </button>
             </div>
-          ))}
-
-          {riders.length === 0 && (
-            <div style={{ backgroundColor: 'white', borderRadius: '20px', padding: '48px', textAlign: 'center', border: '1px solid #f0f0f0' }}>
-              <Bike size={64} color="#d1d5db" style={{ margin: '0 auto 16px' }} />
-              <p style={{ color: '#6b7280', fontSize: '16px' }}>Nenhum motoqueiro cadastrado nesta placa</p>
-              <p style={{ color: '#9ca3af', fontSize: '14px', marginTop: '8px' }}>Volte mais tarde ou tente outra placa</p>
-            </div>
-          )}
-        </div>
+          </div>
+        ))}
+        {riders.length === 0 && (
+          <div style={{ backgroundColor: 'white', borderRadius: '20px', padding: '48px', textAlign: 'center', border: '1px solid #f0f0f0' }}>
+            <Bike size={64} color="#d1d5db" style={{ margin: '0 auto 16px' }} />
+            <p style={{ color: '#6b7280', fontSize: '16px' }}>Nenhum motoqueiro cadastrado nesta placa</p>
+          </div>
+        )}
       </div>
 
-      {/* Modal */}
       {showForm && selectedRider && (
         <div style={styles.modalOverlay} onClick={() => setShowForm(false)}>
           <div style={styles.modalContent} onClick={(e) => e.stopPropagation()}>
             <div style={{ background: 'linear-gradient(135deg, #f59e0b, #ea580c)', padding: '20px', borderRadius: '24px 24px 0 0', color: 'white' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div>
-                  <h3 style={{ fontSize: '20px', fontWeight: 'bold' }}>Solicitar Corrida</h3>
-                  <p style={{ fontSize: '13px', opacity: 0.9, marginTop: '4px' }}>Motoqueiro: {selectedRider.name}</p>
-                </div>
+                <h3 style={{ fontSize: '20px', fontWeight: 'bold' }}>Solicitar Corrida</h3>
                 <button onClick={() => setShowForm(false)} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white', width: '32px', height: '32px', borderRadius: '50%', cursor: 'pointer', fontSize: '18px' }}>✕</button>
               </div>
+              <p style={{ fontSize: '13px', opacity: 0.9, marginTop: '4px' }}>Motoqueiro: {selectedRider.name}</p>
             </div>
-
             <form onSubmit={handleSubmit} style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              <div>
-                <label style={styles.label}>Seu nome</label>
-                <input 
-                  type="text" 
-                  required 
-                  value={formData.customerName} 
-                  onChange={(e) => setFormData({...formData, customerName: e.target.value})} 
-                  style={styles.input} 
-                  placeholder="Digite seu nome completo"
-                  onFocus={(e) => e.currentTarget.style.borderColor = '#f59e0b'}
-                  onBlur={(e) => e.currentTarget.style.borderColor = '#e5e7eb'}
-                />
-              </div>
-
-              <div>
-                <label style={styles.label}>Seu telefone</label>
-                <input 
-                  type="tel" 
-                  required 
-                  value={formData.customerPhone} 
-                  onChange={(e) => setFormData({...formData, customerPhone: e.target.value})} 
-                  style={styles.input} 
-                  placeholder="923 456 789"
-                  onFocus={(e) => e.currentTarget.style.borderColor = '#f59e0b'}
-                  onBlur={(e) => e.currentTarget.style.borderColor = '#e5e7eb'}
-                />
-              </div>
-
-              <div>
-                <label style={styles.label}>📍 Endereço de origem</label>
-                <input 
-                  type="text" 
-                  required 
-                  value={formData.pickupAddress} 
-                  onChange={(e) => setFormData({...formData, pickupAddress: e.target.value})} 
-                  style={styles.input} 
-                  placeholder="Onde você está?"
-                  onFocus={(e) => e.currentTarget.style.borderColor = '#f59e0b'}
-                  onBlur={(e) => e.currentTarget.style.borderColor = '#e5e7eb'}
-                />
-              </div>
-
-              <div>
-                <label style={styles.label}>🎯 Endereço de destino</label>
-                <input 
-                  type="text" 
-                  required 
-                  value={formData.dropoffAddress} 
-                  onChange={(e) => setFormData({...formData, dropoffAddress: e.target.value})} 
-                  style={styles.input} 
-                  placeholder="Para onde você vai?"
-                  onFocus={(e) => e.currentTarget.style.borderColor = '#f59e0b'}
-                  onBlur={(e) => e.currentTarget.style.borderColor = '#e5e7eb'}
-                />
-              </div>
-
-              <div>
-                <label style={styles.label}>💰 Valor da corrida (Kz)</label>
-                <input 
-                  type="number" 
-                  required 
-                  value={formData.price} 
-                  onChange={(e) => setFormData({...formData, price: parseInt(e.target.value)})} 
-                  style={styles.input} 
-                  placeholder="1000"
-                  min="100"
-                  step="100"
-                  onFocus={(e) => e.currentTarget.style.borderColor = '#f59e0b'}
-                  onBlur={(e) => e.currentTarget.style.borderColor = '#e5e7eb'}
-                />
-              </div>
-
-              <button 
-                type="submit" 
-                style={{ 
-                  ...styles.buttonPrimary, 
-                  width: '100%', 
-                  justifyContent: 'center', 
-                  padding: '14px',
-                  fontSize: '16px',
-                  marginTop: '8px'
-                }}
-              >
+              <input type="text" required placeholder="Seu nome" value={formData.customerName} onChange={(e) => setFormData({...formData, customerName: e.target.value})} style={styles.input} />
+              <input type="tel" required placeholder="Seu telefone" value={formData.customerPhone} onChange={(e) => setFormData({...formData, customerPhone: e.target.value})} style={styles.input} />
+              <input type="text" required placeholder="Endereço de origem" value={formData.pickupAddress} onChange={(e) => setFormData({...formData, pickupAddress: e.target.value})} style={styles.input} />
+              <input type="text" required placeholder="Endereço de destino" value={formData.dropoffAddress} onChange={(e) => setFormData({...formData, dropoffAddress: e.target.value})} style={styles.input} />
+              <input type="number" required placeholder="Valor da corrida (Kz)" value={formData.price} onChange={(e) => setFormData({...formData, price: parseInt(e.target.value)})} style={styles.input} min="100" step="100" />
+              <button type="submit" style={{ ...styles.buttonPrimary, width: '100%', justifyContent: 'center', padding: '14px', fontSize: '16px' }}>
                 <Navigation size={18} />
                 Confirmar Pedido
               </button>
@@ -335,6 +597,10 @@ export default function PlateRiders() {
         @keyframes spin {
           from { transform: rotate(0deg); }
           to { transform: rotate(360deg); }
+        }
+        @keyframes pulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.3; }
         }
       `}</style>
     </div>

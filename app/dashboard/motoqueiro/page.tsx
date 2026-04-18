@@ -1,4 +1,4 @@
-// app/dashboard/motoqueiro/page.tsx - VERSÃO COM MODAL INLINE
+// app/dashboard/motoqueiro/page.tsx
 'use client'
 import { useEffect, useState, useRef } from 'react'
 import { supabase } from '@/lib/supabase/client'
@@ -7,7 +7,37 @@ import {
   Power, Phone, MapPin, Navigation, CheckCircle, LogOut, Bell, History, Clock, CheckSquare, XCircle,
   User, Wallet, Star, BellRing, BellOff, Edit, Camera, Loader2, X
 } from 'lucide-react'
-import { requestNotificationPermission, isNotificationSupported, registerServiceWorker } from '@/lib/notifications'
+import dynamic from 'next/dynamic'
+import 'leaflet/dist/leaflet.css'
+
+// Importar componentes do mapa dinamicamente
+const MapContainer = dynamic(
+  () => import('react-leaflet').then((mod) => mod.MapContainer),
+  { ssr: false }
+)
+const TileLayer = dynamic(
+  () => import('react-leaflet').then((mod) => mod.TileLayer),
+  { ssr: false }
+)
+const Marker = dynamic(
+  () => import('react-leaflet').then((mod) => mod.Marker),
+  { ssr: false }
+)
+const Popup = dynamic(
+  () => import('react-leaflet').then((mod) => mod.Popup),
+  { ssr: false }
+)
+
+// Configurar ícones do Leaflet
+if (typeof window !== 'undefined') {
+  const L = require('leaflet')
+  delete (L.Icon.Default.prototype as any)._getIconUrl
+  L.Icon.Default.mergeOptions({
+    iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
+    iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
+    shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+  })
+}
 
 export default function RiderDashboard() {
   const [isOnline, setIsOnline] = useState(false)
@@ -22,6 +52,11 @@ export default function RiderDashboard() {
   const [pushPermission, setPushPermission] = useState<string>('default')
   const [stats, setStats] = useState({ totalEarnings: 0, totalRides: 0, rating: 4.8 })
   const [showEditProfile, setShowEditProfile] = useState(false)
+  const [selectedOrder, setSelectedOrder] = useState<any>(null)
+  const [showMap, setShowMap] = useState(false)
+  const [riderLocation, setRiderLocation] = useState<{ lat: number; lng: number } | null>(null)
+  const [customerLocation, setCustomerLocation] = useState<{ lat: number; lng: number } | null>(null)
+  const [locationInterval, setLocationInterval] = useState<NodeJS.Timeout | null>(null)
   const router = useRouter()
   const channelRef = useRef<any>(null)
   const audioRef = useRef<HTMLAudioElement | null>(null)
@@ -47,9 +82,42 @@ export default function RiderDashboard() {
     }, 5000)
     return () => {
       if (channelRef.current) supabase.removeChannel(channelRef.current)
+      if (locationInterval) clearInterval(locationInterval)
       clearTimeout(timer)
     }
   }, [])
+
+  // Enviar localização do motoqueiro periodicamente
+  const startLocationTracking = () => {
+    if (locationInterval) clearInterval(locationInterval)
+    
+    const interval = setInterval(() => {
+      if (navigator.geolocation && selectedOrder?.id) {
+        navigator.geolocation.getCurrentPosition(async (position) => {
+          const location = {
+            lat: position.coords.latitude,
+            lng: position.coords.longitude
+          }
+          setRiderLocation(location)
+          await supabase
+            .from('orders')
+            .update({ rider_location: JSON.stringify(location) })
+            .eq('id', selectedOrder.id)
+        }, (error) => {
+          console.error('Erro ao obter localização:', error)
+        })
+      }
+    }, 5000) // Atualiza a cada 5 segundos
+    
+    setLocationInterval(interval)
+  }
+
+  const stopLocationTracking = () => {
+    if (locationInterval) {
+      clearInterval(locationInterval)
+      setLocationInterval(null)
+    }
+  }
 
   const playSound = () => audioRef.current?.play().catch(() => {})
   const sendPushNotification = (title: string, body: string) => {
@@ -153,14 +221,26 @@ export default function RiderDashboard() {
   const acceptOrder = async (order: any) => {
     if (!isOnline) { alert('⚠️ Você precisa estar online para aceitar pedidos!'); return }
     if (!rider?.id) { alert('❌ Sessão expirada. Faça login novamente.'); router.push('/login/motoqueiro'); return }
+    
+    setSelectedOrder(order)
+    
+    // Carregar localização do cliente
+    if (order.customer_lat && order.customer_lng) {
+      setCustomerLocation({ lat: order.customer_lat, lng: order.customer_lng })
+    }
+    
+    setShowMap(true)
+    startLocationTracking()
+    
     try {
       const { data, error } = await supabase.from('orders').update({ status: 'accepted' }).eq('id', order.id).eq('rider_id', rider.id).select()
       if (error) throw error
       if (!data || data.length === 0) throw new Error('Nenhum pedido atualizado')
       setPendingOrders(prev => prev.filter(o => o.id !== order.id))
       await addNotification('Pedido Aceito ✅', `Você aceitou a corrida de ${order.customer_name}`, 'success')
-      if (order.customer_phone && confirm(`📞 Pedido aceito! Deseja ligar para ${order.customer_name} (${order.customer_phone})?`)) window.location.href = `tel:${order.customer_phone}`
-    } catch (err) { alert('Erro ao aceitar pedido') }
+    } catch (err) {
+      alert('Erro ao aceitar pedido')
+    }
   }
 
   const completeOrder = async (order: any) => {
@@ -171,6 +251,11 @@ export default function RiderDashboard() {
         setCompletedOrders(prev => prev.map(o => o.id === order.id ? { ...o, status: 'completed' } : o))
         setStats(prev => ({ ...prev, totalEarnings: prev.totalEarnings + (order.price || 0), totalRides: prev.totalRides + 1 }))
         await addNotification('Corrida Concluída 🎉', `Corrida de ${order.customer_name} concluída! Ganhou ${order.price?.toLocaleString()} Kz`, 'success')
+        setShowMap(false)
+        stopLocationTracking()
+        setSelectedOrder(null)
+        setCustomerLocation(null)
+        setRiderLocation(null)
       }
     }
   }
@@ -181,6 +266,11 @@ export default function RiderDashboard() {
       await supabase.from('orders').update({ status: 'cancelled' }).eq('id', order.id).eq('rider_id', rider.id)
       setPendingOrders(prev => prev.filter(o => o.id !== order.id))
       await addNotification('Pedido Cancelado ❌', `Pedido de ${order.customer_name} foi cancelado`, 'alert')
+      if (selectedOrder?.id === order.id) {
+        setShowMap(false)
+        stopLocationTracking()
+        setSelectedOrder(null)
+      }
     }
   }
 
@@ -211,16 +301,164 @@ export default function RiderDashboard() {
     )
   }
 
+  // Tela do mapa com navegação
+  // app/dashboard/motoqueiro/page.tsx - Adicione estas melhorias
+
+// Na tela do mapa, adicione mais informações e botões
+if (showMap && selectedOrder) {
+  const center = riderLocation || customerLocation || { lat: -8.8383, lng: 13.2344 }
+  
+  // Calcular distância aproximada (fórmula de Haversine simplificada)
+  const calculateDistance = () => {
+    if (!riderLocation || !customerLocation) return null
+    const R = 6371 // Raio da Terra em km
+    const dLat = (customerLocation.lat - riderLocation.lat) * Math.PI / 180
+    const dLon = (customerLocation.lng - riderLocation.lng) * Math.PI / 180
+    const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+              Math.cos(riderLocation.lat * Math.PI / 180) * Math.cos(customerLocation.lat * Math.PI / 180) *
+              Math.sin(dLon/2) * Math.sin(dLon/2)
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a))
+    return (R * c).toFixed(1)
+  }
+  
+  const distance = calculateDistance()
+  
   return (
     <div className="min-h-screen bg-gray-100">
       <div className="bg-white shadow-sm p-4 sticky top-0 z-10">
         <div className="max-w-7xl mx-auto">
-          <div className="flex justify-between items-center">
+          <div className="flex justify-between items-center flex-wrap gap-3">
+            <div className="flex items-center gap-3">
+              <button onClick={() => { setShowMap(false); stopLocationTracking(); }} className="flex items-center gap-2 text-gray-600 hover:text-gray-900">
+                <XCircle className="w-5 h-5" /> Fechar
+              </button>
+              <div>
+                <h1 className="text-xl font-bold text-gray-900">Em Rota</h1>
+                <p className="text-gray-600 text-sm">{selectedOrder.customer_name}</p>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <button 
+                onClick={() => window.location.href = `tel:${selectedOrder.customer_phone}`} 
+                className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-full font-semibold hover:bg-green-600 transition"
+              >
+                <Phone className="w-4 h-4" /> Ligar Cliente
+              </button>
+              <button 
+                onClick={() => completeOrder(selectedOrder)} 
+                className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-full font-semibold hover:bg-blue-600 transition"
+              >
+                <CheckCircle className="w-4 h-4" /> Concluir
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="p-4">
+        <div className="bg-white rounded-xl overflow-hidden shadow-lg">
+          <div style={{ height: '500px', width: '100%' }}>
+            <MapContainer center={[center.lat, center.lng]} zoom={13} style={{ height: '100%', width: '100%' }}>
+              <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution='&copy; OpenStreetMap contributors' />
+              {customerLocation && (
+                <Marker position={[customerLocation.lat, customerLocation.lng]}>
+                  <Popup>
+                    <div className="text-center">
+                      <strong>📍 Cliente</strong>
+                      <p>{selectedOrder.customer_name}</p>
+                      <p>{selectedOrder.pickup_address || 'Ponto de partida'}</p>
+                      <button 
+                        onClick={() => window.location.href = `tel:${selectedOrder.customer_phone}`}
+                        className="mt-2 bg-green-500 text-white px-3 py-1 rounded-lg text-sm"
+                      >
+                        <Phone className="w-3 h-3 inline mr-1" /> Ligar
+                      </button>
+                    </div>
+                  </Popup>
+                </Marker>
+              )}
+              {riderLocation && (
+                <Marker position={[riderLocation.lat, riderLocation.lng]}>
+                  <Popup>
+                    <div className="text-center">
+                      <strong>🏍️ Você está aqui</strong>
+                      <p>Rumo ao cliente</p>
+                      {distance && <p className="text-sm text-blue-600">Distância: {distance} km</p>}
+                    </div>
+                  </Popup>
+                </Marker>
+              )}
+            </MapContainer>
+          </div>
+        </div>
+
+        <div className="mt-4 bg-white rounded-xl p-4 shadow">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <p className="text-sm text-gray-500">Cliente</p>
+              <p className="font-medium">{selectedOrder.customer_name}</p>
+              <p className="text-sm text-gray-600">{selectedOrder.customer_phone}</p>
+            </div>
+            <div>
+              <p className="text-sm text-gray-500">Destino</p>
+              <p className="font-medium">{selectedOrder.dropoff_address || 'Não informado'}</p>
+            </div>
+          </div>
+          
+          {distance && (
+            <div className="mt-3 p-3 bg-blue-50 rounded-lg">
+              <p className="text-sm text-blue-700 flex items-center gap-2">
+                <Navigation className="w-4 h-4" />
+                Distância até o cliente: <strong>{distance} km</strong>
+              </p>
+            </div>
+          )}
+          
+          <div className="mt-3 pt-3 border-t flex gap-2">
+            <button 
+              onClick={() => window.open(`https://www.google.com/maps/dir/${riderLocation?.lat || -8.8383},${riderLocation?.lng || 13.2344}/${customerLocation?.lat || -8.8383},${customerLocation?.lng || 13.2344}`, '_blank')}
+              className="flex-1 bg-amber-500 text-white py-3 rounded-xl font-semibold flex items-center justify-center gap-2 hover:bg-amber-600 transition"
+            >
+              <Navigation className="w-5 h-5" /> Abrir no Google Maps
+            </button>
+            <button 
+              onClick={() => window.location.href = `tel:${selectedOrder.customer_phone}`}
+              className="flex-1 bg-green-500 text-white py-3 rounded-xl font-semibold flex items-center justify-center gap-2 hover:bg-green-600 transition"
+            >
+              <Phone className="w-5 h-5" /> Ligar Cliente
+            </button>
+          </div>
+        </div>
+        
+        {/* Botão para quando chegar ao destino */}
+        <div className="mt-4">
+          <button 
+            onClick={() => {
+              if (confirm(`✅ Confirma que chegou ao destino de ${selectedOrder.customer_name}?`)) {
+                completeOrder(selectedOrder)
+              }
+            }}
+            className="w-full bg-gradient-to-r from-green-500 to-emerald-600 text-white py-4 rounded-xl font-bold text-lg flex items-center justify-center gap-3 hover:from-green-600 hover:to-emerald-700 transition shadow-lg"
+          >
+            <CheckCircle className="w-6 h-6" />
+            CHEGUEI AO DESTINO - CONCLUIR CORRIDA
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+  return (
+    <div className="min-h-screen bg-gray-100">
+      <div className="bg-white shadow-sm p-4 sticky top-0 z-10">
+        <div className="max-w-7xl mx-auto">
+          <div className="flex justify-between items-center flex-wrap gap-3">
             <div className="flex items-center gap-3">
               {rider?.photo_url ? <img src={rider.photo_url} alt={rider.name} className="w-12 h-12 rounded-full object-cover border-2 border-amber-500" /> : <div className="w-12 h-12 bg-gradient-to-r from-amber-500 to-red-500 rounded-full flex items-center justify-center"><User className="w-6 h-6 text-white" /></div>}
               <div><h1 className="text-xl font-bold text-gray-900">{rider?.name}</h1><p className="text-gray-600 text-sm">{rider?.plate?.plate_number || 'Placa não definida'}</p></div>
             </div>
-            <div className="flex gap-2 items-center">
+            <div className="flex gap-2 flex-wrap">
               <button onClick={() => setShowEditProfile(true)} className="flex items-center gap-2 px-4 py-2 rounded-full font-semibold transition bg-blue-500 text-white hover:bg-blue-600 shadow-md"><Edit className="w-4 h-4" /> Editar Perfil</button>
               {isNotificationSupported() && pushPermission === 'default' && <button onClick={requestPushPermission} className="flex items-center gap-2 px-3 py-1.5 bg-blue-500 text-white text-sm rounded-full"><Bell className="w-4 h-4" /> Ativar Notificações</button>}
               {isNotificationSupported() && pushPermission === 'granted' && <div className="flex items-center gap-2 text-xs text-green-600 bg-green-50 px-3 py-1.5 rounded-full"><BellRing className="w-4 h-4" /> Notificações ativas</div>}
@@ -265,7 +503,7 @@ export default function RiderDashboard() {
         )}
       </div>
 
-      {/* Modal de Editar Perfil - VERSÃO COM ESTILO INLINE */}
+      {/* Modal de Editar Perfil */}
       {showEditProfile && (
         <div style={{
           position: 'fixed',
@@ -300,12 +538,7 @@ export default function RiderDashboard() {
               top: 0
             }}>
               <h3 style={{ fontWeight: 'bold', fontSize: '1.125rem' }}>Editar Perfil</h3>
-              <button 
-                onClick={() => setShowEditProfile(false)} 
-                style={{ background: 'none', border: 'none', color: 'white', fontSize: '1.5rem', cursor: 'pointer', lineHeight: 1 }}
-              >
-                &times;
-              </button>
+              <button onClick={() => setShowEditProfile(false)} style={{ background: 'none', border: 'none', color: 'white', fontSize: '1.5rem', cursor: 'pointer', lineHeight: 1 }}>&times;</button>
             </div>
             
             <form onSubmit={async (e) => {
@@ -350,14 +583,9 @@ export default function RiderDashboard() {
                 alert('Erro ao atualizar: ' + error.message)
               }
             }} style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              {/* Upload de Foto */}
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                 <div style={{ position: 'relative' }}>
-                  <img 
-                    src={rider?.photo_url || 'https://via.placeholder.com/96'} 
-                    alt="Foto do perfil" 
-                    style={{ width: '6rem', height: '6rem', borderRadius: '9999px', objectFit: 'cover', border: '4px solid #fcd34d' }}
-                  />
+                  <img src={rider?.photo_url || 'https://via.placeholder.com/96'} alt="Foto do perfil" style={{ width: '6rem', height: '6rem', borderRadius: '9999px', objectFit: 'cover', border: '4px solid #fcd34d' }} />
                   <label style={{ position: 'absolute', bottom: 0, right: 0, backgroundColor: '#f59e0b', borderRadius: '9999px', padding: '0.375rem', cursor: 'pointer' }}>
                     <Camera size={16} color="white" />
                     <input type="file" name="photo" accept="image/*" style={{ display: 'none' }} />
@@ -390,4 +618,25 @@ export default function RiderDashboard() {
       )}
     </div>
   )
+}
+
+// Funções auxiliares
+function isNotificationSupported() {
+  return typeof window !== 'undefined' && 'Notification' in window
+}
+
+async function requestNotificationPermission() {
+  if (!isNotificationSupported()) return false
+  const permission = await Notification.requestPermission()
+  return permission === 'granted'
+}
+
+async function registerServiceWorker() {
+  if ('serviceWorker' in navigator) {
+    try {
+      await navigator.serviceWorker.register('/sw.js')
+    } catch (error) {
+      console.error('Service Worker registration failed:', error)
+    }
+  }
 }
