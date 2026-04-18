@@ -128,6 +128,12 @@ export default function Home() {
                   <Building2 size={16} /> Associação
                 </button>
               </Link>
+              <Link href="/login/operador">
+  <button className="flex items-center gap-1 px-3 py-1.5 text-sm text-gray-600 hover:text-amber-600 transition rounded-lg hover:bg-gray-100">
+    <Shield className="w-4 h-4" />
+    Operador
+  </button>
+</Link>
               <Link href="/login/admin">
                 <button style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '6px 12px', fontSize: '14px', color: '#6b7280', background: 'none', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>
                   <Shield size={16} /> Admin

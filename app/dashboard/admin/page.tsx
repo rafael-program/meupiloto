@@ -7,8 +7,13 @@ import {
   Shield, LogOut, Users, Bike, CreditCard, TrendingUp, 
   Plus, Edit, Trash2, Search, AlertCircle, Menu, X, 
   UserCog, Store, ClipboardList, RefreshCw, Phone,
-  DollarSign, Calendar, CheckCircle, XCircle, Building2
+  DollarSign, Calendar, CheckCircle, XCircle, Building2,
+  UserPlus, UserCheck, UserX
 } from 'lucide-react'
+
+// ============================================
+// TYPES
+// ============================================
 
 type Association = {
   id: string
@@ -72,6 +77,21 @@ type Order = {
   }
 }
 
+type Operador = {
+  id: string
+  name: string
+  email: string
+  phone: string
+  password: string
+  is_active: boolean
+  created_at: string
+  created_by: string | null
+}
+
+// ============================================
+// COMPONENTE PRINCIPAL
+// ============================================
+
 export default function AdminDashboard() {
   const router = useRouter()
   const [admin, setAdmin] = useState<any>(null)
@@ -81,12 +101,14 @@ export default function AdminDashboard() {
   const [plates, setPlates] = useState<Plate[]>([])
   const [riders, setRiders] = useState<Rider[]>([])
   const [orders, setOrders] = useState<Order[]>([])
+  const [operadores, setOperadores] = useState<Operador[]>([])
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<string>('dashboard')
   const [searchTerm, setSearchTerm] = useState('')
   const [showAddAssociation, setShowAddAssociation] = useState(false)
   const [showAddBoss, setShowAddBoss] = useState(false)
   const [showAddPlate, setShowAddPlate] = useState(false)
+  const [showAddOperador, setShowAddOperador] = useState(false)
   const [stats, setStats] = useState({
     totalAssociations: 0,
     totalBosses: 0,
@@ -95,7 +117,9 @@ export default function AdminDashboard() {
     totalOrders: 0,
     totalRevenue: 0,
     onlineRiders: 0,
-    activePlates: 0
+    activePlates: 0,
+    totalOperadores: 0,
+    activeOperadores: 0
   })
 
   useEffect(() => {
@@ -144,10 +168,15 @@ export default function AdminDashboard() {
     
     setOrders(ordersData || [])
 
+    // Carregar operadores
+    const { data: operadoresData } = await supabase.from('operadores').select('*').order('created_at', { ascending: false })
+    setOperadores(operadoresData || [])
+
     const completedOrders = ordersData?.filter(o => o.status === 'completed') || []
     const totalRevenue = completedOrders.reduce((sum, o) => sum + (o.price || 0), 0)
     const onlineRiders = ridersData?.filter(r => r.is_online === true) || []
     const activePlates = platesData?.filter(p => p.is_active === true) || []
+    const activeOperadores = operadoresData?.filter(o => o.is_active === true) || []
 
     setStats({
       totalAssociations: associationsData?.length || 0,
@@ -157,7 +186,9 @@ export default function AdminDashboard() {
       totalOrders: ordersData?.length || 0,
       totalRevenue,
       onlineRiders: onlineRiders.length,
-      activePlates: activePlates.length
+      activePlates: activePlates.length,
+      totalOperadores: operadoresData?.length || 0,
+      activeOperadores: activeOperadores.length
     })
 
     setLoading(false)
@@ -181,12 +212,21 @@ export default function AdminDashboard() {
     if (!error) loadAllData()
   }
 
+  const toggleOperadorStatus = async (operadorId: string, currentStatus: boolean) => {
+    if (confirm(`Deseja ${currentStatus ? 'desativar' : 'ativar'} este operador?`)) {
+      const { error } = await supabase.from('operadores').update({ is_active: !currentStatus }).eq('id', operadorId)
+      if (!error) loadAllData()
+      else alert('Erro ao alterar status: ' + error.message)
+    }
+  }
+
   const callRider = (phone: string, riderName: string) => {
     if (confirm(`📞 Deseja ligar para o motoqueiro ${riderName} (${phone})?`)) {
       window.location.href = `tel:${phone}`
     }
   }
 
+  // Filtros
   const filteredAssociations = associations.filter(a => 
     a.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
     a.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -212,6 +252,12 @@ export default function AdminDashboard() {
     o.customer_phone?.includes(searchTerm) ||
     o.rider?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     o.rider?.phone?.includes(searchTerm)
+  )
+
+  const filteredOperadores = operadores.filter(op => 
+    op.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    op.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    op.phone.includes(searchTerm)
   )
 
   if (loading) {
@@ -275,6 +321,7 @@ export default function AdminDashboard() {
             {[
               { id: 'dashboard', label: 'Dashboard', icon: TrendingUp },
               { id: 'associations', label: 'Associações', icon: Building2 },
+              { id: 'operadores', label: 'Operadores', icon: Users },
               { id: 'orders', label: 'Pedidos', icon: ClipboardList },
               { id: 'plates', label: 'Placas', icon: Store },
               { id: 'bosses', label: 'Chefes', icon: UserCog },
@@ -323,6 +370,7 @@ export default function AdminDashboard() {
                 <h1 style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#111827' }}>
                   {activeTab === 'dashboard' && 'Dashboard'}
                   {activeTab === 'associations' && 'Associações'}
+                  {activeTab === 'operadores' && 'Operadores'}
                   {activeTab === 'orders' && 'Pedidos'}
                   {activeTab === 'plates' && 'Placas'}
                   {activeTab === 'bosses' && 'Chefes'}
@@ -343,12 +391,13 @@ export default function AdminDashboard() {
                     style={{ padding: '0.5rem 0.5rem 0.5rem 2rem', border: '1px solid #e5e7eb', borderRadius: '0.5rem', width: '16rem' }}
                   />
                 </div>
-                {(activeTab === 'associations' || activeTab === 'bosses' || activeTab === 'plates') && (
+                {(activeTab === 'associations' || activeTab === 'bosses' || activeTab === 'plates' || activeTab === 'operadores') && (
                   <button 
                     onClick={() => {
                       if (activeTab === 'associations') setShowAddAssociation(true)
                       else if (activeTab === 'bosses') setShowAddBoss(true)
-                      else setShowAddPlate(true)
+                      else if (activeTab === 'plates') setShowAddPlate(true)
+                      else if (activeTab === 'operadores') setShowAddOperador(true)
                     }} 
                     style={styles.buttonPrimary}
                   >
@@ -365,6 +414,7 @@ export default function AdminDashboard() {
           <div style={{ padding: '1.5rem' }}>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
               <div style={styles.card}><p style={{ fontSize: '0.75rem', color: '#6b7280' }}>Associações</p><p style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>{stats.totalAssociations}</p></div>
+              <div style={styles.card}><p style={{ fontSize: '0.75rem', color: '#6b7280' }}>Operadores</p><p style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>{stats.totalOperadores}</p><p style={{ fontSize: '0.75rem', color: '#059669' }}>{stats.activeOperadores} ativos</p></div>
               <div style={styles.card}><p style={{ fontSize: '0.75rem', color: '#6b7280' }}>Placas</p><p style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>{stats.totalPlates}</p><p style={{ fontSize: '0.75rem', color: '#059669' }}>{stats.activePlates} ativas</p></div>
               <div style={styles.card}><p style={{ fontSize: '0.75rem', color: '#6b7280' }}>Chefes</p><p style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>{stats.totalBosses}</p></div>
               <div style={styles.card}><p style={{ fontSize: '0.75rem', color: '#6b7280' }}>Motoqueiros</p><p style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>{stats.totalRiders}</p><p style={{ fontSize: '0.75rem', color: '#059669' }}>{stats.onlineRiders} online</p></div>
@@ -382,36 +432,50 @@ export default function AdminDashboard() {
           <div style={{ padding: '1.5rem' }}>
             <div style={{ backgroundColor: 'white', borderRadius: '0.75rem', overflow: 'auto' }}>
               <table style={styles.table}>
-                <thead>
-                  <tr>
-                    <th style={styles.th}>Nome</th>
-                    <th style={styles.th}>Email</th>
-                    <th style={styles.th}>Telefone</th>
-                    <th style={styles.th}>Status</th>
-                    <th style={styles.th}>Ações</th>
-                  </tr>
-                </thead>
+                <thead><tr><th style={styles.th}>Nome</th><th style={styles.th}>Email</th><th style={styles.th}>Telefone</th><th style={styles.th}>Status</th><th style={styles.th}>Ações</th></tr></thead>
                 <tbody>
                   {filteredAssociations.map((assoc) => (
                     <tr key={assoc.id}>
                       <td style={styles.td}>{assoc.name}</td>
                       <td style={styles.td}>{assoc.email}</td>
                       <td style={styles.td}>{assoc.phone}</td>
+                      <td style={styles.td}><span style={assoc.is_active ? styles.badgeActive : styles.badgeInactive}>{assoc.is_active ? 'Ativo' : 'Inativo'}</span></td>
+                      <td style={styles.td}><button onClick={() => deleteItem('associations', assoc.id, assoc.name)} style={styles.buttonDanger}><Trash2 size={16} /></button></td>
+                    </tr>
+                  ))}
+                  {filteredAssociations.length === 0 && (<tr><td colSpan={5} style={{ padding: '2rem', textAlign: 'center', color: '#6b7280' }}>Nenhuma associação encontrada</td></tr>)}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* Operadores */}
+        {activeTab === 'operadores' && (
+          <div style={{ padding: '1.5rem' }}>
+            <div style={{ backgroundColor: 'white', borderRadius: '0.75rem', overflow: 'auto' }}>
+              <table style={styles.table}>
+                <thead><tr><th style={styles.th}>Nome</th><th style={styles.th}>Email</th><th style={styles.th}>Telefone</th><th style={styles.th}>Status</th><th style={styles.th}>Criado em</th><th style={styles.th}>Ações</th></tr></thead>
+                <tbody>
+                  {filteredOperadores.map((op) => (
+                    <tr key={op.id}>
+                      <td style={styles.td}>{op.name}</td>
+                      <td style={styles.td}>{op.email || '-'}</td>
+                      <td style={styles.td}>{op.phone}</td>
                       <td style={styles.td}>
-                        <span style={assoc.is_active ? styles.badgeActive : styles.badgeInactive}>
-                          {assoc.is_active ? 'Ativo' : 'Inativo'}
-                        </span>
+                        <button onClick={() => toggleOperadorStatus(op.id, op.is_active)} style={op.is_active ? styles.badgeActive : styles.badgeInactive}>
+                          {op.is_active ? 'Ativo' : 'Inativo'}
+                        </button>
                       </td>
+                      <td style={styles.td}>{new Date(op.created_at).toLocaleDateString('pt-AO')}</td>
                       <td style={styles.td}>
-                        <button onClick={() => deleteItem('associations', assoc.id, assoc.name)} style={styles.buttonDanger}>
+                        <button onClick={() => deleteItem('operadores', op.id, op.name)} style={styles.buttonDanger}>
                           <Trash2 size={16} />
                         </button>
                       </td>
                     </tr>
                   ))}
-                  {filteredAssociations.length === 0 && (
-                    <tr><td colSpan={5} style={{ padding: '2rem', textAlign: 'center', color: '#6b7280' }}>Nenhuma associação encontrada</td></tr>
-                  )}
+                  {filteredOperadores.length === 0 && (<tr><td colSpan={6} style={{ padding: '2rem', textAlign: 'center', color: '#6b7280' }}>Nenhum operador encontrado</td></tr>)}
                 </tbody>
               </table>
             </div>
@@ -423,18 +487,7 @@ export default function AdminDashboard() {
           <div style={{ padding: '1.5rem' }}>
             <div style={{ backgroundColor: 'white', borderRadius: '0.75rem', overflow: 'auto' }}>
               <table style={styles.table}>
-                <thead>
-                  <tr>
-                    <th style={styles.th}>Cliente</th>
-                    <th style={styles.th}>Telefone</th>
-                    <th style={styles.th}>Motoqueiro</th>
-                    <th style={styles.th}>Tel. Motoqueiro</th>
-                    <th style={styles.th}>Valor</th>
-                    <th style={styles.th}>Status</th>
-                    <th style={styles.th}>Data</th>
-                    <th style={styles.th}>Ações</th>
-                  </tr>
-                </thead>
+                <thead><tr><th style={styles.th}>Cliente</th><th style={styles.th}>Telefone</th><th style={styles.th}>Motoqueiro</th><th style={styles.th}>Tel. Motoqueiro</th><th style={styles.th}>Valor</th><th style={styles.th}>Status</th><th style={styles.th}>Data</th><th style={styles.th}>Ações</th></tr></thead>
                 <tbody>
                   {filteredOrders.map((order) => (
                     <tr key={order.id}>
@@ -444,15 +497,9 @@ export default function AdminDashboard() {
                         {order.rider ? (
                           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                             <span>{order.rider.name}</span>
-                            {order.rider.is_online ? (
-                              <span style={{ fontSize: '0.7rem', color: '#10b981' }}>● Online</span>
-                            ) : (
-                              <span style={{ fontSize: '0.7rem', color: '#ef4444' }}>● Offline</span>
-                            )}
+                            {order.rider.is_online ? <span style={{ fontSize: '0.7rem', color: '#10b981' }}>● Online</span> : <span style={{ fontSize: '0.7rem', color: '#ef4444' }}>● Offline</span>}
                           </div>
-                        ) : (
-                          <span style={{ color: '#9ca3af' }}>Não atribuído</span>
-                        )}
+                        ) : <span style={{ color: '#9ca3af' }}>Não atribuído</span>}
                       </td>
                       <td style={styles.td}>
                         {order.rider?.phone ? (
@@ -471,18 +518,12 @@ export default function AdminDashboard() {
                         }}>
                           {order.status === 'completed' ? 'Concluído' : order.status === 'pending' ? 'Pendente' : order.status === 'accepted' ? 'Aceito' : 'Cancelado'}
                         </span>
-                       </td>
+                      </td>
                       <td style={styles.td}>{new Date(order.created_at).toLocaleDateString('pt-AO')}</td>
-                      <td style={styles.td}>
-                        <button onClick={() => deleteItem('orders', order.id, `pedido de ${order.customer_name}`)} style={styles.buttonDanger}>
-                          <Trash2 size={16} />
-                        </button>
-                       </td>
-                     </tr>
+                      <td style={styles.td}><button onClick={() => deleteItem('orders', order.id, `pedido de ${order.customer_name}`)} style={styles.buttonDanger}><Trash2 size={16} /></button></td>
+                    </tr>
                   ))}
-                  {filteredOrders.length === 0 && (
-                    <tr><td colSpan={8} style={{ padding: '2rem', textAlign: 'center', color: '#6b7280' }}>Nenhum pedido encontrado</td></tr>
-                  )}
+                  {filteredOrders.length === 0 && (<tr><td colSpan={8} style={{ padding: '2rem', textAlign: 'center', color: '#6b7280' }}>Nenhum pedido encontrado</td></tr>)}
                 </tbody>
               </table>
             </div>
@@ -562,6 +603,7 @@ export default function AdminDashboard() {
       {showAddAssociation && <AddAssociationModal onClose={() => setShowAddAssociation(false)} onSuccess={() => { setShowAddAssociation(false); loadAllData() }} />}
       {showAddBoss && <AddBossModal onClose={() => setShowAddBoss(false)} onSuccess={() => { setShowAddBoss(false); loadAllData() }} />}
       {showAddPlate && <AddPlateModal bosses={bosses} onClose={() => setShowAddPlate(false)} onSuccess={() => { setShowAddPlate(false); loadAllData() }} />}
+      {showAddOperador && <AddOperadorModal onClose={() => setShowAddOperador(false)} onSuccess={() => { setShowAddOperador(false); loadAllData() }} adminId={admin?.id} />}
     </div>
   )
 }
@@ -666,6 +708,42 @@ function AddPlateModal({ bosses, onClose, onSuccess }: any) {
           </select>
           <input type="number" placeholder="Taxa Semanal" value={formData.weekly_fee} onChange={(e) => setFormData({...formData, weekly_fee: parseInt(e.target.value)})} style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} />
           <input type="number" placeholder="Máximo de Motoqueiros" value={formData.max_riders} onChange={(e) => setFormData({...formData, max_riders: parseInt(e.target.value)})} style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} />
+          <button type="submit" disabled={loading} style={{ backgroundColor: '#4f46e5', color: 'white', padding: '0.75rem', borderRadius: '0.5rem', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}>{loading ? 'Cadastrando...' : 'Cadastrar'}</button>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+// Modal de Adicionar Operador
+function AddOperadorModal({ onClose, onSuccess, adminId }: any) {
+  const [formData, setFormData] = useState({ name: '', email: '', phone: '', password: 'operador123' })
+  const [loading, setLoading] = useState(false)
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault(); setLoading(true)
+    const { error } = await supabase.from('operadores').insert({ 
+      ...formData, 
+      is_active: true,
+      created_by: adminId,
+      created_at: new Date().toISOString() 
+    })
+    if (!error) onSuccess(); else alert('Erro: ' + error.message)
+    setLoading(false)
+  }
+
+  return (
+    <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 }}>
+      <div style={{ backgroundColor: 'white', borderRadius: '1rem', maxWidth: '28rem', width: '90%' }}>
+        <div style={{ background: 'linear-gradient(135deg, #4f46e5, #4338ca)', padding: '1rem', borderRadius: '1rem 1rem 0 0', display: 'flex', justifyContent: 'space-between', color: 'white' }}>
+          <h3 style={{ fontWeight: 'bold' }}>Novo Operador</h3>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer' }}>✕</button>
+        </div>
+        <form onSubmit={handleSubmit} style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          <input type="text" required placeholder="Nome completo" value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} />
+          <input type="email" placeholder="Email (opcional)" value={formData.email} onChange={(e) => setFormData({...formData, email: e.target.value})} style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} />
+          <input type="tel" required placeholder="Telefone (usado para login)" value={formData.phone} onChange={(e) => setFormData({...formData, phone: e.target.value})} style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} />
+          <input type="text" placeholder="Senha" value={formData.password} onChange={(e) => setFormData({...formData, password: e.target.value})} style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem', backgroundColor: '#f9fafb' }} />
           <button type="submit" disabled={loading} style={{ backgroundColor: '#4f46e5', color: 'white', padding: '0.75rem', borderRadius: '0.5rem', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}>{loading ? 'Cadastrando...' : 'Cadastrar'}</button>
         </form>
       </div>

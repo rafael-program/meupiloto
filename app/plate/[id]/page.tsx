@@ -54,6 +54,10 @@ export default function PlateRiders() {
     
     if (!selectedRider) return
 
+    // Calcular data de expiração (10 minutos a partir de agora)
+    const expiresAt = new Date()
+    expiresAt.setMinutes(expiresAt.getMinutes() + 10) // Alterado para 10 minutos
+
     const { error } = await supabase
       .from('orders')
       .insert({
@@ -65,17 +69,20 @@ export default function PlateRiders() {
         dropoff_address: formData.dropoffAddress,
         price: formData.price,
         status: 'pending',
+        expires_at: expiresAt.toISOString(),
+        notification_sent: false,
         client_name: formData.customerName,
         client_phone: formData.customerPhone,
         pickup_location: formData.pickupAddress,
-        destination: formData.dropoffAddress
+        destination: formData.dropoffAddress,
+        created_at: new Date().toISOString()
       })
 
     if (error) {
       console.error('Erro detalhado:', error)
       alert('Erro ao criar pedido: ' + error.message)
     } else {
-      alert(`✅ Pedido enviado para ${selectedRider.name}! Ele irá te ligar em breve.`)
+      alert(`✅ Pedido enviado para ${selectedRider.name}! Ele tem 10 minutos para aceitar.`) // Mensagem atualizada
       setShowForm(false)
       setFormData({
         customerName: '',
