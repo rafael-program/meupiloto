@@ -1,4 +1,3 @@
-// app/dashboard/admin/page.tsx
 'use client'
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase/client'
@@ -8,7 +7,7 @@ import {
   Plus, Edit, Trash2, Search, AlertCircle, Menu, X, 
   UserCog, Store, ClipboardList, RefreshCw, Phone,
   DollarSign, Calendar, CheckCircle, XCircle, Building2,
-  UserPlus, UserCheck, UserX
+  UserPlus, UserCheck, UserX, Link2, Link2Off
 } from 'lucide-react'
 
 // ============================================
@@ -47,6 +46,8 @@ type Plate = {
   total_weekly_fee: number
   created_at: string
   boss?: Boss
+  operador_id?: string
+  assigned_at?: string
 }
 
 type Rider = {
@@ -96,6 +97,7 @@ export default function AdminDashboard() {
   const router = useRouter()
   const [admin, setAdmin] = useState<any>(null)
   const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [isMobile, setIsMobile] = useState(false)
   const [associations, setAssociations] = useState<Association[]>([])
   const [bosses, setBosses] = useState<Boss[]>([])
   const [plates, setPlates] = useState<Plate[]>([])
@@ -109,6 +111,12 @@ export default function AdminDashboard() {
   const [showAddBoss, setShowAddBoss] = useState(false)
   const [showAddPlate, setShowAddPlate] = useState(false)
   const [showAddOperador, setShowAddOperador] = useState(false)
+  const [showAssignPlates, setShowAssignPlates] = useState(false)
+  const [selectedOperador, setSelectedOperador] = useState<string>('')
+  const [selectedPlates, setSelectedPlates] = useState<Set<string>>(new Set())
+  const [assignSearchTerm, setAssignSearchTerm] = useState('')
+  const [assignLoading, setAssignLoading] = useState(false)
+  const [assignMessage, setAssignMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [stats, setStats] = useState({
     totalAssociations: 0,
     totalBosses: 0,
@@ -119,8 +127,18 @@ export default function AdminDashboard() {
     onlineRiders: 0,
     activePlates: 0,
     totalOperadores: 0,
-    activeOperadores: 0
+    activeOperadores: 0,
+    assignedPlates: 0
   })
+
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768)
+    }
+    checkMobile()
+    window.addEventListener('resize', checkMobile)
+    return () => window.removeEventListener('resize', checkMobile)
+  }, [])
 
   useEffect(() => {
     const adminId = localStorage.getItem('admin_id')
@@ -140,7 +158,6 @@ export default function AdminDashboard() {
   const loadAllData = async () => {
     setLoading(true)
 
-    // Carregar associações
     const { data: associationsData } = await supabase.from('associations').select('*').order('created_at', { ascending: false })
     setAssociations(associationsData || [])
 
@@ -168,7 +185,6 @@ export default function AdminDashboard() {
     
     setOrders(ordersData || [])
 
-    // Carregar operadores
     const { data: operadoresData } = await supabase.from('operadores').select('*').order('created_at', { ascending: false })
     setOperadores(operadoresData || [])
 
@@ -177,6 +193,7 @@ export default function AdminDashboard() {
     const onlineRiders = ridersData?.filter(r => r.is_online === true) || []
     const activePlates = platesData?.filter(p => p.is_active === true) || []
     const activeOperadores = operadoresData?.filter(o => o.is_active === true) || []
+    const assignedPlates = platesData?.filter(p => p.operador_id) || []
 
     setStats({
       totalAssociations: associationsData?.length || 0,
@@ -188,10 +205,73 @@ export default function AdminDashboard() {
       onlineRiders: onlineRiders.length,
       activePlates: activePlates.length,
       totalOperadores: operadoresData?.length || 0,
-      activeOperadores: activeOperadores.length
+      activeOperadores: activeOperadores.length,
+      assignedPlates: assignedPlates.length
     })
 
     setLoading(false)
+  }
+
+  const handleAssignPlates = async () => {
+    if (!selectedOperador || selectedPlates.size === 0) return
+    
+    setAssignLoading(true)
+    setAssignMessage(null)
+    
+    const results = []
+    
+    for (const plateId of selectedPlates) {
+      const { error } = await supabase
+        .from('plates')
+        .update({ 
+          operador_id: selectedOperador,
+          assigned_at: new Date().toISOString()
+        })
+        .eq('id', plateId)
+      
+      results.push(!error)
+    }
+    
+    const successCount = results.filter(r => r).length
+    
+    if (successCount > 0) {
+      setAssignMessage({ 
+        type: 'success', 
+        text: `${successCount} placa(s) atribuída(s) com sucesso!` 
+      })
+      setSelectedPlates(new Set())
+      loadAllData()
+      setTimeout(() => setAssignMessage(null), 3000)
+    } else {
+      setAssignMessage({ type: 'error', text: 'Erro ao atribuir placas' })
+    }
+    
+    setAssignLoading(false)
+  }
+
+  const handleUnassignPlate = async (plateId: string, plateNumber: string) => {
+    if (!confirm(`Remover atribuição da placa ${plateNumber}?`)) return
+    
+    const { error } = await supabase
+      .from('plates')
+      .update({ operador_id: null, assigned_at: null })
+      .eq('id', plateId)
+    
+    if (!error) {
+      loadAllData()
+      setAssignMessage({ type: 'success', text: `Placa ${plateNumber} removida com sucesso!` })
+      setTimeout(() => setAssignMessage(null), 3000)
+    }
+  }
+
+  const togglePlateSelection = (plateId: string) => {
+    const newSet = new Set(selectedPlates)
+    if (newSet.has(plateId)) {
+      newSet.delete(plateId)
+    } else {
+      newSet.add(plateId)
+    }
+    setSelectedPlates(newSet)
   }
 
   const handleLogout = () => {
@@ -249,7 +329,7 @@ export default function AdminDashboard() {
 
   const filteredOrders = orders.filter(o => 
     o.customer_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    o.customer_phone?.includes(searchTerm) ||
+    o.customer_phone.includes(searchTerm) ||
     o.rider?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     o.rider?.phone?.includes(searchTerm)
   )
@@ -258,6 +338,14 @@ export default function AdminDashboard() {
     op.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     op.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
     op.phone.includes(searchTerm)
+  )
+
+  const selectedOperadorInfo = operadores.find(o => o.id === selectedOperador)
+  const operadorPlates = plates.filter(p => p.operador_id === selectedOperador)
+  const availablePlates = plates.filter(p => !p.operador_id && p.is_active)
+  
+  const filteredAssignPlates = (selectedOperador ? operadorPlates : availablePlates).filter(p =>
+    p.plate_number.toLowerCase().includes(assignSearchTerm.toLowerCase())
   )
 
   if (loading) {
@@ -277,12 +365,23 @@ export default function AdminDashboard() {
       position: 'fixed', top: 0, left: 0, bottom: 0, 
       background: 'linear-gradient(135deg, #1f2937, #111827)', 
       transition: 'all 0.3s', zIndex: 20,
-      width: sidebarOpen ? '16rem' : '5rem',
-      overflow: 'hidden'
+      width: sidebarOpen ? (isMobile ? '100%' : '16rem') : (isMobile ? '0' : '5rem'),
+      overflow: 'hidden',
+      transform: isMobile && !sidebarOpen ? 'translateX(-100%)' : 'translateX(0)',
+    },
+    sidebarOverlay: {
+      position: 'fixed' as const,
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      backgroundColor: 'rgba(0,0,0,0.5)',
+      zIndex: 19,
+      display: isMobile && sidebarOpen ? 'block' : 'none'
     },
     mainContent: { 
       transition: 'all 0.3s', 
-      marginLeft: sidebarOpen ? '16rem' : '5rem'
+      marginLeft: sidebarOpen && !isMobile ? '16rem' : (!sidebarOpen && !isMobile ? '5rem' : 0)
     },
     card: { 
       backgroundColor: 'white', 
@@ -304,6 +403,9 @@ export default function AdminDashboard() {
 
   return (
     <div style={styles.container}>
+      {/* Overlay para mobile */}
+      <div style={styles.sidebarOverlay} onClick={() => setSidebarOpen(false)} />
+      
       {/* Sidebar */}
       <div style={styles.sidebar}>
         <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -322,6 +424,7 @@ export default function AdminDashboard() {
               { id: 'dashboard', label: 'Dashboard', icon: TrendingUp },
               { id: 'associations', label: 'Associações', icon: Building2 },
               { id: 'operadores', label: 'Operadores', icon: Users },
+              { id: 'assign', label: 'Atribuir Placas', icon: Link2 },
               { id: 'orders', label: 'Pedidos', icon: ClipboardList },
               { id: 'plates', label: 'Placas', icon: Store },
               { id: 'bosses', label: 'Chefes', icon: UserCog },
@@ -329,7 +432,10 @@ export default function AdminDashboard() {
             ].map((item) => (
               <button
                 key={item.id}
-                onClick={() => setActiveTab(item.id)}
+                onClick={() => {
+                  setActiveTab(item.id)
+                  if (isMobile) setSidebarOpen(false)
+                }}
                 style={{
                   width: '100%', display: 'flex', alignItems: 'center', gap: '0.75rem',
                   padding: '0.75rem 1rem', background: activeTab === item.id ? '#4f46e5' : 'transparent',
@@ -365,19 +471,25 @@ export default function AdminDashboard() {
         {/* Header */}
         <div style={{ backgroundColor: 'white', boxShadow: '0 1px 2px 0 rgba(0,0,0,0.05)', position: 'sticky', top: 0, zIndex: 10 }}>
           <div style={{ padding: '1rem 1.5rem' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                {isMobile && (
+                  <button onClick={() => setSidebarOpen(true)} style={{ padding: '0.5rem', background: 'none', border: 'none', cursor: 'pointer' }}>
+                    <Menu size={24} color="#374151" />
+                  </button>
+                )}
                 <h1 style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#111827' }}>
                   {activeTab === 'dashboard' && 'Dashboard'}
                   {activeTab === 'associations' && 'Associações'}
                   {activeTab === 'operadores' && 'Operadores'}
+                  {activeTab === 'assign' && 'Atribuir Placas a Operadores'}
                   {activeTab === 'orders' && 'Pedidos'}
                   {activeTab === 'plates' && 'Placas'}
                   {activeTab === 'bosses' && 'Chefes'}
                   {activeTab === 'riders' && 'Motoqueiros'}
                 </h1>
               </div>
-              <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+              <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
                 <button onClick={loadAllData} style={{ padding: '0.5rem', color: '#6b7280', background: 'none', border: 'none', cursor: 'pointer' }}>
                   <RefreshCw size={20} />
                 </button>
@@ -388,7 +500,7 @@ export default function AdminDashboard() {
                     placeholder="Buscar..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    style={{ padding: '0.5rem 0.5rem 0.5rem 2rem', border: '1px solid #e5e7eb', borderRadius: '0.5rem', width: '16rem' }}
+                    style={{ padding: '0.5rem 0.5rem 0.5rem 2rem', border: '1px solid #e5e7eb', borderRadius: '0.5rem', width: isMobile ? '100%' : '16rem' }}
                   />
                 </div>
                 {(activeTab === 'associations' || activeTab === 'bosses' || activeTab === 'plates' || activeTab === 'operadores') && (
@@ -412,10 +524,10 @@ export default function AdminDashboard() {
         {/* Dashboard */}
         {activeTab === 'dashboard' && (
           <div style={{ padding: '1.5rem' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
               <div style={styles.card}><p style={{ fontSize: '0.75rem', color: '#6b7280' }}>Associações</p><p style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>{stats.totalAssociations}</p></div>
               <div style={styles.card}><p style={{ fontSize: '0.75rem', color: '#6b7280' }}>Operadores</p><p style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>{stats.totalOperadores}</p><p style={{ fontSize: '0.75rem', color: '#059669' }}>{stats.activeOperadores} ativos</p></div>
-              <div style={styles.card}><p style={{ fontSize: '0.75rem', color: '#6b7280' }}>Placas</p><p style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>{stats.totalPlates}</p><p style={{ fontSize: '0.75rem', color: '#059669' }}>{stats.activePlates} ativas</p></div>
+              <div style={styles.card}><p style={{ fontSize: '0.75rem', color: '#6b7280' }}>Placas</p><p style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>{stats.totalPlates}</p><p style={{ fontSize: '0.75rem', color: '#059669' }}>{stats.activePlates} ativas</p><p style={{ fontSize: '0.75rem', color: '#4f46e5' }}>{stats.assignedPlates} atribuídas</p></div>
               <div style={styles.card}><p style={{ fontSize: '0.75rem', color: '#6b7280' }}>Chefes</p><p style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>{stats.totalBosses}</p></div>
               <div style={styles.card}><p style={{ fontSize: '0.75rem', color: '#6b7280' }}>Motoqueiros</p><p style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>{stats.totalRiders}</p><p style={{ fontSize: '0.75rem', color: '#059669' }}>{stats.onlineRiders} online</p></div>
               <div style={styles.card}><p style={{ fontSize: '0.75rem', color: '#6b7280' }}>Pedidos</p><p style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>{stats.totalOrders}</p></div>
@@ -429,21 +541,43 @@ export default function AdminDashboard() {
 
         {/* Associações */}
         {activeTab === 'associations' && (
-          <div style={{ padding: '1.5rem' }}>
+          <div style={{ padding: '1.5rem', overflowX: 'auto' }}>
             <div style={{ backgroundColor: 'white', borderRadius: '0.75rem', overflow: 'auto' }}>
               <table style={styles.table}>
-                <thead><tr><th style={styles.th}>Nome</th><th style={styles.th}>Email</th><th style={styles.th}>Telefone</th><th style={styles.th}>Status</th><th style={styles.th}>Ações</th></tr></thead>
+                <thead>
+                  <tr>
+                    <th style={styles.th}>Nome</th>
+                    <th style={styles.th}>Email</th>
+                    <th style={styles.th}>Telefone</th>
+                    <th style={styles.th}>Status</th>
+                    <th style={styles.th}>Ações</th>
+                  </tr>
+                </thead>
                 <tbody>
                   {filteredAssociations.map((assoc) => (
                     <tr key={assoc.id}>
                       <td style={styles.td}>{assoc.name}</td>
                       <td style={styles.td}>{assoc.email}</td>
                       <td style={styles.td}>{assoc.phone}</td>
-                      <td style={styles.td}><span style={assoc.is_active ? styles.badgeActive : styles.badgeInactive}>{assoc.is_active ? 'Ativo' : 'Inativo'}</span></td>
-                      <td style={styles.td}><button onClick={() => deleteItem('associations', assoc.id, assoc.name)} style={styles.buttonDanger}><Trash2 size={16} /></button></td>
+                      <td style={styles.td}>
+                        <span style={assoc.is_active ? styles.badgeActive : styles.badgeInactive}>
+                          {assoc.is_active ? 'Ativo' : 'Inativo'}
+                        </span>
+                      </td>
+                      <td style={styles.td}>
+                        <button onClick={() => deleteItem('associations', assoc.id, assoc.name)} style={styles.buttonDanger}>
+                          <Trash2 size={16} />
+                        </button>
+                      </td>
                     </tr>
                   ))}
-                  {filteredAssociations.length === 0 && (<tr><td colSpan={5} style={{ padding: '2rem', textAlign: 'center', color: '#6b7280' }}>Nenhuma associação encontrada</td></tr>)}
+                  {filteredAssociations.length === 0 && (
+                    <tr>
+                      <td colSpan={5} style={{ padding: '2rem', textAlign: 'center', color: '#6b7280' }}>
+                        Nenhuma associação encontrada
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
@@ -452,42 +586,420 @@ export default function AdminDashboard() {
 
         {/* Operadores */}
         {activeTab === 'operadores' && (
-          <div style={{ padding: '1.5rem' }}>
+          <div style={{ padding: '1.5rem', overflowX: 'auto' }}>
             <div style={{ backgroundColor: 'white', borderRadius: '0.75rem', overflow: 'auto' }}>
               <table style={styles.table}>
-                <thead><tr><th style={styles.th}>Nome</th><th style={styles.th}>Email</th><th style={styles.th}>Telefone</th><th style={styles.th}>Status</th><th style={styles.th}>Criado em</th><th style={styles.th}>Ações</th></tr></thead>
+                <thead>
+                  <tr>
+                    <th style={styles.th}>Nome</th>
+                    <th style={styles.th}>Email</th>
+                    <th style={styles.th}>Telefone</th>
+                    <th style={styles.th}>Status</th>
+                    <th style={styles.th}>Placas</th>
+                    <th style={styles.th}>Criado em</th>
+                    <th style={styles.th}>Ações</th>
+                  </tr>
+                </thead>
                 <tbody>
-                  {filteredOperadores.map((op) => (
-                    <tr key={op.id}>
-                      <td style={styles.td}>{op.name}</td>
-                      <td style={styles.td}>{op.email || '-'}</td>
-                      <td style={styles.td}>{op.phone}</td>
-                      <td style={styles.td}>
-                        <button onClick={() => toggleOperadorStatus(op.id, op.is_active)} style={op.is_active ? styles.badgeActive : styles.badgeInactive}>
-                          {op.is_active ? 'Ativo' : 'Inativo'}
-                        </button>
-                      </td>
-                      <td style={styles.td}>{new Date(op.created_at).toLocaleDateString('pt-AO')}</td>
-                      <td style={styles.td}>
-                        <button onClick={() => deleteItem('operadores', op.id, op.name)} style={styles.buttonDanger}>
-                          <Trash2 size={16} />
-                        </button>
+                  {filteredOperadores.map((op) => {
+                    const opPlates = plates.filter(p => p.operador_id === op.id)
+                    return (
+                      <tr key={op.id}>
+                        <td style={styles.td}>{op.name}</td>
+                        <td style={styles.td}>{op.email || '-'}</td>
+                        <td style={styles.td}>{op.phone}</td>
+                        <td style={styles.td}>
+                          <button onClick={() => toggleOperadorStatus(op.id, op.is_active)} style={op.is_active ? styles.badgeActive : styles.badgeInactive}>
+                            {op.is_active ? 'Ativo' : 'Inativo'}
+                          </button>
+                        </td>
+                        <td style={styles.td}>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                            {opPlates.length > 0 ? opPlates.map(p => (
+                              <span key={p.id} style={{ backgroundColor: '#fef3c7', color: '#d97706', padding: '2px 6px', borderRadius: '12px', fontSize: '11px' }}>
+                                {p.plate_number}
+                              </span>
+                            )) : <span style={{ color: '#9ca3af', fontSize: '12px' }}>Nenhuma</span>}
+                          </div>
+                        </td>
+                        <td style={styles.td}>{new Date(op.created_at).toLocaleDateString('pt-AO')}</td>
+                        <td style={styles.td}>
+                          <button onClick={() => deleteItem('operadores', op.id, op.name)} style={styles.buttonDanger}>
+                            <Trash2 size={16} />
+                          </button>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                  {filteredOperadores.length === 0 && (
+                    <tr>
+                      <td colSpan={7} style={{ padding: '2rem', textAlign: 'center', color: '#6b7280' }}>
+                        Nenhum operador encontrado
                       </td>
                     </tr>
-                  ))}
-                  {filteredOperadores.length === 0 && (<tr><td colSpan={6} style={{ padding: '2rem', textAlign: 'center', color: '#6b7280' }}>Nenhum operador encontrado</td></tr>)}
+                  )}
                 </tbody>
               </table>
             </div>
           </div>
         )}
 
+       {/* Atribuir Placas */}
+{activeTab === 'assign' && (
+  <div style={{ padding: '1.5rem' }}>
+    <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
+      {assignMessage && (
+        <div style={{
+          padding: '12px 16px',
+          borderRadius: '12px',
+          marginBottom: '20px',
+          backgroundColor: assignMessage.type === 'success' ? '#d1fae5' : '#fee2e2',
+          color: assignMessage.type === 'success' ? '#065f46' : '#dc2626',
+        }}>
+          {assignMessage.text}
+        </div>
+      )}
+      
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '24px' }}>
+        {/* Coluna Esquerda - Selecionar Operador */}
+        <div style={{ backgroundColor: 'white', borderRadius: '16px', padding: '20px', border: '1px solid #e5e7eb' }}>
+          <h3 style={{ fontSize: '18px', fontWeight: 'bold', marginBottom: '16px' }}>1. Selecione o Operador</h3>
+          
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '400px', overflowY: 'auto' }}>
+            {operadores.filter(o => o.is_active).map((op) => {
+              const opPlatesCount = plates.filter(p => p.operador_id === op.id).length
+              return (
+                <button
+                  key={op.id}
+                  onClick={() => {
+                    setSelectedOperador(op.id)
+                    setSelectedPlates(new Set())
+                    setAssignSearchTerm('')
+                  }}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '12px',
+                    padding: '12px 16px',
+                    backgroundColor: selectedOperador === op.id ? '#fef3c7' : 'white',
+                    border: `1px solid ${selectedOperador === op.id ? '#f59e0b' : '#e5e7eb'}`,
+                    borderRadius: '12px',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s',
+                  }}
+                >
+                  <div style={{
+                    width: '40px',
+                    height: '40px',
+                    background: 'linear-gradient(135deg, #f59e0b, #ea580c)',
+                    borderRadius: '10px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}>
+                    <span style={{ color: 'white', fontWeight: 'bold' }}>{op.name.charAt(0)}</span>
+                  </div>
+                  <div style={{ flex: 1, textAlign: 'left' }}>
+                    <p style={{ fontWeight: 'bold' }}>{op.name}</p>
+                    <p style={{ fontSize: '12px', color: '#6b7280' }}>{op.phone}</p>
+                  </div>
+                  <div>
+                    <span style={{
+                      backgroundColor: '#f3f4f6',
+                      padding: '2px 8px',
+                      borderRadius: '20px',
+                      fontSize: '12px',
+                    }}>
+                      {opPlatesCount} placas
+                    </span>
+                  </div>
+                </button>
+              )
+            })}
+            {operadores.filter(o => o.is_active).length === 0 && (
+              <p style={{ textAlign: 'center', color: '#6b7280', padding: '20px' }}>Nenhum operador ativo</p>
+            )}
+          </div>
+        </div>
+        
+        {/* Coluna Direita - Gerenciar Placas */}
+        {selectedOperador && (
+          <div style={{ backgroundColor: 'white', borderRadius: '16px', padding: '20px', border: '1px solid #e5e7eb' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '8px' }}>
+              <h3 style={{ fontSize: '18px', fontWeight: 'bold' }}>
+                Gerenciar Placas - {selectedOperadorInfo?.name}
+              </h3>
+              {selectedPlates.size > 0 && (
+                <button
+                  onClick={handleAssignPlates}
+                  disabled={assignLoading}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    padding: '8px 16px',
+                    backgroundColor: '#f59e0b',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                    fontWeight: 500,
+                  }}
+                >
+                  <UserCheck size={16} />
+                  Atribuir ({selectedPlates.size})
+                </button>
+              )}
+            </div>
+            
+            {/* Abas para alternar visão */}
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', borderBottom: '1px solid #e5e7eb' }}>
+              <button
+                onClick={() => setAssignSearchTerm('todas')}
+                style={{
+                  padding: '8px 16px',
+                  border: 'none',
+                  background: 'none',
+                  cursor: 'pointer',
+                  color: assignSearchTerm === 'todas' ? '#f59e0b' : '#6b7280',
+                  borderBottom: assignSearchTerm === 'todas' ? '2px solid #f59e0b' : 'none',
+                  fontWeight: assignSearchTerm === 'todas' ? 'bold' : 'normal',
+                }}
+              >
+                Todas as Placas
+              </button>
+              <button
+                onClick={() => setAssignSearchTerm('disponiveis')}
+                style={{
+                  padding: '8px 16px',
+                  border: 'none',
+                  background: 'none',
+                  cursor: 'pointer',
+                  color: assignSearchTerm === 'disponiveis' ? '#f59e0b' : '#6b7280',
+                  borderBottom: assignSearchTerm === 'disponiveis' ? '2px solid #f59e0b' : 'none',
+                  fontWeight: assignSearchTerm === 'disponiveis' ? 'bold' : 'normal',
+                }}
+              >
+                Disponíveis ({availablePlates.length})
+              </button>
+              <button
+                onClick={() => setAssignSearchTerm('atribuidas')}
+                style={{
+                  padding: '8px 16px',
+                  border: 'none',
+                  background: 'none',
+                  cursor: 'pointer',
+                  color: assignSearchTerm === 'atribuidas' ? '#f59e0b' : '#6b7280',
+                  borderBottom: assignSearchTerm === 'atribuidas' ? '2px solid #f59e0b' : 'none',
+                  fontWeight: assignSearchTerm === 'atribuidas' ? 'bold' : 'normal',
+                }}
+              >
+                Atribuídas a este Operador ({operadorPlates.length})
+              </button>
+            </div>
+            
+            {/* Busca */}
+            <div style={{ position: 'relative', marginBottom: '16px' }}>
+              <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#9ca3af' }} />
+              <input
+                type="text"
+                placeholder="Buscar placa por número..."
+                value={assignSearchTerm === 'todas' || assignSearchTerm === 'disponiveis' || assignSearchTerm === 'atribuidas' ? '' : assignSearchTerm}
+                onChange={(e) => setAssignSearchTerm(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '10px 12px 10px 36px',
+                  border: '1px solid #e5e7eb',
+                  borderRadius: '10px',
+                  fontSize: '14px',
+                }}
+              />
+            </div>
+            
+            {/* Lista de Placas */}
+            <div style={{ maxHeight: '500px', overflowY: 'auto' }}>
+              {(() => {
+                let platesToShow = [];
+                
+                // Filtrar por tipo de visualização
+                if (assignSearchTerm === 'disponiveis') {
+                  platesToShow = availablePlates;
+                } else if (assignSearchTerm === 'atribuidas') {
+                  platesToShow = operadorPlates;
+                } else {
+                  // 'todas' ou qualquer outro termo de busca
+                  platesToShow = [...availablePlates, ...operadorPlates];
+                  
+                  // Se não for uma das abas especiais, aplicar filtro de busca textual
+                  if (assignSearchTerm && assignSearchTerm !== 'todas') {
+                    platesToShow = platesToShow.filter(p =>
+                      p.plate_number.toLowerCase().includes(assignSearchTerm.toLowerCase())
+                    );
+                  }
+                }
+                
+                if (platesToShow.length === 0) {
+                  return (
+                    <div style={{ textAlign: 'center', padding: '40px', color: '#9ca3af' }}>
+                      <Store size={48} style={{ marginBottom: '12px', opacity: 0.5 }} />
+                      <p>Nenhuma placa encontrada</p>
+                    </div>
+                  );
+                }
+                
+                return platesToShow.map((plate) => (
+                  <div
+                    key={plate.id}
+                    onClick={() => {
+                      // Só permite selecionar placas disponíveis (não atribuídas a ninguém)
+                      if (!plate.operador_id && assignSearchTerm !== 'atribuidas') {
+                        togglePlateSelection(plate.id);
+                      }
+                    }}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '12px 16px',
+                      marginBottom: '8px',
+                      borderRadius: '12px',
+                      border: '1px solid',
+                      borderColor: selectedPlates.has(plate.id) ? '#f59e0b' : '#e5e7eb',
+                      backgroundColor: selectedPlates.has(plate.id) ? '#fef3c7' : 'white',
+                      cursor: (!plate.operador_id && assignSearchTerm !== 'atribuidas') ? 'pointer' : 'default',
+                      transition: 'all 0.2s',
+                      opacity: plate.operador_id && plate.operador_id !== selectedOperador ? 0.5 : 1,
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1 }}>
+                      <Store size={24} color={plate.operador_id ? '#f59e0b' : '#6b7280'} />
+                      <div>
+                        <p style={{ fontWeight: 600, fontSize: '16px' }}>{plate.plate_number}</p>
+                        <p style={{ fontSize: '12px', color: '#6b7280', marginTop: '2px' }}>
+                          Chefe: {plate.boss?.name || 'Não definido'} | 
+                          Taxa: {plate.weekly_fee?.toLocaleString()} Kz
+                        </p>
+                        {plate.operador_id && plate.operador_id !== selectedOperador && (
+                          <p style={{ fontSize: '11px', color: '#ef4444', marginTop: '2px' }}>
+                            ⚠️ Atribuída a outro operador
+                          </p>
+                        )}
+                        {plate.operador_id === selectedOperador && (
+                          <p style={{ fontSize: '11px', color: '#10b981', marginTop: '2px' }}>
+                            ✓ Atribuída a este operador
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    <div>
+                      {plate.operador_id === selectedOperador ? (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleUnassignPlate(plate.id, plate.plate_number);
+                          }}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            padding: '6px 12px',
+                            backgroundColor: '#fee2e2',
+                            color: '#dc2626',
+                            border: 'none',
+                            borderRadius: '8px',
+                            cursor: 'pointer',
+                            fontSize: '12px',
+                            fontWeight: 500,
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.backgroundColor = '#fecaca';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.backgroundColor = '#fee2e2';
+                          }}
+                        >
+                          <Link2Off size={14} />
+                          Remover
+                        </button>
+                      ) : plate.operador_id ? (
+                        <span style={{
+                          fontSize: '12px',
+                          color: '#9ca3af',
+                          backgroundColor: '#f3f4f6',
+                          padding: '6px 12px',
+                          borderRadius: '8px',
+                        }}>
+                          Indisponível
+                        </span>
+                      ) : selectedPlates.has(plate.id) ? (
+                        <div style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          color: '#10b981',
+                          backgroundColor: '#d1fae5',
+                          padding: '6px 12px',
+                          borderRadius: '8px',
+                        }}>
+                          <CheckCircle size={16} />
+                          <span style={{ fontSize: '12px', fontWeight: 500 }}>Selecionada</span>
+                        </div>
+                      ) : (
+                        <div style={{
+                          width: '24px',
+                          height: '24px',
+                          border: '2px solid #d1d5db',
+                          borderRadius: '6px',
+                          backgroundColor: 'white',
+                        }} />
+                      )}
+                    </div>
+                  </div>
+                ));
+              })()}
+            </div>
+            
+            {/* Instruções */}
+            <div style={{
+              marginTop: '20px',
+              padding: '12px',
+              backgroundColor: '#fef3c7',
+              borderRadius: '8px',
+              fontSize: '13px',
+              color: '#92400e',
+            }}>
+              <strong>💡 Como funciona:</strong>
+              <ul style={{ marginTop: '8px', marginLeft: '20px', marginBottom: 0 }}>
+                <li>Selecione as placas disponíveis (sem dono)</li>
+                <li>Clique em "Atribuir" para vincular as placas selecionadas ao operador</li>
+                <li>Na aba "Atribuídas" você pode remover placas do operador</li>
+                <li>Use a busca para encontrar placas específicas</li>
+              </ul>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  </div>
+)}
+
         {/* Pedidos */}
         {activeTab === 'orders' && (
-          <div style={{ padding: '1.5rem' }}>
+          <div style={{ padding: '1.5rem', overflowX: 'auto' }}>
             <div style={{ backgroundColor: 'white', borderRadius: '0.75rem', overflow: 'auto' }}>
               <table style={styles.table}>
-                <thead><tr><th style={styles.th}>Cliente</th><th style={styles.th}>Telefone</th><th style={styles.th}>Motoqueiro</th><th style={styles.th}>Tel. Motoqueiro</th><th style={styles.th}>Valor</th><th style={styles.th}>Status</th><th style={styles.th}>Data</th><th style={styles.th}>Ações</th></tr></thead>
+                <thead>
+                  <tr>
+                    <th style={styles.th}>Cliente</th>
+                    <th style={styles.th}>Telefone</th>
+                    <th style={styles.th}>Motoqueiro</th>
+                    <th style={styles.th}>Tel. Motoqueiro</th>
+                    <th style={styles.th}>Valor</th>
+                    <th style={styles.th}>Status</th>
+                    <th style={styles.th}>Data</th>
+                    <th style={styles.th}>Ações</th>
+                  </tr>
+                </thead>
                 <tbody>
                   {filteredOrders.map((order) => (
                     <tr key={order.id}>
@@ -520,10 +1032,20 @@ export default function AdminDashboard() {
                         </span>
                       </td>
                       <td style={styles.td}>{new Date(order.created_at).toLocaleDateString('pt-AO')}</td>
-                      <td style={styles.td}><button onClick={() => deleteItem('orders', order.id, `pedido de ${order.customer_name}`)} style={styles.buttonDanger}><Trash2 size={16} /></button></td>
+                      <td style={styles.td}>
+                        <button onClick={() => deleteItem('orders', order.id, `pedido de ${order.customer_name}`)} style={styles.buttonDanger}>
+                          <Trash2 size={16} />
+                        </button>
+                      </td>
                     </tr>
                   ))}
-                  {filteredOrders.length === 0 && (<tr><td colSpan={8} style={{ padding: '2rem', textAlign: 'center', color: '#6b7280' }}>Nenhum pedido encontrado</td></tr>)}
+                  {filteredOrders.length === 0 && (
+                    <tr>
+                      <td colSpan={8} style={{ padding: '2rem', textAlign: 'center', color: '#6b7280' }}>
+                        Nenhum pedido encontrado
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
@@ -532,21 +1054,63 @@ export default function AdminDashboard() {
 
         {/* Placas */}
         {activeTab === 'plates' && (
-          <div style={{ padding: '1.5rem' }}>
+          <div style={{ padding: '1.5rem', overflowX: 'auto' }}>
             <div style={{ backgroundColor: 'white', borderRadius: '0.75rem', overflow: 'auto' }}>
               <table style={styles.table}>
-                <thead><tr>{['Placa', 'Chefe', 'Taxa', 'Motoqueiros', 'Status', 'Ações'].map(h => <th key={h} style={styles.th}>{h}</th>)}</tr></thead>
+                <thead>
+                  <tr>
+                    <th style={styles.th}>Placa</th>
+                    <th style={styles.th}>Chefe</th>
+                    <th style={styles.th}>Taxa</th>
+                    <th style={styles.th}>Motoqueiros</th>
+                    <th style={styles.th}>Operador</th>
+                    <th style={styles.th}>Status</th>
+                    <th style={styles.th}>Ações</th>
+                  </tr>
+                </thead>
                 <tbody>
-                  {filteredPlates.map((plate) => (
-                    <tr key={plate.id}>
-                      <td style={styles.td}><div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}><Store size={16} color="#3b82f6" />{plate.plate_number}</div></td>
-                      <td style={styles.td}>{plate.boss?.name || '-'}</td>
-                      <td style={styles.td}>{plate.weekly_fee?.toLocaleString()} Kz</td>
-                      <td style={styles.td}>{riders.filter(r => r.plate_id === plate.id).length} / {plate.max_riders || 20}</td>
-                      <td style={styles.td}><button onClick={() => togglePlateStatus(plate.id, plate.is_active)} style={plate.is_active ? styles.badgeActive : styles.badgeInactive}>{plate.is_active ? 'Ativo' : 'Inativo'}</button></td>
-                      <td style={styles.td}><button onClick={() => deleteItem('plates', plate.id, plate.plate_number)} style={styles.buttonDanger}><Trash2 size={16} /></button></td>
+                  {filteredPlates.map((plate) => {
+                    const assignedOperador = operadores.find(o => o.id === plate.operador_id)
+                    return (
+                      <tr key={plate.id}>
+                        <td style={styles.td}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <Store size={16} color="#3b82f6" />
+                            {plate.plate_number}
+                          </div>
+                        </td>
+                        <td style={styles.td}>{plate.boss?.name || '-'}</td>
+                        <td style={styles.td}>{plate.weekly_fee?.toLocaleString()} Kz</td>
+                        <td style={styles.td}>{riders.filter(r => r.plate_id === plate.id).length} / {plate.max_riders || 20}</td>
+                        <td style={styles.td}>
+                          {assignedOperador ? (
+                            <span style={{ backgroundColor: '#fef3c7', color: '#d97706', padding: '2px 8px', borderRadius: '20px', fontSize: '12px' }}>
+                              {assignedOperador.name}
+                            </span>
+                          ) : (
+                            <span style={{ color: '#9ca3af', fontSize: '12px' }}>Não atribuído</span>
+                          )}
+                        </td>
+                        <td style={styles.td}>
+                          <button onClick={() => togglePlateStatus(plate.id, plate.is_active)} style={plate.is_active ? styles.badgeActive : styles.badgeInactive}>
+                            {plate.is_active ? 'Ativo' : 'Inativo'}
+                          </button>
+                        </td>
+                        <td style={styles.td}>
+                          <button onClick={() => deleteItem('plates', plate.id, plate.plate_number)} style={styles.buttonDanger}>
+                            <Trash2 size={16} />
+                          </button>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                  {filteredPlates.length === 0 && (
+                    <tr>
+                      <td colSpan={7} style={{ padding: '2rem', textAlign: 'center', color: '#6b7280' }}>
+                        Nenhuma placa encontrada
+                      </td>
                     </tr>
-                  ))}
+                  )}
                 </tbody>
               </table>
             </div>
@@ -555,10 +1119,18 @@ export default function AdminDashboard() {
 
         {/* Chefes */}
         {activeTab === 'bosses' && (
-          <div style={{ padding: '1.5rem' }}>
+          <div style={{ padding: '1.5rem', overflowX: 'auto' }}>
             <div style={{ backgroundColor: 'white', borderRadius: '0.75rem', overflow: 'auto' }}>
               <table style={styles.table}>
-                <thead><tr>{['Nome', 'Email', 'Telefone', 'Placa', 'Ações'].map(h => <th key={h} style={styles.th}>{h}</th>)}</tr></thead>
+                <thead>
+                  <tr>
+                    <th style={styles.th}>Nome</th>
+                    <th style={styles.th}>Email</th>
+                    <th style={styles.th}>Telefone</th>
+                    <th style={styles.th}>Placa</th>
+                    <th style={styles.th}>Ações</th>
+                  </tr>
+                </thead>
                 <tbody>
                   {filteredBosses.map((boss) => (
                     <tr key={boss.id}>
@@ -566,9 +1138,20 @@ export default function AdminDashboard() {
                       <td style={styles.td}>{boss.email}</td>
                       <td style={styles.td}>{boss.phone}</td>
                       <td style={styles.td}>{plates.find(p => p.boss_id === boss.id)?.plate_number || '-'}</td>
-                      <td style={styles.td}><button onClick={() => deleteItem('bosses', boss.id, boss.name)} style={styles.buttonDanger}><Trash2 size={16} /></button></td>
+                      <td style={styles.td}>
+                        <button onClick={() => deleteItem('bosses', boss.id, boss.name)} style={styles.buttonDanger}>
+                          <Trash2 size={16} />
+                        </button>
+                      </td>
                     </tr>
                   ))}
+                  {filteredBosses.length === 0 && (
+                    <tr>
+                      <td colSpan={5} style={{ padding: '2rem', textAlign: 'center', color: '#6b7280' }}>
+                        Nenhum chefe encontrado
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
@@ -577,10 +1160,19 @@ export default function AdminDashboard() {
 
         {/* Motoqueiros */}
         {activeTab === 'riders' && (
-          <div style={{ padding: '1.5rem' }}>
+          <div style={{ padding: '1.5rem', overflowX: 'auto' }}>
             <div style={{ backgroundColor: 'white', borderRadius: '0.75rem', overflow: 'auto' }}>
               <table style={styles.table}>
-                <thead><tr>{['Nome', 'Telefone', 'BI', 'Placa', 'Status', 'Ações'].map(h => <th key={h} style={styles.th}>{h}</th>)}</tr></thead>
+                <thead>
+                  <tr>
+                    <th style={styles.th}>Nome</th>
+                    <th style={styles.th}>Telefone</th>
+                    <th style={styles.th}>BI</th>
+                    <th style={styles.th}>Placa</th>
+                    <th style={styles.th}>Status</th>
+                    <th style={styles.th}>Ações</th>
+                  </tr>
+                </thead>
                 <tbody>
                   {filteredRiders.map((rider) => (
                     <tr key={rider.id}>
@@ -588,10 +1180,25 @@ export default function AdminDashboard() {
                       <td style={styles.td}>{rider.phone}</td>
                       <td style={styles.td}>{rider.bi}</td>
                       <td style={styles.td}>{rider.plate?.plate_number || '-'}</td>
-                      <td style={styles.td}><span style={rider.status === 'active' ? styles.badgeActive : styles.badgeInactive}>{rider.status === 'active' ? 'Ativo' : 'Inativo'}</span></td>
-                      <td style={styles.td}><button onClick={() => deleteItem('riders', rider.id, rider.name)} style={styles.buttonDanger}><Trash2 size={16} /></button></td>
+                      <td style={styles.td}>
+                        <span style={rider.status === 'active' ? styles.badgeActive : styles.badgeInactive}>
+                          {rider.status === 'active' ? 'Ativo' : 'Inativo'}
+                        </span>
+                      </td>
+                      <td style={styles.td}>
+                        <button onClick={() => deleteItem('riders', rider.id, rider.name)} style={styles.buttonDanger}>
+                          <Trash2 size={16} />
+                        </button>
+                      </td>
                     </tr>
                   ))}
+                  {filteredRiders.length === 0 && (
+                    <tr>
+                      <td colSpan={6} style={{ padding: '2rem', textAlign: 'center', color: '#6b7280' }}>
+                        Nenhum motoqueiro encontrado
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
@@ -604,11 +1211,18 @@ export default function AdminDashboard() {
       {showAddBoss && <AddBossModal onClose={() => setShowAddBoss(false)} onSuccess={() => { setShowAddBoss(false); loadAllData() }} />}
       {showAddPlate && <AddPlateModal bosses={bosses} onClose={() => setShowAddPlate(false)} onSuccess={() => { setShowAddPlate(false); loadAllData() }} />}
       {showAddOperador && <AddOperadorModal onClose={() => setShowAddOperador(false)} onSuccess={() => { setShowAddOperador(false); loadAllData() }} adminId={admin?.id} />}
+      
+      <style jsx>{`
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+      `}</style>
     </div>
   )
 }
 
-// Modal de Adicionar Associação
+// Modais
 function AddAssociationModal({ onClose, onSuccess }: any) {
   const [formData, setFormData] = useState({ name: '', email: '', phone: '', password: 'associacao123', address: '' })
   const [loading, setLoading] = useState(false)
@@ -644,7 +1258,6 @@ function AddAssociationModal({ onClose, onSuccess }: any) {
   )
 }
 
-// Modal de Adicionar Chefe
 function AddBossModal({ onClose, onSuccess }: any) {
   const [formData, setFormData] = useState({ name: '', email: '', phone: '', password: 'senha123' })
   const [loading, setLoading] = useState(false)
@@ -675,7 +1288,6 @@ function AddBossModal({ onClose, onSuccess }: any) {
   )
 }
 
-// Modal de Adicionar Placa
 function AddPlateModal({ bosses, onClose, onSuccess }: any) {
   const [formData, setFormData] = useState({ plate_number: '', boss_id: '', weekly_fee: 75000, max_riders: 20, fee_per_rider: 300 })
   const [loading, setLoading] = useState(false)
@@ -701,7 +1313,7 @@ function AddPlateModal({ bosses, onClose, onSuccess }: any) {
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer' }}>✕</button>
         </div>
         <form onSubmit={handleSubmit} style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          <input type="text" required placeholder="Nome da Placa" value={formData.plate_number} onChange={(e) => setFormData({...formData, plate_number: e.target.value})} style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} />
+          <input type="text" required placeholder="Número da Placa" value={formData.plate_number} onChange={(e) => setFormData({...formData, plate_number: e.target.value})} style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} />
           <select value={formData.boss_id} onChange={(e) => setFormData({...formData, boss_id: e.target.value})} style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }}>
             <option value="">Nenhum chefe</option>
             {bosses.map((boss: any) => <option key={boss.id} value={boss.id}>{boss.name}</option>)}
@@ -715,7 +1327,6 @@ function AddPlateModal({ bosses, onClose, onSuccess }: any) {
   )
 }
 
-// Modal de Adicionar Operador
 function AddOperadorModal({ onClose, onSuccess, adminId }: any) {
   const [formData, setFormData] = useState({ name: '', email: '', phone: '', password: 'operador123' })
   const [loading, setLoading] = useState(false)

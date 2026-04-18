@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
-import { ArrowLeft, Phone, User, XCircle, Navigation, Bike, Shield, Wifi, Clock, CheckCircle, Star, Heart } from 'lucide-react'
+import { ArrowLeft, Phone, User, XCircle, Navigation, Bike, Shield, Wifi, Clock, CheckCircle, Star, Heart, Menu } from 'lucide-react'
 import dynamic from 'next/dynamic'
 import 'leaflet/dist/leaflet.css'
 
@@ -32,6 +32,7 @@ export default function PlateRiders() {
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [selectedRider, setSelectedRider] = useState<any>(null)
+  const [isMobile, setIsMobile] = useState(false)
   const [formData, setFormData] = useState({
     customerName: '',
     customerPhone: '',
@@ -49,6 +50,15 @@ export default function PlateRiders() {
   const [showThankYouModal, setShowThankYouModal] = useState(false)
   const [rating, setRating] = useState(0)
   const [hoverRating, setHoverRating] = useState(0)
+
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768)
+    }
+    checkMobile()
+    window.addEventListener('resize', checkMobile)
+    return () => window.removeEventListener('resize', checkMobile)
+  }, [])
 
   useEffect(() => {
     loadPlateAndRiders()
@@ -376,9 +386,9 @@ export default function PlateRiders() {
   const styles: Record<string, React.CSSProperties> = {
     container: { minHeight: '100vh', background: 'linear-gradient(135deg, #f9fafb 0%, #fff5ed 100%)' },
     header: { backgroundColor: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(8px)', borderBottom: '1px solid #f0f0f0', position: 'sticky' as const, top: 0, zIndex: 10 },
-    card: { backgroundColor: 'white', borderRadius: '20px', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', border: '1px solid #f0f0f0', overflow: 'hidden', transition: 'all 0.3s ease' },
-    buttonPrimary: { background: 'linear-gradient(135deg, #f59e0b, #ea580c)', color: 'white', padding: '12px 24px', borderRadius: '12px', border: 'none', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', transition: 'all 0.3s ease' },
-    buttonDisabled: { background: '#d1d5db', color: '#6b7280', padding: '12px 24px', borderRadius: '12px', border: 'none', fontWeight: 600, cursor: 'not-allowed', display: 'flex', alignItems: 'center', gap: '8px' },
+    card: { backgroundColor: 'white', borderRadius: isMobile ? '16px' : '20px', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', border: '1px solid #f0f0f0', overflow: 'hidden', transition: 'all 0.3s ease', marginBottom: '16px' },
+    buttonPrimary: { background: 'linear-gradient(135deg, #f59e0b, #ea580c)', color: 'white', padding: isMobile ? '10px 16px' : '12px 24px', borderRadius: '12px', border: 'none', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', transition: 'all 0.3s ease', fontSize: isMobile ? '13px' : '14px' },
+    buttonDisabled: { background: '#d1d5db', color: '#6b7280', padding: isMobile ? '10px 16px' : '12px 24px', borderRadius: '12px', border: 'none', fontWeight: 600, cursor: 'not-allowed', display: 'flex', alignItems: 'center', gap: '8px', fontSize: isMobile ? '13px' : '14px' },
     modalOverlay: { position: 'fixed' as const, top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, backdropFilter: 'blur(4px)' },
     modalContent: { backgroundColor: 'white', borderRadius: '24px', maxWidth: '480px', width: '90%', maxHeight: '90vh', overflow: 'auto', boxShadow: '0 20px 40px rgba(0,0,0,0.2)' },
     waitingModalContent: { 
@@ -387,7 +397,7 @@ export default function PlateRiders() {
       maxWidth: '400px', 
       width: '90%', 
       textAlign: 'center' as const, 
-      padding: '32px', 
+      padding: isMobile ? '24px' : '32px', 
       boxShadow: '0 20px 40px rgba(0,0,0,0.2)' 
     },
     thankYouModalContent: {
@@ -396,17 +406,17 @@ export default function PlateRiders() {
       maxWidth: '450px',
       width: '90%',
       textAlign: 'center' as const,
-      padding: '40px',
+      padding: isMobile ? '24px' : '40px',
       boxShadow: '0 20px 40px rgba(0,0,0,0.2)'
     },
-    input: { width: '100%', padding: '12px', border: '1px solid #e5e7eb', borderRadius: '12px', fontSize: '14px', transition: 'all 0.3s ease' },
+    input: { width: '100%', padding: '12px', border: '1px solid #e5e7eb', borderRadius: '12px', fontSize: isMobile ? '16px' : '14px', transition: 'all 0.3s ease', WebkitAppearance: 'none' as const },
     label: { display: 'block', fontSize: '13px', fontWeight: 600, marginBottom: '6px', color: '#374151' }
   }
 
   if (loading) {
     return (
       <div style={styles.container}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', padding: '20px' }}>
           <div style={{ textAlign: 'center' }}>
             <div style={{ animation: 'spin 1s linear infinite', width: '48px', height: '48px', border: '3px solid #f59e0b', borderTopColor: 'transparent', borderRadius: '50%', margin: '0 auto 16px' }}></div>
             <p style={{ color: '#6b7280' }}>Carregando motoqueiros...</p>
@@ -421,24 +431,24 @@ export default function PlateRiders() {
     return (
       <div style={styles.modalOverlay}>
         <div style={styles.thankYouModalContent}>
-          <div style={{ marginBottom: '24px' }}>
-            <div style={{ width: '80px', height: '80px', background: 'linear-gradient(135deg, #10b981, #059669)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
-              <CheckCircle size={48} color="white" />
+          <div style={{ marginBottom: '20px' }}>
+            <div style={{ width: isMobile ? '60px' : '80px', height: isMobile ? '60px' : '80px', background: 'linear-gradient(135deg, #10b981, #059669)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+              <CheckCircle size={isMobile ? 36 : 48} color="white" />
             </div>
-            <h2 style={{ fontSize: '28px', fontWeight: 'bold', marginBottom: '8px', color: '#111827' }}>Obrigado! 🎉</h2>
-            <p style={{ color: '#6b7280', marginBottom: '8px' }}>
+            <h2 style={{ fontSize: isMobile ? '22px' : '28px', fontWeight: 'bold', marginBottom: '8px', color: '#111827' }}>Obrigado! 🎉</h2>
+            <p style={{ color: '#6b7280', marginBottom: '8px', fontSize: isMobile ? '14px' : '16px' }}>
               Sua corrida foi concluída com sucesso!
             </p>
-            <p style={{ color: '#6b7280', fontSize: '14px' }}>
+            <p style={{ color: '#6b7280', fontSize: isMobile ? '12px' : '14px' }}>
               Esperamos que tenha tido uma ótima experiência com {selectedRider?.name}
             </p>
           </div>
 
-          <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: '24px', marginTop: '8px' }}>
+          <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: '20px', marginTop: '8px' }}>
             <p style={{ fontSize: '14px', fontWeight: 500, marginBottom: '12px', color: '#374151' }}>
               Avalie sua experiência:
             </p>
-            <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', marginBottom: '20px' }}>
+            <div style={{ display: 'flex', justifyContent: 'center', gap: isMobile ? '4px' : '8px', marginBottom: '20px', flexWrap: 'wrap' }}>
               {[1, 2, 3, 4, 5].map((star) => (
                 <button
                   key={star}
@@ -454,7 +464,7 @@ export default function PlateRiders() {
                   }}
                 >
                   <Star
-                    size={32}
+                    size={isMobile ? 28 : 32}
                     fill={(hoverRating || rating) >= star ? '#f59e0b' : 'none'}
                     color="#f59e0b"
                     style={{
@@ -479,7 +489,8 @@ export default function PlateRiders() {
                 fontWeight: 'bold',
                 cursor: rating > 0 ? 'pointer' : 'not-allowed',
                 transition: 'all 0.3s ease',
-                marginBottom: '12px'
+                marginBottom: '12px',
+                fontSize: isMobile ? '14px' : '16px'
               }}
             >
               {rating > 0 ? `Avaliar (${rating} estrela${rating > 1 ? 's' : ''})` : 'Selecione uma avaliação'}
@@ -495,7 +506,8 @@ export default function PlateRiders() {
                 borderRadius: '12px',
                 border: '1px solid #e5e7eb',
                 cursor: 'pointer',
-                transition: 'all 0.3s ease'
+                transition: 'all 0.3s ease',
+                fontSize: isMobile ? '14px' : '16px'
               }}
             >
               Ir para página inicial
@@ -512,31 +524,31 @@ export default function PlateRiders() {
     return (
       <div style={styles.container}>
         <div style={styles.header}>
-          <div style={{ maxWidth: '1280px', margin: '0 auto', padding: '16px 24px' }}>
+          <div style={{ maxWidth: '1280px', margin: '0 auto', padding: isMobile ? '12px 16px' : '16px 24px' }}>
             <button onClick={() => {
               setShowMap(false)
               setOrderId(null)
               localStorage.removeItem('active_order_id')
               localStorage.removeItem('active_order_status')
               router.push('/')
-            }} style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#6b7280', background: 'none', border: 'none', cursor: 'pointer', marginBottom: '16px', fontSize: '14px' }}>
+            }} style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#6b7280', background: 'none', border: 'none', cursor: 'pointer', marginBottom: isMobile ? '12px' : '16px', fontSize: isMobile ? '13px' : '14px' }}>
               <ArrowLeft size={18} />
               Voltar ao Início
             </button>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <div style={{ width: '48px', height: '48px', background: 'linear-gradient(135deg, #f59e0b, #ea580c)', borderRadius: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Bike size={24} color="white" />
+            <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? '10px' : '12px', flexWrap: 'wrap' }}>
+              <div style={{ width: isMobile ? '40px' : '48px', height: isMobile ? '40px' : '48px', background: 'linear-gradient(135deg, #f59e0b, #ea580c)', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Bike size={isMobile ? 20 : 24} color="white" />
               </div>
-              <div>
-                <h1 style={{ fontSize: '24px', fontWeight: 'bold', color: '#111827' }}>Motoqueiro a Caminho</h1>
-                <p style={{ fontSize: '14px', color: '#6b7280', marginTop: '4px' }}>{selectedRider?.name} está vindo até você</p>
+              <div style={{ flex: 1 }}>
+                <h1 style={{ fontSize: isMobile ? '20px' : '24px', fontWeight: 'bold', color: '#111827' }}>Motoqueiro a Caminho</h1>
+                <p style={{ fontSize: isMobile ? '12px' : '14px', color: '#6b7280', marginTop: '4px' }}>{selectedRider?.name} está vindo até você</p>
               </div>
             </div>
           </div>
         </div>
-        <div style={{ padding: '24px' }}>
-          <div style={{ backgroundColor: 'white', borderRadius: '20px', overflow: 'hidden', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
-            <div style={{ height: '500px', width: '100%' }}>
+        <div style={{ padding: isMobile ? '12px' : '24px' }}>
+          <div style={{ backgroundColor: 'white', borderRadius: '16px', overflow: 'hidden', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
+            <div style={{ height: isMobile ? '400px' : '500px', width: '100%' }}>
               <MapContainer center={[center.lat, center.lng]} zoom={13} style={{ height: '100%', width: '100%' }}>
                 <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution='&copy; OpenStreetMap contributors' />
                 {customerLocation && (
@@ -552,18 +564,18 @@ export default function PlateRiders() {
               </MapContainer>
             </div>
           </div>
-          <div style={{ marginTop: '24px', backgroundColor: 'white', borderRadius: '20px', padding: '20px', border: '1px solid #f0f0f0' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+          <div style={{ marginTop: '16px', backgroundColor: 'white', borderRadius: '16px', padding: '16px', border: '1px solid #f0f0f0' }}>
+            <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', alignItems: isMobile ? 'stretch' : 'center', gap: '12px' }}>
               <div style={{ flex: 1 }}>
-                <p style={{ fontSize: '13px', color: '#6b7280' }}>Status do Pedido</p>
+                <p style={{ fontSize: '12px', color: '#6b7280' }}>Status do Pedido</p>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
                   <div style={{ width: '10px', height: '10px', backgroundColor: '#10b981', borderRadius: '50%', animation: 'pulse 1.5s infinite' }}></div>
-                  <span style={{ fontWeight: 500, color: '#10b981' }}>Motoqueiro aceitou! Está a caminho</span>
+                  <span style={{ fontWeight: 500, color: '#10b981', fontSize: isMobile ? '13px' : '14px' }}>Motoqueiro aceitou! Está a caminho</span>
                 </div>
               </div>
-              <div>
-                <p style={{ fontSize: '13px', color: '#6b7280' }}>Destino: {formData.dropoffAddress || 'Não informado'}</p>
-                <p style={{ fontSize: '15px', fontWeight: 'bold', color: '#059669' }}>Valor: {formData.price?.toLocaleString()} Kz</p>
+              <div style={{ textAlign: isMobile ? 'left' : 'right' }}>
+                <p style={{ fontSize: '12px', color: '#6b7280' }}>Destino: {formData.dropoffAddress || 'Não informado'}</p>
+                <p style={{ fontSize: isMobile ? '16px' : '18px', fontWeight: 'bold', color: '#059669' }}>{formData.price?.toLocaleString()} Kz</p>
               </div>
             </div>
           </div>
@@ -574,7 +586,7 @@ export default function PlateRiders() {
               localStorage.removeItem('active_order_id')
               localStorage.removeItem('active_order_status')
               router.push('/')
-            }} style={{ background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer', fontSize: '14px' }}>
+            }} style={{ background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer', fontSize: isMobile ? '13px' : '14px', padding: '12px' }}>
               ← Ir para página inicial
             </button>
           </div>
@@ -587,22 +599,22 @@ export default function PlateRiders() {
     return (
       <div style={styles.modalOverlay}>
         <div style={styles.waitingModalContent}>
-          <div style={{ marginBottom: '24px' }}>
-            <div style={{ width: '80px', height: '80px', background: 'linear-gradient(135deg, #f59e0b, #ea580c)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
-              <Clock size={40} color="white" />
+          <div style={{ marginBottom: '20px' }}>
+            <div style={{ width: isMobile ? '60px' : '80px', height: isMobile ? '60px' : '80px', background: 'linear-gradient(135deg, #f59e0b, #ea580c)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+              <Clock size={isMobile ? 32 : 40} color="white" />
             </div>
-            <h2 style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '8px' }}>Aguardando Motoqueiro</h2>
-            <p style={{ color: '#6b7280', marginBottom: '16px' }}>
+            <h2 style={{ fontSize: isMobile ? '20px' : '24px', fontWeight: 'bold', marginBottom: '8px' }}>Aguardando Motoqueiro</h2>
+            <p style={{ color: '#6b7280', marginBottom: '16px', fontSize: isMobile ? '13px' : '14px' }}>
               {selectedRider?.name} foi notificado sobre seu pedido
             </p>
           </div>
 
-          <div style={{ backgroundColor: '#fef3c7', borderRadius: '16px', padding: '16px', marginBottom: '24px' }}>
-            <p style={{ fontSize: '14px', color: '#92400e', marginBottom: '8px' }}>Tempo restante para resposta:</p>
-            <p style={{ fontSize: '36px', fontWeight: 'bold', color: '#d97706', fontFamily: 'monospace', margin: 0 }}>
+          <div style={{ backgroundColor: '#fef3c7', borderRadius: '12px', padding: '16px', marginBottom: '20px' }}>
+            <p style={{ fontSize: '13px', color: '#92400e', marginBottom: '8px' }}>Tempo restante para resposta:</p>
+            <p style={{ fontSize: isMobile ? '32px' : '36px', fontWeight: 'bold', color: '#d97706', fontFamily: 'monospace', margin: 0 }}>
               {formatTime(timeLeft)}
             </p>
-            <p style={{ fontSize: '12px', color: '#92400e', marginTop: '8px', marginBottom: 0 }}>
+            <p style={{ fontSize: '11px', color: '#92400e', marginTop: '8px', marginBottom: 0 }}>
               Se o motoqueiro não responder em 15 minutos, o pedido será cancelado automaticamente
             </p>
           </div>
@@ -614,7 +626,7 @@ export default function PlateRiders() {
               localStorage.removeItem('active_order_id')
               localStorage.removeItem('active_order_status')
             }}
-            style={{ width: '100%', backgroundColor: '#ef4444', color: 'white', padding: '14px', borderRadius: '12px', border: 'none', fontWeight: 'bold', cursor: 'pointer' }}
+            style={{ width: '100%', backgroundColor: '#ef4444', color: 'white', padding: '14px', borderRadius: '12px', border: 'none', fontWeight: 'bold', cursor: 'pointer', fontSize: isMobile ? '14px' : '16px' }}
           >
             Cancelar Pedido
           </button>
@@ -626,71 +638,83 @@ export default function PlateRiders() {
   return (
     <div style={styles.container}>
       <div style={styles.header}>
-        <div style={{ maxWidth: '1280px', margin: '0 auto', padding: '16px 24px' }}>
-          <button onClick={() => router.back()} style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#6b7280', background: 'none', border: 'none', cursor: 'pointer', marginBottom: '16px', fontSize: '14px' }}>
+        <div style={{ maxWidth: '1280px', margin: '0 auto', padding: isMobile ? '12px 16px' : '16px 24px' }}>
+          <button onClick={() => router.back()} style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#6b7280', background: 'none', border: 'none', cursor: 'pointer', marginBottom: isMobile ? '12px' : '16px', fontSize: isMobile ? '13px' : '14px' }}>
             <ArrowLeft size={18} />
             Voltar
           </button>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <div style={{ width: '48px', height: '48px', background: 'linear-gradient(135deg, #f59e0b, #ea580c)', borderRadius: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Bike size={24} color="white" />
+          <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? '10px' : '12px', flexWrap: 'wrap' }}>
+            <div style={{ width: isMobile ? '40px' : '48px', height: isMobile ? '40px' : '48px', background: 'linear-gradient(135deg, #f59e0b, #ea580c)', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Bike size={isMobile ? 20 : 24} color="white" />
             </div>
             <div>
-              <h1 style={{ fontSize: '28px', fontWeight: 'bold' }}>{plate?.plate_number}</h1>
-              <p style={{ fontSize: '14px', color: '#6b7280', marginTop: '4px' }}>{riders.filter(r => r.is_online).length} motoqueiros online • {riders.length} total</p>
+              <h1 style={{ fontSize: isMobile ? '22px' : '28px', fontWeight: 'bold' }}>{plate?.plate_number}</h1>
+              <p style={{ fontSize: isMobile ? '12px' : '14px', color: '#6b7280', marginTop: '4px' }}>{riders.filter(r => r.is_online).length} motoqueiros online • {riders.length} total</p>
             </div>
           </div>
         </div>
       </div>
 
-      <div style={{ maxWidth: '1280px', margin: '0 auto', padding: '24px' }}>
+      <div style={{ maxWidth: '1280px', margin: '0 auto', padding: isMobile ? '12px' : '24px' }}>
         {riders.map((rider) => (
           <div key={rider.id} style={styles.card}>
-            <div style={{ padding: '20px', display: 'flex', alignItems: 'center', gap: '20px', flexWrap: 'wrap' }}>
-              <div style={{ flexShrink: 0 }}>
-                {rider.photo_url ? (
-                  <img src={rider.photo_url} alt={rider.name} style={{ width: '72px', height: '72px', borderRadius: '50%', objectFit: 'cover', border: '3px solid #f59e0b' }} />
-                ) : (
-                  <div style={{ width: '72px', height: '72px', background: 'linear-gradient(135deg, #f59e0b, #ea580c)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <User size={32} color="white" />
-                  </div>
-                )}
-              </div>
-              <div style={{ flex: 1 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', marginBottom: '8px' }}>
-                  <h3 style={{ fontSize: '18px', fontWeight: 'bold', color: '#111827' }}>{rider.name}</h3>
-                  {rider.is_online ? (
-                    <span style={{ display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: '#ecfdf5', color: '#059669', padding: '4px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: 500 }}>
-                      <Wifi size={12} />
-                      Online
-                    </span>
+            <div style={{ padding: isMobile ? '16px' : '20px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? '12px' : '20px', flexWrap: 'wrap' }}>
+                <div style={{ flexShrink: 0 }}>
+                  {rider.photo_url ? (
+                    <img src={rider.photo_url} alt={rider.name} style={{ width: isMobile ? '56px' : '72px', height: isMobile ? '56px' : '72px', borderRadius: '50%', objectFit: 'cover', border: '3px solid #f59e0b' }} />
                   ) : (
-                    <span style={{ display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: '#f3f4f6', color: '#6b7280', padding: '4px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: 500 }}>
-                      <XCircle size={12} />
-                      Offline
-                    </span>
+                    <div style={{ width: isMobile ? '56px' : '72px', height: isMobile ? '56px' : '72px', background: 'linear-gradient(135deg, #f59e0b, #ea580c)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <User size={isMobile ? 24 : 32} color="white" />
+                    </div>
                   )}
                 </div>
-                <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', marginTop: '8px' }}>
-                  <p style={{ fontSize: '13px', color: '#6b7280', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    <Shield size={14} /> BI: {rider.bi}
-                  </p>
-                  <p style={{ fontSize: '13px', color: '#6b7280', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    <Phone size={14} /> {rider.phone}
-                  </p>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '8px' }}>
+                    <h3 style={{ fontSize: isMobile ? '16px' : '18px', fontWeight: 'bold', color: '#111827', wordBreak: 'break-word' }}>{rider.name}</h3>
+                    {rider.is_online ? (
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', backgroundColor: '#ecfdf5', color: '#059669', padding: '4px 8px', borderRadius: '20px', fontSize: '11px', fontWeight: 500, whiteSpace: 'nowrap' }}>
+                        <Wifi size={10} />
+                        Online
+                      </span>
+                    ) : (
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', backgroundColor: '#f3f4f6', color: '#6b7280', padding: '4px 8px', borderRadius: '20px', fontSize: '11px', fontWeight: 500, whiteSpace: 'nowrap' }}>
+                        <XCircle size={10} />
+                        Offline
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: isMobile ? '6px' : '12px', marginTop: '6px' }}>
+                    <p style={{ fontSize: isMobile ? '11px' : '13px', color: '#6b7280', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <Shield size={12} /> BI: {rider.bi}
+                    </p>
+                    <p style={{ fontSize: isMobile ? '11px' : '13px', color: '#6b7280', display: 'flex', alignItems: 'center', gap: '4px', wordBreak: 'break-all' }}>
+                      <Phone size={12} /> {rider.phone}
+                    </p>
+                  </div>
+                </div>
+                <div style={{ width: isMobile ? '100%' : 'auto' }}>
+                  <button 
+                    onClick={() => handleOpenForm(rider)} 
+                    disabled={!rider.is_online} 
+                    style={{ 
+                      ...(rider.is_online ? styles.buttonPrimary : styles.buttonDisabled), 
+                      width: isMobile ? '100%' : 'auto',
+                      justifyContent: 'center'
+                    }}
+                  >
+                    <Navigation size={isMobile ? 14 : 18} />
+                    Pedir Moto
+                  </button>
                 </div>
               </div>
-              <button onClick={() => handleOpenForm(rider)} disabled={!rider.is_online} style={rider.is_online ? styles.buttonPrimary : styles.buttonDisabled}>
-                <Navigation size={18} />
-                Pedir Moto
-              </button>
             </div>
           </div>
         ))}
         {riders.length === 0 && (
-          <div style={{ backgroundColor: 'white', borderRadius: '20px', padding: '48px', textAlign: 'center', border: '1px solid #f0f0f0' }}>
-            <Bike size={64} color="#d1d5db" style={{ margin: '0 auto 16px' }} />
-            <p style={{ color: '#6b7280', fontSize: '16px' }}>Nenhum motoqueiro cadastrado nesta placa</p>
+          <div style={{ backgroundColor: 'white', borderRadius: '16px', padding: '32px 20px', textAlign: 'center', border: '1px solid #f0f0f0' }}>
+            <Bike size={48} color="#d1d5db" style={{ margin: '0 auto 16px' }} />
+            <p style={{ color: '#6b7280', fontSize: isMobile ? '14px' : '16px' }}>Nenhum motoqueiro cadastrado nesta placa</p>
           </div>
         )}
       </div>
@@ -698,21 +722,21 @@ export default function PlateRiders() {
       {showForm && selectedRider && (
         <div style={styles.modalOverlay} onClick={() => setShowForm(false)}>
           <div style={styles.modalContent} onClick={(e) => e.stopPropagation()}>
-            <div style={{ background: 'linear-gradient(135deg, #f59e0b, #ea580c)', padding: '20px', borderRadius: '24px 24px 0 0', color: 'white' }}>
+            <div style={{ background: 'linear-gradient(135deg, #f59e0b, #ea580c)', padding: isMobile ? '16px' : '20px', borderRadius: '24px 24px 0 0', color: 'white' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <h3 style={{ fontSize: '20px', fontWeight: 'bold' }}>Solicitar Corrida</h3>
+                <h3 style={{ fontSize: isMobile ? '18px' : '20px', fontWeight: 'bold' }}>Solicitar Corrida</h3>
                 <button onClick={() => setShowForm(false)} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white', width: '32px', height: '32px', borderRadius: '50%', cursor: 'pointer', fontSize: '18px' }}>✕</button>
               </div>
-              <p style={{ fontSize: '13px', opacity: 0.9, marginTop: '4px' }}>Motoqueiro: {selectedRider.name}</p>
+              <p style={{ fontSize: '12px', opacity: 0.9, marginTop: '4px' }}>Motoqueiro: {selectedRider.name}</p>
             </div>
-            <form onSubmit={handleSubmit} style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <form onSubmit={handleSubmit} style={{ padding: isMobile ? '20px' : '24px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
               <input type="text" required placeholder="Seu nome" value={formData.customerName} onChange={(e) => setFormData({...formData, customerName: e.target.value})} style={styles.input} />
               <input type="tel" required placeholder="Seu telefone" value={formData.customerPhone} onChange={(e) => setFormData({...formData, customerPhone: e.target.value})} style={styles.input} />
               <input type="text" required placeholder="Endereço de origem" value={formData.pickupAddress} onChange={(e) => setFormData({...formData, pickupAddress: e.target.value})} style={styles.input} />
               <input type="text" required placeholder="Endereço de destino" value={formData.dropoffAddress} onChange={(e) => setFormData({...formData, dropoffAddress: e.target.value})} style={styles.input} />
               <input type="number" required placeholder="Valor da corrida (Kz)" value={formData.price} onChange={(e) => setFormData({...formData, price: parseInt(e.target.value)})} style={styles.input} min="100" step="100" />
-              <button type="submit" style={{ ...styles.buttonPrimary, width: '100%', justifyContent: 'center', padding: '14px', fontSize: '16px' }}>
-                <Navigation size={18} />
+              <button type="submit" style={{ ...styles.buttonPrimary, width: '100%', justifyContent: 'center', padding: '14px', fontSize: isMobile ? '15px' : '16px' }}>
+                <Navigation size={isMobile ? 16 : 18} />
                 Confirmar Pedido
               </button>
             </form>
@@ -728,6 +752,11 @@ export default function PlateRiders() {
         @keyframes pulse {
           0%, 100% { opacity: 1; }
           50% { opacity: 0.3; }
+        }
+        @media (max-width: 768px) {
+          input, button {
+            font-size: 16px !important;
+          }
         }
       `}</style>
     </div>
