@@ -273,7 +273,7 @@ function PaymentModal({ plateId, plateName, amount, totalRiders, feePerRider, ma
 
 // Modal de Configuração da Placa
 function PlateConfigModal({ plate, onClose, onSuccess }: any) {
-  const [formData, setFormData] = useState({ max_riders: plate.max_riders || 20, fee_per_rider: plate.fee_per_rider || 300 })
+ const [formData, setFormData] = useState({ max_riders: plate.max_riders || 20, fee_per_rider: plate.fee_per_rider || 500 })
   const [loading, setLoading] = useState(false)
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -317,7 +317,7 @@ export default function BossDashboard() {
     onlineNow: 0,
     weeklyPayment: 0,
     maxRiders: 20,
-    feePerRider: 300,
+    feePerRider: 500,
     availableSlots: 20
   })
 
@@ -359,7 +359,7 @@ export default function BossDashboard() {
       setRiders(ridersData || [])
 
       const maxRidersValue = plateData.max_riders || 20
-      const feePerRiderValue = plateData.fee_per_rider || 300
+      const feePerRiderValue = plateData.fee_per_rider || 500
       const totalFee = (ridersData?.length || 0) * feePerRiderValue
       
       setStats({
