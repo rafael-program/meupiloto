@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
-import { ArrowLeft, Phone, User, XCircle, Navigation, Bike, Shield, Wifi, Clock } from 'lucide-react'
+import { ArrowLeft, Phone, User, XCircle, Navigation, Bike, Shield, Wifi, Clock, CheckCircle, Star, Heart } from 'lucide-react'
 import dynamic from 'next/dynamic'
 import 'leaflet/dist/leaflet.css'
 
@@ -46,6 +46,9 @@ export default function PlateRiders() {
   const [showMap, setShowMap] = useState(false)
   const [customerLocation, setCustomerLocation] = useState<{ lat: number; lng: number } | null>(null)
   const [riderLocation, setRiderLocation] = useState<{ lat: number; lng: number } | null>(null)
+  const [showThankYouModal, setShowThankYouModal] = useState(false)
+  const [rating, setRating] = useState(0)
+  const [hoverRating, setHoverRating] = useState(0)
 
   useEffect(() => {
     loadPlateAndRiders()
@@ -79,6 +82,8 @@ export default function PlateRiders() {
       setOrderStatus('pending')
       setShowWaitingModal(true)
       if (savedRiderName) setSelectedRider({ name: savedRiderName })
+    } else if (savedOrderId && savedOrderStatus === 'completed') {
+      setShowThankYouModal(true)
     }
   }, [])
 
@@ -135,7 +140,6 @@ export default function PlateRiders() {
 
     console.log('📡 Iniciando subscription para pedido:', orderId)
 
-    // Primeiro, buscar o status atual do pedido
     const fetchCurrentOrder = async () => {
       const { data } = await supabase
         .from('orders')
@@ -155,13 +159,16 @@ export default function PlateRiders() {
               setRiderLocation(location)
             } catch (e) {}
           }
+        } else if (data.status === 'completed' && orderStatus !== 'completed') {
+          setOrderStatus('completed')
+          setShowMap(false)
+          setShowThankYouModal(true)
         }
       }
     }
     
     fetchCurrentOrder()
 
-    // Subscription para mudanças em tempo real
     const subscription = supabase
       .channel(`order_updates_${orderId}`)
       .on(
@@ -205,6 +212,10 @@ export default function PlateRiders() {
             setOrderId(null)
             localStorage.removeItem('active_order_id')
             localStorage.removeItem('active_order_status')
+          } else if (newStatus === 'completed') {
+            console.log('🎉 Pedido CONCLUÍDO! Mostrando modal de agradecimento...')
+            setShowMap(false)
+            setShowThankYouModal(true)
           }
         }
       )
@@ -252,6 +263,23 @@ export default function PlateRiders() {
       subscription.unsubscribe()
     }
   }, [orderId, showMap])
+
+  const handleSubmitRating = async () => {
+    if (rating > 0 && orderId) {
+      await supabase
+        .from('orders')
+        .update({ customer_rating: rating })
+        .eq('id', orderId)
+      
+      // Limpar localStorage
+      localStorage.removeItem('active_order_id')
+      localStorage.removeItem('active_order_status')
+      localStorage.removeItem('active_order_rider')
+      
+      setShowThankYouModal(false)
+      router.push('/')
+    }
+  }
 
   const loadPlateAndRiders = async () => {
     const { data: plateData } = await supabase
@@ -362,6 +390,15 @@ export default function PlateRiders() {
       padding: '32px', 
       boxShadow: '0 20px 40px rgba(0,0,0,0.2)' 
     },
+    thankYouModalContent: {
+      backgroundColor: 'white',
+      borderRadius: '24px',
+      maxWidth: '450px',
+      width: '90%',
+      textAlign: 'center' as const,
+      padding: '40px',
+      boxShadow: '0 20px 40px rgba(0,0,0,0.2)'
+    },
     input: { width: '100%', padding: '12px', border: '1px solid #e5e7eb', borderRadius: '12px', fontSize: '14px', transition: 'all 0.3s ease' },
     label: { display: 'block', fontSize: '13px', fontWeight: 600, marginBottom: '6px', color: '#374151' }
   }
@@ -373,6 +410,96 @@ export default function PlateRiders() {
           <div style={{ textAlign: 'center' }}>
             <div style={{ animation: 'spin 1s linear infinite', width: '48px', height: '48px', border: '3px solid #f59e0b', borderTopColor: 'transparent', borderRadius: '50%', margin: '0 auto 16px' }}></div>
             <p style={{ color: '#6b7280' }}>Carregando motoqueiros...</p>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Modal de Agradecimento
+  if (showThankYouModal) {
+    return (
+      <div style={styles.modalOverlay}>
+        <div style={styles.thankYouModalContent}>
+          <div style={{ marginBottom: '24px' }}>
+            <div style={{ width: '80px', height: '80px', background: 'linear-gradient(135deg, #10b981, #059669)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+              <CheckCircle size={48} color="white" />
+            </div>
+            <h2 style={{ fontSize: '28px', fontWeight: 'bold', marginBottom: '8px', color: '#111827' }}>Obrigado! 🎉</h2>
+            <p style={{ color: '#6b7280', marginBottom: '8px' }}>
+              Sua corrida foi concluída com sucesso!
+            </p>
+            <p style={{ color: '#6b7280', fontSize: '14px' }}>
+              Esperamos que tenha tido uma ótima experiência com {selectedRider?.name}
+            </p>
+          </div>
+
+          <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: '24px', marginTop: '8px' }}>
+            <p style={{ fontSize: '14px', fontWeight: 500, marginBottom: '12px', color: '#374151' }}>
+              Avalie sua experiência:
+            </p>
+            <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', marginBottom: '20px' }}>
+              {[1, 2, 3, 4, 5].map((star) => (
+                <button
+                  key={star}
+                  onClick={() => setRating(star)}
+                  onMouseEnter={() => setHoverRating(star)}
+                  onMouseLeave={() => setHoverRating(0)}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    padding: '4px',
+                    transition: 'transform 0.2s'
+                  }}
+                >
+                  <Star
+                    size={32}
+                    fill={(hoverRating || rating) >= star ? '#f59e0b' : 'none'}
+                    color="#f59e0b"
+                    style={{
+                      transform: (hoverRating || rating) >= star ? 'scale(1.1)' : 'scale(1)',
+                      transition: 'transform 0.2s'
+                    }}
+                  />
+                </button>
+              ))}
+            </div>
+
+            <button
+              onClick={handleSubmitRating}
+              disabled={rating === 0}
+              style={{
+                width: '100%',
+                background: rating > 0 ? 'linear-gradient(135deg, #f59e0b, #ea580c)' : '#e5e7eb',
+                color: rating > 0 ? 'white' : '#9ca3af',
+                padding: '14px',
+                borderRadius: '12px',
+                border: 'none',
+                fontWeight: 'bold',
+                cursor: rating > 0 ? 'pointer' : 'not-allowed',
+                transition: 'all 0.3s ease',
+                marginBottom: '12px'
+              }}
+            >
+              {rating > 0 ? `Avaliar (${rating} estrela${rating > 1 ? 's' : ''})` : 'Selecione uma avaliação'}
+            </button>
+
+            <button
+              onClick={() => router.push('/')}
+              style={{
+                width: '100%',
+                background: 'none',
+                color: '#6b7280',
+                padding: '12px',
+                borderRadius: '12px',
+                border: '1px solid #e5e7eb',
+                cursor: 'pointer',
+                transition: 'all 0.3s ease'
+              }}
+            >
+              Ir para página inicial
+            </button>
           </div>
         </div>
       </div>
