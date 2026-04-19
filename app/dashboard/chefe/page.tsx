@@ -1,4 +1,4 @@
-// app/dashboard/chefe/page.tsx - VERSÃO COMPLETA COM MODAIS NA ORDEM CORRETA
+// app/dashboard/chefe/page.tsx - VERSÃO MODERNIZADA E RESPONSIVA
 'use client'
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase/client'
@@ -7,14 +7,14 @@ import {
   Bike, Users, Plus, Edit, Trash2, LogOut, DollarSign,
   CheckCircle, XCircle, Search, UserPlus, CreditCard,
   Smartphone, Building, Copy, Check, TrendingUp, Settings, AlertCircle,
-  X, Camera, Loader2
+  X, Camera, Loader2, Menu, Wifi, WifiOff, Star, Phone, MapPin
 } from 'lucide-react'
 
 // ============================================
 // MODAIS (DEFINIDOS ANTES DO COMPONENTE PRINCIPAL)
 // ============================================
 
-// Modal de Adicionar Motoqueiro
+// Modal de Adicionar Motoqueiro - Versão Responsiva
 function AddRiderModal({ plateId, onClose, onSuccess }: any) {
   const [formData, setFormData] = useState({
     name: '',
@@ -25,6 +25,11 @@ function AddRiderModal({ plateId, onClose, onSuccess }: any) {
   const [photoUrl, setPhotoUrl] = useState<string>('')
   const [loading, setLoading] = useState(false)
   const [uploadingPhoto, setUploadingPhoto] = useState(false)
+  const [isMobile, setIsMobile] = useState(false)
+
+  useEffect(() => {
+    setIsMobile(window.innerWidth < 768)
+  }, [])
 
   const handlePhotoUpload = async (file: File) => {
     setUploadingPhoto(true)
@@ -96,33 +101,33 @@ function AddRiderModal({ plateId, onClose, onSuccess }: any) {
   return (
     <div style={{
       position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-      backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center',
-      justifyContent: 'center', zIndex: 50, overflow: 'auto'
+      backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center',
+      justifyContent: 'center', zIndex: 50, overflow: 'auto', backdropFilter: 'blur(4px)'
     }}>
-      <div style={{ backgroundColor: 'white', borderRadius: '1rem', maxWidth: '28rem', width: '90%', maxHeight: '90vh', overflow: 'auto' }}>
-        <div style={{ background: 'linear-gradient(135deg, #f59e0b, #ef4444)', padding: '1rem', borderRadius: '1rem 1rem 0 0', display: 'flex', justifyContent: 'space-between', color: 'white' }}>
-          <h3 style={{ fontWeight: 'bold' }}>Novo Motoqueiro</h3>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer', fontSize: '1.25rem' }}>✕</button>
+      <div style={{ backgroundColor: 'white', borderRadius: '24px', maxWidth: '500px', width: '90%', maxHeight: '90vh', overflow: 'auto' }}>
+        <div style={{ background: 'linear-gradient(135deg, #f59e0b, #ea580c)', padding: isMobile ? '16px' : '20px', borderRadius: '24px 24px 0 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: 'white', position: 'sticky', top: 0 }}>
+          <h3 style={{ fontWeight: 'bold', fontSize: isMobile ? '18px' : '20px' }}>Novo Motoqueiro</h3>
+          <button onClick={onClose} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white', cursor: 'pointer', width: '32px', height: '32px', borderRadius: '50%', fontSize: '18px' }}>✕</button>
         </div>
-        <form onSubmit={handleSubmit} style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+        <form onSubmit={handleSubmit} style={{ padding: isMobile ? '20px' : '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
             <div style={{ position: 'relative' }}>
               {photoUrl ? (
                 <div style={{ position: 'relative' }}>
-                  <img src={photoUrl} alt="Preview" style={{ width: '6rem', height: '6rem', borderRadius: '9999px', objectFit: 'cover', border: '4px solid #fcd34d' }} />
-                  <button type="button" onClick={() => setPhotoUrl('')} style={{ position: 'absolute', top: '-0.5rem', right: '-0.5rem', backgroundColor: '#ef4444', color: 'white', borderRadius: '9999px', padding: '0.25rem', border: 'none', cursor: 'pointer' }}>
-                    <X size={16} />
+                  <img src={photoUrl} alt="Preview" style={{ width: '96px', height: '96px', borderRadius: '50%', objectFit: 'cover', border: '4px solid #fcd34d' }} />
+                  <button type="button" onClick={() => setPhotoUrl('')} style={{ position: 'absolute', top: '-4px', right: '-4px', backgroundColor: '#ef4444', color: 'white', borderRadius: '50%', padding: '4px', border: 'none', cursor: 'pointer' }}>
+                    <X size={14} />
                   </button>
                 </div>
               ) : (
                 <label style={{ cursor: 'pointer' }}>
-                  <div style={{ width: '6rem', height: '6rem', backgroundColor: '#f3f4f6', borderRadius: '9999px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', border: '2px dashed #d1d5db' }}>
+                  <div style={{ width: '96px', height: '96px', backgroundColor: '#f3f4f6', borderRadius: '50%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', border: '2px dashed #d1d5db' }}>
                     {uploadingPhoto ? (
                       <Loader2 size={32} style={{ color: '#f59e0b', animation: 'spin 1s linear infinite' }} />
                     ) : (
                       <>
                         <Camera size={32} style={{ color: '#9ca3af' }} />
-                        <span style={{ fontSize: '0.75rem', color: '#6b7280', marginTop: '0.25rem' }}>Foto</span>
+                        <span style={{ fontSize: '10px', color: '#6b7280', marginTop: '4px' }}>Foto</span>
                       </>
                     )}
                   </div>
@@ -130,28 +135,37 @@ function AddRiderModal({ plateId, onClose, onSuccess }: any) {
                 </label>
               )}
             </div>
-            <p style={{ fontSize: '0.75rem', color: '#9ca3af', marginTop: '0.5rem' }}>Clique para adicionar foto (max 2MB)</p>
+            <p style={{ fontSize: '11px', color: '#9ca3af', marginTop: '8px' }}>Clique para adicionar foto (max 2MB)</p>
           </div>
 
-          <input type="text" required placeholder="Nome completo" value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} style={{ width: '100%', padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} />
-          <input type="tel" required placeholder="Telefone" value={formData.phone} onChange={(e) => setFormData({...formData, phone: e.target.value})} style={{ width: '100%', padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} />
-          <input type="text" required placeholder="BI" value={formData.bi} onChange={(e) => setFormData({...formData, bi: e.target.value})} style={{ width: '100%', padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} />
-          <input type="text" placeholder="Senha" value={formData.password} onChange={(e) => setFormData({...formData, password: e.target.value})} style={{ width: '100%', padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem', backgroundColor: '#f9fafb' }} />
-          <button type="submit" disabled={loading || uploadingPhoto} style={{ width: '100%', backgroundColor: '#f59e0b', color: 'white', padding: '0.75rem', borderRadius: '0.5rem', border: 'none', cursor: 'pointer', fontWeight: 'bold', opacity: (loading || uploadingPhoto) ? 0.5 : 1 }}>
-            {loading ? 'Cadastrando...' : 'Cadastrar Motoqueiro'}
-          </button>
+          <input type="text" required placeholder="Nome completo" value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} style={{ width: '100%', padding: '12px', border: '1px solid #e5e7eb', borderRadius: '12px', fontSize: isMobile ? '16px' : '14px' }} />
+          <input type="tel" required placeholder="Telefone" value={formData.phone} onChange={(e) => setFormData({...formData, phone: e.target.value})} style={{ width: '100%', padding: '12px', border: '1px solid #e5e7eb', borderRadius: '12px', fontSize: isMobile ? '16px' : '14px' }} />
+          <input type="text" required placeholder="BI" value={formData.bi} onChange={(e) => setFormData({...formData, bi: e.target.value})} style={{ width: '100%', padding: '12px', border: '1px solid #e5e7eb', borderRadius: '12px', fontSize: isMobile ? '16px' : '14px' }} />
+          <input type="text" placeholder="Senha" value={formData.password} onChange={(e) => setFormData({...formData, password: e.target.value})} style={{ width: '100%', padding: '12px', border: '1px solid #e5e7eb', borderRadius: '12px', fontSize: isMobile ? '16px' : '14px', backgroundColor: '#f9fafb' }} />
+          
+          <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
+            <button type="button" onClick={onClose} style={{ flex: 1, padding: '12px', border: '1px solid #e5e7eb', borderRadius: '12px', cursor: 'pointer', background: 'white', fontWeight: 500 }}>Cancelar</button>
+            <button type="submit" disabled={loading || uploadingPhoto} style={{ flex: 1, padding: '12px', background: 'linear-gradient(135deg, #f59e0b, #ea580c)', color: 'white', border: 'none', borderRadius: '12px', cursor: 'pointer', fontWeight: 'bold', opacity: (loading || uploadingPhoto) ? 0.5 : 1 }}>
+              {loading ? 'Cadastrando...' : 'Cadastrar'}
+            </button>
+          </div>
         </form>
       </div>
     </div>
   )
 }
 
-// Modal de Editar Motoqueiro
+// Modal de Editar Motoqueiro - Versão Responsiva
 function EditRiderModal({ rider, onClose, onSuccess }: any) {
   const [formData, setFormData] = useState({ name: rider.name, phone: rider.phone, bi: rider.bi, password: '' })
   const [photoUrl, setPhotoUrl] = useState<string>(rider.photo_url || '')
   const [loading, setLoading] = useState(false)
   const [uploadingPhoto, setUploadingPhoto] = useState(false)
+  const [isMobile, setIsMobile] = useState(false)
+
+  useEffect(() => {
+    setIsMobile(window.innerWidth < 768)
+  }, [])
 
   const handlePhotoUpload = async (file: File) => {
     setUploadingPhoto(true)
@@ -179,49 +193,58 @@ function EditRiderModal({ rider, onClose, onSuccess }: any) {
   }
 
   return (
-    <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 }}>
-      <div style={{ backgroundColor: 'white', borderRadius: '1rem', maxWidth: '28rem', width: '90%', maxHeight: '90vh', overflow: 'auto' }}>
-        <div style={{ background: 'linear-gradient(135deg, #3b82f6, #2563eb)', padding: '1rem', borderRadius: '1rem 1rem 0 0', display: 'flex', justifyContent: 'space-between', color: 'white' }}>
-          <h3 style={{ fontWeight: 'bold' }}>Editar Motoqueiro</h3>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer', fontSize: '1.25rem' }}>✕</button>
+    <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50, backdropFilter: 'blur(4px)' }}>
+      <div style={{ backgroundColor: 'white', borderRadius: '24px', maxWidth: '500px', width: '90%', maxHeight: '90vh', overflow: 'auto' }}>
+        <div style={{ background: 'linear-gradient(135deg, #3b82f6, #1d4ed8)', padding: isMobile ? '16px' : '20px', borderRadius: '24px 24px 0 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: 'white' }}>
+          <h3 style={{ fontWeight: 'bold', fontSize: isMobile ? '18px' : '20px' }}>Editar Motoqueiro</h3>
+          <button onClick={onClose} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white', cursor: 'pointer', width: '32px', height: '32px', borderRadius: '50%', fontSize: '18px' }}>✕</button>
         </div>
-        <form onSubmit={handleSubmit} style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+        <form onSubmit={handleSubmit} style={{ padding: isMobile ? '20px' : '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
             <div style={{ position: 'relative' }}>
               {photoUrl ? (
                 <div style={{ position: 'relative' }}>
-                  <img src={photoUrl} alt="Preview" style={{ width: '6rem', height: '6rem', borderRadius: '9999px', objectFit: 'cover', border: '4px solid #93c5fd' }} />
-                  <button type="button" onClick={() => setPhotoUrl('')} style={{ position: 'absolute', top: '-0.5rem', right: '-0.5rem', backgroundColor: '#ef4444', color: 'white', borderRadius: '9999px', padding: '0.25rem', border: 'none', cursor: 'pointer' }}><X size={16} /></button>
+                  <img src={photoUrl} alt="Preview" style={{ width: '96px', height: '96px', borderRadius: '50%', objectFit: 'cover', border: '4px solid #93c5fd' }} />
+                  <button type="button" onClick={() => setPhotoUrl('')} style={{ position: 'absolute', top: '-4px', right: '-4px', backgroundColor: '#ef4444', color: 'white', borderRadius: '50%', padding: '4px', border: 'none', cursor: 'pointer' }}><X size={14} /></button>
                 </div>
               ) : (
                 <label style={{ cursor: 'pointer' }}>
-                  <div style={{ width: '6rem', height: '6rem', backgroundColor: '#f3f4f6', borderRadius: '9999px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', border: '2px dashed #d1d5db' }}>
-                    {uploadingPhoto ? <Loader2 size={32} style={{ color: '#3b82f6', animation: 'spin 1s linear infinite' }} /> : <><Camera size={32} style={{ color: '#9ca3af' }} /><span style={{ fontSize: '0.75rem', color: '#6b7280', marginTop: '0.25rem' }}>Foto</span></>}
+                  <div style={{ width: '96px', height: '96px', backgroundColor: '#f3f4f6', borderRadius: '50%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', border: '2px dashed #d1d5db' }}>
+                    {uploadingPhoto ? <Loader2 size={32} style={{ color: '#3b82f6', animation: 'spin 1s linear infinite' }} /> : <><Camera size={32} style={{ color: '#9ca3af' }} /><span style={{ fontSize: '10px', color: '#6b7280', marginTop: '4px' }}>Foto</span></>}
                   </div>
                   <input type="file" accept="image/*" onChange={(e) => { const file = e.target.files?.[0]; if (file) handlePhotoUpload(file) }} style={{ display: 'none' }} disabled={uploadingPhoto} />
                 </label>
               )}
             </div>
-            <p style={{ fontSize: '0.75rem', color: '#9ca3af', marginTop: '0.5rem' }}>Clique na foto para trocar (max 2MB)</p>
+            <p style={{ fontSize: '11px', color: '#9ca3af', marginTop: '8px' }}>Clique na foto para trocar (max 2MB)</p>
           </div>
-          <input type="text" required placeholder="Nome" value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} style={{ width: '100%', padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} />
-          <input type="tel" required placeholder="Telefone" value={formData.phone} onChange={(e) => setFormData({...formData, phone: e.target.value})} style={{ width: '100%', padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} />
-          <input type="text" required placeholder="BI" value={formData.bi} onChange={(e) => setFormData({...formData, bi: e.target.value})} style={{ width: '100%', padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} />
-          <input type="text" placeholder="Nova Senha (opcional)" value={formData.password} onChange={(e) => setFormData({...formData, password: e.target.value})} style={{ width: '100%', padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} />
-          <button type="submit" disabled={loading || uploadingPhoto} style={{ width: '100%', backgroundColor: '#3b82f6', color: 'white', padding: '0.75rem', borderRadius: '0.5rem', border: 'none', cursor: 'pointer', fontWeight: 'bold', opacity: (loading || uploadingPhoto) ? 0.5 : 1 }}>{loading ? 'Salvando...' : 'Salvar Alterações'}</button>
+          <input type="text" required placeholder="Nome" value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} style={{ width: '100%', padding: '12px', border: '1px solid #e5e7eb', borderRadius: '12px', fontSize: isMobile ? '16px' : '14px' }} />
+          <input type="tel" required placeholder="Telefone" value={formData.phone} onChange={(e) => setFormData({...formData, phone: e.target.value})} style={{ width: '100%', padding: '12px', border: '1px solid #e5e7eb', borderRadius: '12px', fontSize: isMobile ? '16px' : '14px' }} />
+          <input type="text" required placeholder="BI" value={formData.bi} onChange={(e) => setFormData({...formData, bi: e.target.value})} style={{ width: '100%', padding: '12px', border: '1px solid #e5e7eb', borderRadius: '12px', fontSize: isMobile ? '16px' : '14px' }} />
+          <input type="text" placeholder="Nova Senha (opcional)" value={formData.password} onChange={(e) => setFormData({...formData, password: e.target.value})} style={{ width: '100%', padding: '12px', border: '1px solid #e5e7eb', borderRadius: '12px', fontSize: isMobile ? '16px' : '14px' }} />
+          
+          <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
+            <button type="button" onClick={onClose} style={{ flex: 1, padding: '12px', border: '1px solid #e5e7eb', borderRadius: '12px', cursor: 'pointer', background: 'white', fontWeight: 500 }}>Cancelar</button>
+            <button type="submit" disabled={loading || uploadingPhoto} style={{ flex: 1, padding: '12px', background: 'linear-gradient(135deg, #3b82f6, #1d4ed8)', color: 'white', border: 'none', borderRadius: '12px', cursor: 'pointer', fontWeight: 'bold', opacity: (loading || uploadingPhoto) ? 0.5 : 1 }}>{loading ? 'Salvando...' : 'Salvar'}</button>
+          </div>
         </form>
       </div>
     </div>
   )
 }
 
-// Modal de Pagamento
+// Modal de Pagamento - Versão Responsiva
 function PaymentModal({ plateId, plateName, amount, totalRiders, feePerRider, maxRiders, onClose, onSuccess }: any) {
   const [loading, setLoading] = useState(false)
   const [copied, setCopied] = useState(false)
   const [paymentMethod, setPaymentMethod] = useState('unitel')
   const [showReceipt, setShowReceipt] = useState(false)
   const [paymentData, setPaymentData] = useState<any>(null)
+  const [isMobile, setIsMobile] = useState(false)
+
+  useEffect(() => {
+    setIsMobile(window.innerWidth < 768)
+  }, [])
 
   const paymentInfo = { unitelMoney: { number: '926572603', name: 'Rafael Domingos Nzambi' }, iban: { bank: 'Banco Atlantico', account: 'AO06 0055 0000 2883 6759 1015 5', swift: 'Shoow', beneficiary: 'Rafael Domingos Nzambi' } }
 
@@ -240,14 +263,27 @@ function PaymentModal({ plateId, plateName, amount, totalRiders, feePerRider, ma
 
   if (showReceipt && paymentData) {
     return (
-      <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 }}>
-        <div style={{ backgroundColor: 'white', borderRadius: '1rem', maxWidth: '28rem', width: '90%' }}>
-          <div style={{ background: 'linear-gradient(135deg, #10b981, #059669)', padding: '1rem', borderRadius: '1rem 1rem 0 0', display: 'flex', justifyContent: 'space-between', color: 'white' }}><h3 style={{ fontWeight: 'bold' }}>✅ Comprovante</h3><button onClick={onClose} style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer', fontSize: '1.25rem' }}>✕</button></div>
-          <div style={{ padding: '1.25rem' }}>
-            <div style={{ textAlign: 'center' }}><div style={{ width: '4rem', height: '4rem', backgroundColor: '#d1fae5', borderRadius: '9999px', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1rem' }}><CheckCircle size={32} color="#059669" /></div><h2 style={{ fontSize: '1.25rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>Pagamento Confirmado!</h2></div>
-            <div style={{ backgroundColor: '#f9fafb', borderRadius: '0.5rem', padding: '1rem', margin: '1rem 0' }}><div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}><span>Placa:</span><span style={{ fontWeight: 'bold' }}>{paymentData.plateName}</span></div><div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}><span>Motoqueiros:</span><span>{paymentData.totalRiders}</span></div><div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}><span>Taxa/Motoqueiro:</span><span>{paymentData.feePerRider.toLocaleString()} Kz</span></div><div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #e5e7eb', paddingTop: '0.5rem', marginTop: '0.5rem' }}><span>Total:</span><span style={{ fontWeight: 'bold', color: '#059669' }}>{paymentData.amount.toLocaleString()} Kz</span></div></div>
-            <button onClick={sendToWhatsApp} style={{ width: '100%', backgroundColor: '#10b981', color: 'white', padding: '0.75rem', borderRadius: '0.5rem', border: 'none', cursor: 'pointer', fontWeight: 'bold', marginBottom: '0.5rem' }}>📱 Enviar via WhatsApp</button>
-            <button onClick={onSuccess} style={{ width: '100%', backgroundColor: '#f3f4f6', color: '#374151', padding: '0.75rem', borderRadius: '0.5rem', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}>Fechar</button>
+      <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50, backdropFilter: 'blur(4px)' }}>
+        <div style={{ backgroundColor: 'white', borderRadius: '24px', maxWidth: '450px', width: '90%' }}>
+          <div style={{ background: 'linear-gradient(135deg, #10b981, #059669)', padding: isMobile ? '16px' : '20px', borderRadius: '24px 24px 0 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: 'white' }}>
+            <h3 style={{ fontWeight: 'bold', fontSize: isMobile ? '18px' : '20px' }}>✅ Comprovante</h3>
+            <button onClick={onClose} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white', cursor: 'pointer', width: '32px', height: '32px', borderRadius: '50%', fontSize: '18px' }}>✕</button>
+          </div>
+          <div style={{ padding: isMobile ? '20px' : '24px' }}>
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ width: '64px', height: '64px', backgroundColor: '#d1fae5', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+                <CheckCircle size={32} color="#059669" />
+              </div>
+              <h2 style={{ fontSize: '20px', fontWeight: 'bold', marginBottom: '8px' }}>Pagamento Confirmado!</h2>
+            </div>
+            <div style={{ backgroundColor: '#f9fafb', borderRadius: '12px', padding: '16px', margin: '16px 0' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}><span style={{ fontSize: '13px' }}>Placa:</span><span style={{ fontWeight: 'bold' }}>{paymentData.plateName}</span></div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}><span style={{ fontSize: '13px' }}>Motoqueiros:</span><span>{paymentData.totalRiders}</span></div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}><span style={{ fontSize: '13px' }}>Taxa/Motoqueiro:</span><span>{paymentData.feePerRider.toLocaleString()} Kz</span></div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #e5e7eb', paddingTop: '12px', marginTop: '8px' }}><span style={{ fontWeight: 'bold' }}>Total:</span><span style={{ fontWeight: 'bold', color: '#059669' }}>{paymentData.amount.toLocaleString()} Kz</span></div>
+            </div>
+            <button onClick={sendToWhatsApp} style={{ width: '100%', backgroundColor: '#10b981', color: 'white', padding: '14px', borderRadius: '12px', border: 'none', cursor: 'pointer', fontWeight: 'bold', marginBottom: '8px' }}>📱 Enviar via WhatsApp</button>
+            <button onClick={onSuccess} style={{ width: '100%', backgroundColor: '#f3f4f6', color: '#374151', padding: '14px', borderRadius: '12px', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}>Fechar</button>
           </div>
         </div>
       </div>
@@ -255,40 +291,114 @@ function PaymentModal({ plateId, plateName, amount, totalRiders, feePerRider, ma
   }
 
   return (
-    <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50, overflow: 'auto' }}>
-      <div style={{ backgroundColor: 'white', borderRadius: '1rem', maxWidth: '32rem', width: '90%', maxHeight: '90vh', overflow: 'auto' }}>
-        <div style={{ background: 'linear-gradient(135deg, #10b981, #059669)', padding: '1rem', borderRadius: '1rem 1rem 0 0', display: 'flex', justifyContent: 'space-between', color: 'white', position: 'sticky', top: 0 }}><h3 style={{ fontWeight: 'bold' }}>Pagar Taxa Semanal</h3><button onClick={onClose} style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer', fontSize: '1.25rem' }}>✕</button></div>
-        <form onSubmit={handleSubmit} style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-          <div style={{ backgroundColor: '#f9fafb', borderRadius: '0.5rem', padding: '1rem', textAlign: 'center' }}><p style={{ fontSize: '0.875rem', color: '#6b7280' }}>Total a Pagar</p><p style={{ fontSize: '1.875rem', fontWeight: 'bold', color: '#059669' }}>{amount.toLocaleString()} Kz</p></div>
-          <div style={{ backgroundColor: '#fffbeb', borderRadius: '0.5rem', padding: '0.75rem' }}><p style={{ fontSize: '0.875rem', fontWeight: '500', marginBottom: '0.5rem' }}>📊 Detalhamento:</p><div style={{ fontSize: '0.875rem' }}><div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Motoqueiros:</span><span>{totalRiders} / {maxRiders}</span></div><div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.25rem' }}><span>Taxa por motoqueiro:</span><span>{feePerRider} Kz</span></div><div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #fde68a', paddingTop: '0.5rem', marginTop: '0.5rem', fontWeight: 'bold' }}><span>Total:</span><span>{amount.toLocaleString()} Kz</span></div></div></div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}><button type="button" onClick={() => setPaymentMethod('unitel')} style={{ padding: '0.75rem', borderRadius: '0.5rem', border: `2px solid ${paymentMethod === 'unitel' ? '#10b981' : '#e5e7eb'}`, backgroundColor: paymentMethod === 'unitel' ? '#f0fdf4' : 'white', cursor: 'pointer' }}><Smartphone size={20} style={{ margin: '0 auto 0.25rem', color: '#059669' }} /><span style={{ fontSize: '0.75rem' }}>Unitel Money</span></button><button type="button" onClick={() => setPaymentMethod('iban')} style={{ padding: '0.75rem', borderRadius: '0.5rem', border: `2px solid ${paymentMethod === 'iban' ? '#3b82f6' : '#e5e7eb'}`, backgroundColor: paymentMethod === 'iban' ? '#eff6ff' : 'white', cursor: 'pointer' }}><Building size={20} style={{ margin: '0 auto 0.25rem', color: '#2563eb' }} /><span style={{ fontSize: '0.75rem' }}>IBAN</span></button></div>
-          {paymentMethod === 'unitel' && (<div style={{ border: '1px solid #e5e7eb', borderRadius: '0.5rem', padding: '1rem' }}><div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><span>Número:</span><div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}><span style={{ fontFamily: 'monospace' }}>{paymentInfo.unitelMoney.number}</span><button type="button" onClick={() => copyToClipboard(paymentInfo.unitelMoney.number)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>{copied ? <Check size={16} color="#059669" /> : <Copy size={16} />}</button></div></div><div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.5rem' }}><span>Nome:</span><span>{paymentInfo.unitelMoney.name}</span></div></div>)}
-          {paymentMethod === 'iban' && (<div style={{ border: '1px solid #e5e7eb', borderRadius: '0.5rem', padding: '1rem' }}><div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Banco:</span><span>{paymentInfo.iban.bank}</span></div><div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.5rem' }}><span>IBAN:</span><div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}><span style={{ fontFamily: 'monospace', fontSize: '0.75rem' }}>{paymentInfo.iban.account}</span><button type="button" onClick={() => copyToClipboard(paymentInfo.iban.account)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><Copy size={16} /></button></div></div><div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.5rem' }}><span>Beneficiário:</span><span>{paymentInfo.iban.beneficiary}</span></div></div>)}
-          <button type="submit" disabled={loading} style={{ backgroundColor: '#10b981', color: 'white', padding: '0.75rem', borderRadius: '0.5rem', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}>{loading ? 'Processando...' : 'Confirmar Pagamento'}</button>
+    <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50, overflow: 'auto', backdropFilter: 'blur(4px)' }}>
+      <div style={{ backgroundColor: 'white', borderRadius: '24px', maxWidth: '500px', width: '90%', maxHeight: '90vh', overflow: 'auto' }}>
+        <div style={{ background: 'linear-gradient(135deg, #10b981, #059669)', padding: isMobile ? '16px' : '20px', borderRadius: '24px 24px 0 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: 'white', position: 'sticky', top: 0 }}>
+          <h3 style={{ fontWeight: 'bold', fontSize: isMobile ? '18px' : '20px' }}>Pagar Taxa Semanal</h3>
+          <button onClick={onClose} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white', cursor: 'pointer', width: '32px', height: '32px', borderRadius: '50%', fontSize: '18px' }}>✕</button>
+        </div>
+        <form onSubmit={handleSubmit} style={{ padding: isMobile ? '20px' : '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <div style={{ backgroundColor: '#f0fdf4', borderRadius: '16px', padding: '16px', textAlign: 'center' }}>
+            <p style={{ fontSize: '13px', color: '#6b7280' }}>Total a Pagar</p>
+            <p style={{ fontSize: '28px', fontWeight: 'bold', color: '#059669' }}>{amount.toLocaleString()} Kz</p>
+          </div>
+          
+          <div style={{ backgroundColor: '#fffbeb', borderRadius: '12px', padding: '12px' }}>
+            <p style={{ fontSize: '13px', fontWeight: 500, marginBottom: '8px' }}>📊 Detalhamento:</p>
+            <div style={{ fontSize: '13px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>Motoqueiros:</span><span>{totalRiders} / {maxRiders}</span></div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '6px' }}><span>Taxa por motoqueiro:</span><span>{feePerRider} Kz</span></div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #fde68a', paddingTop: '8px', marginTop: '8px', fontWeight: 'bold' }}><span>Total:</span><span>{amount.toLocaleString()} Kz</span></div>
+            </div>
+          </div>
+          
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+            <button type="button" onClick={() => setPaymentMethod('unitel')} style={{ padding: '12px', borderRadius: '12px', border: `2px solid ${paymentMethod === 'unitel' ? '#10b981' : '#e5e7eb'}`, backgroundColor: paymentMethod === 'unitel' ? '#f0fdf4' : 'white', cursor: 'pointer' }}>
+              <Smartphone size={20} style={{ margin: '0 auto 4px', color: '#059669' }} />
+              <span style={{ fontSize: '12px' }}>Unitel Money</span>
+            </button>
+            <button type="button" onClick={() => setPaymentMethod('iban')} style={{ padding: '12px', borderRadius: '12px', border: `2px solid ${paymentMethod === 'iban' ? '#3b82f6' : '#e5e7eb'}`, backgroundColor: paymentMethod === 'iban' ? '#eff6ff' : 'white', cursor: 'pointer' }}>
+              <Building size={20} style={{ margin: '0 auto 4px', color: '#2563eb' }} />
+              <span style={{ fontSize: '12px' }}>IBAN</span>
+            </button>
+          </div>
+          
+          {paymentMethod === 'unitel' && (
+            <div style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                <span style={{ fontSize: '13px' }}>Número:</span>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                  <span style={{ fontFamily: 'monospace', fontSize: '14px' }}>{paymentInfo.unitelMoney.number}</span>
+                  <button type="button" onClick={() => copyToClipboard(paymentInfo.unitelMoney.number)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>{copied ? <Check size={16} color="#059669" /> : <Copy size={16} />}</button>
+                </div>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ fontSize: '13px' }}>Nome:</span><span style={{ fontSize: '13px' }}>{paymentInfo.unitelMoney.name}</span></div>
+            </div>
+          )}
+          
+          {paymentMethod === 'iban' && (
+            <div style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}><span style={{ fontSize: '13px' }}>Banco:</span><span style={{ fontSize: '13px' }}>{paymentInfo.iban.bank}</span></div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                <span style={{ fontSize: '13px' }}>IBAN:</span>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                  <span style={{ fontFamily: 'monospace', fontSize: '11px' }}>{paymentInfo.iban.account.substring(0, 20)}...</span>
+                  <button type="button" onClick={() => copyToClipboard(paymentInfo.iban.account)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><Copy size={16} /></button>
+                </div>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ fontSize: '13px' }}>Beneficiário:</span><span style={{ fontSize: '13px' }}>{paymentInfo.iban.beneficiary}</span></div>
+            </div>
+          )}
+          
+          <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
+            <button type="button" onClick={onClose} style={{ flex: 1, padding: '12px', border: '1px solid #e5e7eb', borderRadius: '12px', cursor: 'pointer', background: 'white', fontWeight: 500 }}>Cancelar</button>
+            <button type="submit" disabled={loading} style={{ flex: 1, padding: '12px', background: 'linear-gradient(135deg, #10b981, #059669)', color: 'white', border: 'none', borderRadius: '12px', cursor: 'pointer', fontWeight: 'bold' }}>{loading ? 'Processando...' : 'Confirmar'}</button>
+          </div>
         </form>
       </div>
     </div>
   )
 }
 
-// Modal de Configuração da Placa
+// Modal de Configuração da Placa - Versão Responsiva
 function PlateConfigModal({ plate, onClose, onSuccess }: any) {
- const [formData, setFormData] = useState({ max_riders: plate.max_riders || 20, fee_per_rider: plate.fee_per_rider || 500 })
+  const [formData, setFormData] = useState({ max_riders: plate.max_riders || 20, fee_per_rider: plate.fee_per_rider || 500 })
   const [loading, setLoading] = useState(false)
+  const [isMobile, setIsMobile] = useState(false)
+
+  useEffect(() => {
+    setIsMobile(window.innerWidth < 768)
+  }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault(); setLoading(true); await onSuccess(formData.max_riders, formData.fee_per_rider); setLoading(false)
   }
 
   return (
-    <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 }}>
-      <div style={{ backgroundColor: 'white', borderRadius: '1rem', maxWidth: '28rem', width: '90%' }}>
-        <div style={{ background: 'linear-gradient(135deg, #f59e0b, #ef4444)', padding: '1rem', borderRadius: '1rem 1rem 0 0', display: 'flex', justifyContent: 'space-between', color: 'white' }}><h3 style={{ fontWeight: 'bold' }}>Configurar Placa</h3><button onClick={onClose} style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer', fontSize: '1.25rem' }}>✕</button></div>
-        <form onSubmit={handleSubmit} style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          <div><label style={{ display: 'block', fontSize: '0.875rem', fontWeight: '500', marginBottom: '0.25rem' }}>Número máximo de motoqueiros</label><input type="number" required value={formData.max_riders} onChange={(e) => setFormData({...formData, max_riders: parseInt(e.target.value)})} style={{ width: '100%', padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} /></div>
-          <div><label style={{ display: 'block', fontSize: '0.875rem', fontWeight: '500', marginBottom: '0.25rem' }}>Taxa por motoqueiro (Kz)</label><input type="number" required value={formData.fee_per_rider} onChange={(e) => setFormData({...formData, fee_per_rider: parseInt(e.target.value)})} style={{ width: '100%', padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} /></div>
-          <div style={{ backgroundColor: '#fffbeb', borderRadius: '0.5rem', padding: '0.75rem' }}><p style={{ fontSize: '0.875rem', fontWeight: '500', marginBottom: '0.5rem' }}>💰 Resumo:</p><p style={{ fontSize: '0.875rem' }}>{formData.max_riders} motoqueiros × {formData.fee_per_rider} Kz = <strong>{(formData.max_riders * formData.fee_per_rider).toLocaleString()} Kz/semana</strong></p></div>
-          <button type="submit" disabled={loading} style={{ backgroundColor: '#f59e0b', color: 'white', padding: '0.75rem', borderRadius: '0.5rem', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}>{loading ? 'Salvando...' : 'Salvar Configuração'}</button>
+    <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50, backdropFilter: 'blur(4px)' }}>
+      <div style={{ backgroundColor: 'white', borderRadius: '24px', maxWidth: '450px', width: '90%' }}>
+        <div style={{ background: 'linear-gradient(135deg, #f59e0b, #ea580c)', padding: isMobile ? '16px' : '20px', borderRadius: '24px 24px 0 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: 'white' }}>
+          <h3 style={{ fontWeight: 'bold', fontSize: isMobile ? '18px' : '20px' }}>Configurar Placa</h3>
+          <button onClick={onClose} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white', cursor: 'pointer', width: '32px', height: '32px', borderRadius: '50%', fontSize: '18px' }}>✕</button>
+        </div>
+        <form onSubmit={handleSubmit} style={{ padding: isMobile ? '20px' : '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <div>
+            <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, marginBottom: '6px' }}>Número máximo de motoqueiros</label>
+            <input type="number" required value={formData.max_riders} onChange={(e) => setFormData({...formData, max_riders: parseInt(e.target.value)})} style={{ width: '100%', padding: '12px', border: '1px solid #e5e7eb', borderRadius: '12px', fontSize: isMobile ? '16px' : '14px' }} />
+          </div>
+          <div>
+            <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, marginBottom: '6px' }}>Taxa por motoqueiro (Kz)</label>
+            <input type="number" required value={formData.fee_per_rider} onChange={(e) => setFormData({...formData, fee_per_rider: parseInt(e.target.value)})} style={{ width: '100%', padding: '12px', border: '1px solid #e5e7eb', borderRadius: '12px', fontSize: isMobile ? '16px' : '14px' }} />
+          </div>
+          <div style={{ backgroundColor: '#fffbeb', borderRadius: '12px', padding: '12px' }}>
+            <p style={{ fontSize: '13px', fontWeight: 500, marginBottom: '8px' }}>💰 Resumo:</p>
+            <p style={{ fontSize: '13px' }}>{formData.max_riders} motoqueiros × {formData.fee_per_rider} Kz = <strong>{(formData.max_riders * formData.fee_per_rider).toLocaleString()} Kz/semana</strong></p>
+          </div>
+          
+          <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
+            <button type="button" onClick={onClose} style={{ flex: 1, padding: '12px', border: '1px solid #e5e7eb', borderRadius: '12px', cursor: 'pointer', background: 'white', fontWeight: 500 }}>Cancelar</button>
+            <button type="submit" disabled={loading} style={{ flex: 1, padding: '12px', background: 'linear-gradient(135deg, #f59e0b, #ea580c)', color: 'white', border: 'none', borderRadius: '12px', cursor: 'pointer', fontWeight: 'bold' }}>{loading ? 'Salvando...' : 'Salvar'}</button>
+          </div>
         </form>
       </div>
     </div>
@@ -311,6 +421,8 @@ export default function BossDashboard() {
   const [showConfigModal, setShowConfigModal] = useState(false)
   const [selectedRider, setSelectedRider] = useState<any>(null)
   const [searchTerm, setSearchTerm] = useState('')
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [isMobile, setIsMobile] = useState(false)
   const [stats, setStats] = useState({
     totalRiders: 0,
     activeRiders: 0,
@@ -320,6 +432,18 @@ export default function BossDashboard() {
     feePerRider: 500,
     availableSlots: 20
   })
+
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768)
+      if (window.innerWidth >= 768) {
+        setMobileMenuOpen(false)
+      }
+    }
+    checkMobile()
+    window.addEventListener('resize', checkMobile)
+    return () => window.removeEventListener('resize', checkMobile)
+  }, [])
 
   useEffect(() => {
     const bossId = localStorage.getItem('boss_id')
@@ -340,7 +464,6 @@ export default function BossDashboard() {
       .single()
     setBoss(bossData)
 
-    // CORRIGIDO: Buscar placa pelo boss_id, não pelo nome fixo
     const { data: plateData } = await supabase
       .from('plates')
       .select('*')
@@ -422,11 +545,40 @@ export default function BossDashboard() {
     rider.bi.toLowerCase().includes(searchTerm.toLowerCase())
   )
 
+  const styles = {
+    container: { minHeight: '100vh', background: 'linear-gradient(135deg, #f9fafb 0%, #fffbeb 100%)' },
+    card: { background: 'white', borderRadius: '16px', padding: '16px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)', border: '1px solid #f0f0f0' },
+    buttonPrimary: { background: 'linear-gradient(135deg, #f59e0b, #ea580c)', color: 'white', padding: '10px 20px', borderRadius: '12px', border: 'none', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', transition: 'all 0.3s ease' },
+    mobileMenu: {
+      position: 'fixed' as const,
+      top: 0,
+      right: 0,
+      bottom: 0,
+      width: '280px',
+      backgroundColor: 'white',
+      boxShadow: '-2px 0 8px rgba(0,0,0,0.1)',
+      zIndex: 20,
+      transform: mobileMenuOpen ? 'translateX(0)' : 'translateX(100%)',
+      transition: 'transform 0.3s ease-in-out',
+      overflowY: 'auto' as const,
+    },
+    overlay: {
+      position: 'fixed' as const,
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      backgroundColor: 'rgba(0,0,0,0.5)',
+      zIndex: 19,
+      display: mobileMenuOpen ? 'block' : 'none',
+    }
+  }
+
   if (loading) {
     return (
-      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#f3f4f6' }}>
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, #f9fafb 0%, #fffbeb 100%)' }}>
         <div style={{ textAlign: 'center' }}>
-          <div style={{ animation: 'spin 1s linear infinite', width: '3rem', height: '3rem', border: '2px solid #f59e0b', borderTopColor: 'transparent', borderRadius: '9999px', margin: '0 auto 1rem' }}></div>
+          <div style={{ animation: 'spin 1s linear infinite', width: '48px', height: '48px', border: '3px solid #f59e0b', borderTopColor: 'transparent', borderRadius: '50%', margin: '0 auto 16px' }}></div>
           <p style={{ color: '#6b7280' }}>Carregando dashboard...</p>
         </div>
       </div>
@@ -435,129 +587,201 @@ export default function BossDashboard() {
 
   if (!plate) {
     return (
-      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#f3f4f6' }}>
-        <div style={{ textAlign: 'center', backgroundColor: 'white', padding: '2rem', borderRadius: '1rem', maxWidth: '28rem' }}>
-          <AlertCircle size={64} color="#f59e0b" style={{ margin: '0 auto 1rem' }} />
-          <h2 style={{ fontSize: '1.25rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>Nenhuma placa encontrada</h2>
-          <p style={{ marginBottom: '1rem' }}>Você não está associado a nenhuma placa.</p>
-          <button onClick={handleLogout} style={{ backgroundColor: '#f59e0b', color: 'white', padding: '0.5rem 1.5rem', border: 'none', borderRadius: '0.5rem', cursor: 'pointer' }}>Sair</button>
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, #f9fafb 0%, #fffbeb 100%)' }}>
+        <div style={{ textAlign: 'center', backgroundColor: 'white', padding: '32px', borderRadius: '24px', maxWidth: '400px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
+          <AlertCircle size={64} color="#f59e0b" style={{ margin: '0 auto 16px' }} />
+          <h2 style={{ fontSize: '20px', fontWeight: 'bold', marginBottom: '8px' }}>Nenhuma placa encontrada</h2>
+          <p style={{ marginBottom: '20px', color: '#6b7280' }}>Você não está associado a nenhuma placa.</p>
+          <button onClick={handleLogout} style={{ background: 'linear-gradient(135deg, #f59e0b, #ea580c)', color: 'white', padding: '12px 24px', border: 'none', borderRadius: '12px', cursor: 'pointer', fontWeight: 'bold' }}>Sair</button>
         </div>
       </div>
     )
   }
 
   return (
-    <div style={{ minHeight: '100vh', backgroundColor: '#f3f4f6' }}>
+    <div style={styles.container}>
+      {/* Overlay do menu mobile */}
+      <div style={styles.overlay} onClick={() => setMobileMenuOpen(false)} />
+
+      {/* Menu Mobile */}
+      <div style={styles.mobileMenu}>
+        <div style={{ padding: '20px', borderBottom: '1px solid #f0f0f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Bike size={24} color="#f59e0b" />
+            <span style={{ fontWeight: 'bold', fontSize: '16px' }}>Menu</span>
+          </div>
+          <button onClick={() => setMobileMenuOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
+            <X size={24} color="#6b7280" />
+          </button>
+        </div>
+        <div style={{ padding: '16px' }}>
+          <button onClick={() => { setShowAddRider(true); setMobileMenuOpen(false) }} style={{ width: '100%', padding: '12px 16px', display: 'flex', alignItems: 'center', gap: '12px', background: 'none', border: 'none', borderRadius: '12px', cursor: 'pointer', marginBottom: '4px' }}>
+            <UserPlus size={20} color="#f59e0b" /> Novo Motoqueiro
+          </button>
+          <button onClick={() => { setShowPaymentModal(true); setMobileMenuOpen(false) }} style={{ width: '100%', padding: '12px 16px', display: 'flex', alignItems: 'center', gap: '12px', background: 'none', border: 'none', borderRadius: '12px', cursor: 'pointer', marginBottom: '4px' }}>
+            <CreditCard size={20} color="#10b981" /> Pagar Taxa
+          </button>
+          <button onClick={() => { setShowConfigModal(true); setMobileMenuOpen(false) }} style={{ width: '100%', padding: '12px 16px', display: 'flex', alignItems: 'center', gap: '12px', background: 'none', border: 'none', borderRadius: '12px', cursor: 'pointer', marginBottom: '4px' }}>
+            <Settings size={20} color="#6b7280" /> Configurar Placa
+          </button>
+          <div style={{ borderTop: '1px solid #f0f0f0', marginTop: '16px', paddingTop: '16px' }}>
+            <button onClick={handleLogout} style={{ width: '100%', padding: '12px 16px', display: 'flex', alignItems: 'center', gap: '12px', background: 'none', border: 'none', borderRadius: '12px', cursor: 'pointer', color: '#ef4444' }}>
+              <LogOut size={20} /> Sair
+            </button>
+          </div>
+        </div>
+      </div>
+
       {/* Header */}
-      <div style={{ backgroundColor: 'white', borderBottom: '1px solid #e5e7eb', position: 'sticky', top: 0, zIndex: 10 }}>
-        <div style={{ maxWidth: '1280px', margin: '0 auto', padding: '0.75rem 1rem' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-              <div style={{ background: 'linear-gradient(135deg, #f59e0b, #ef4444)', padding: '0.5rem', borderRadius: '0.5rem' }}>
-                <Bike size={24} color="white" />
+      <div style={{ backgroundColor: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(8px)', borderBottom: '1px solid #f0f0f0', position: 'sticky', top: 0, zIndex: 10 }}>
+        <div style={{ maxWidth: '1280px', margin: '0 auto', padding: isMobile ? '12px 16px' : '16px 24px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div style={{ width: isMobile ? '40px' : '48px', height: isMobile ? '40px' : '48px', background: 'linear-gradient(135deg, #f59e0b, #ea580c)', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Bike size={isMobile ? 20 : 24} color="white" />
               </div>
               <div>
-                <h1 style={{ fontSize: '1.25rem', fontWeight: 'bold' }}>Dashboard Chefe</h1>
-                <p style={{ fontSize: '0.75rem', color: '#6b7280' }}>{plate?.plate_number}</p>
+                <h1 style={{ fontSize: isMobile ? '18px' : '20px', fontWeight: 'bold', color: '#111827' }}>Dashboard Chefe</h1>
+                <p style={{ fontSize: '12px', color: '#6b7280' }}>{plate?.plate_number}</p>
               </div>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-              <button onClick={() => setShowConfigModal(true)} style={{ padding: '0.5rem', background: 'none', border: 'none', cursor: 'pointer', borderRadius: '9999px' }}>
-                <Settings size={20} color="#4b5563" />
-              </button>
-              <div style={{ textAlign: 'right' }}>
-                <p style={{ fontSize: '0.875rem', fontWeight: '500' }}>{boss?.name}</p>
-                <p style={{ fontSize: '0.75rem', color: '#6b7280' }}>{boss?.phone}</p>
+
+            {/* Desktop Actions */}
+            {!isMobile && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <button onClick={() => setShowConfigModal(true)} style={{ padding: '8px', background: 'none', border: 'none', cursor: 'pointer', borderRadius: '10px' }}>
+                  <Settings size={20} color="#6b7280" />
+                </button>
+                <div style={{ textAlign: 'right' }}>
+                  <p style={{ fontSize: '14px', fontWeight: 500 }}>{boss?.name}</p>
+                  <p style={{ fontSize: '11px', color: '#6b7280' }}>{boss?.phone}</p>
+                </div>
+                <button onClick={handleLogout} style={{ padding: '8px', background: 'none', border: 'none', cursor: 'pointer', borderRadius: '10px' }}>
+                  <LogOut size={20} color="#6b7280" />
+                </button>
               </div>
-              <button onClick={handleLogout} style={{ padding: '0.5rem', background: 'none', border: 'none', cursor: 'pointer', borderRadius: '9999px' }}>
-                <LogOut size={20} color="#4b5563" />
+            )}
+
+            {/* Mobile Menu Button */}
+            {isMobile && (
+              <button onClick={() => setMobileMenuOpen(true)} style={{ padding: '8px', background: 'none', border: 'none', cursor: 'pointer' }}>
+                <Menu size={24} color="#374151" />
               </button>
-            </div>
+            )}
           </div>
         </div>
       </div>
 
-      {/* Cards */}
-      <div style={{ maxWidth: '1280px', margin: '0 auto', padding: '1.5rem 1rem' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '1rem' }}>
-          <div style={{ backgroundColor: 'white', borderRadius: '0.75rem', padding: '1rem' }}>
-            <p style={{ fontSize: '0.75rem', color: '#6b7280' }}>Motoqueiros</p>
-            <p style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>{stats.totalRiders} / {stats.maxRiders}</p>
-            <p style={{ fontSize: '0.75rem', color: '#059669' }}>{stats.availableSlots} vagas</p>
+      {/* Stats Cards */}
+      <div style={{ maxWidth: '1280px', margin: '0 auto', padding: isMobile ? '16px' : '24px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(5, 1fr)', gap: isMobile ? '12px' : '16px', marginBottom: '24px' }}>
+          <div style={styles.card}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+              <Users size={isMobile ? 18 : 20} color="#6b7280" />
+              <span style={{ fontSize: isMobile ? '20px' : '24px', fontWeight: 'bold' }}>{stats.totalRiders} / {stats.maxRiders}</span>
+            </div>
+            <p style={{ fontSize: '12px', color: '#6b7280' }}>Motoqueiros</p>
+            <p style={{ fontSize: '11px', color: '#059669', marginTop: '4px' }}>{stats.availableSlots} vagas</p>
           </div>
-          <div style={{ backgroundColor: 'white', borderRadius: '0.75rem', padding: '1rem' }}>
-            <p style={{ fontSize: '0.75rem', color: '#6b7280' }}>Online</p>
-            <p style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#059669' }}>{stats.onlineNow}</p>
+          
+          <div style={styles.card}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+              <Wifi size={isMobile ? 18 : 20} color="#10b981" />
+              <span style={{ fontSize: isMobile ? '20px' : '24px', fontWeight: 'bold', color: '#10b981' }}>{stats.onlineNow}</span>
+            </div>
+            <p style={{ fontSize: '12px', color: '#6b7280' }}>Online</p>
           </div>
-          <div style={{ backgroundColor: 'white', borderRadius: '0.75rem', padding: '1rem' }}>
-            <p style={{ fontSize: '0.75rem', color: '#6b7280' }}>Ativos</p>
-            <p style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#2563eb' }}>{stats.activeRiders}</p>
+          
+          <div style={styles.card}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+              <Star size={isMobile ? 18 : 20} color="#3b82f6" />
+              <span style={{ fontSize: isMobile ? '20px' : '24px', fontWeight: 'bold', color: '#3b82f6' }}>{stats.activeRiders}</span>
+            </div>
+            <p style={{ fontSize: '12px', color: '#6b7280' }}>Ativos</p>
           </div>
-          <div style={{ backgroundColor: 'white', borderRadius: '0.75rem', padding: '1rem' }}>
-            <p style={{ fontSize: '0.75rem', color: '#6b7280' }}>Taxa/Motoqueiro</p>
-            <p style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#d97706' }}>{stats.feePerRider} Kz</p>
+          
+          <div style={styles.card}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+              <DollarSign size={isMobile ? 18 : 20} color="#d97706" />
+              <span style={{ fontSize: isMobile ? '16px' : '24px', fontWeight: 'bold', color: '#d97706' }}>{stats.feePerRider} Kz</span>
+            </div>
+            <p style={{ fontSize: '12px', color: '#6b7280' }}>Taxa/Motoqueiro</p>
           </div>
-          <div style={{ background: 'linear-gradient(135deg, #f59e0b, #ef4444)', borderRadius: '0.75rem', padding: '1rem', color: 'white' }}>
-            <p style={{ fontSize: '0.75rem', opacity: 0.8 }}>Total Semanal</p>
-            <p style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>{stats.weeklyPayment.toLocaleString()} Kz</p>
+          
+          <div style={{ ...styles.card, background: 'linear-gradient(135deg, #f59e0b, #ea580c)', color: 'white' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+              <TrendingUp size={isMobile ? 18 : 20} style={{ opacity: 0.8 }} />
+              <span style={{ fontSize: isMobile ? '18px' : '24px', fontWeight: 'bold' }}>{stats.weeklyPayment.toLocaleString()} Kz</span>
+            </div>
+            <p style={{ fontSize: '12px', opacity: 0.8 }}>Total Semanal</p>
           </div>
         </div>
-      </div>
 
-      {/* Botões */}
-      <div style={{ maxWidth: '1280px', margin: '0 auto', padding: '0 1rem 1.5rem', display: 'flex', gap: '0.75rem' }}>
-        <button onClick={() => setShowAddRider(true)} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem 1rem', backgroundColor: '#f59e0b', color: 'white', border: 'none', borderRadius: '0.5rem', cursor: 'pointer' }}>
-          <UserPlus size={16} /> Novo Motoqueiro
-        </button>
-        <button onClick={() => setShowPaymentModal(true)} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem 1rem', backgroundColor: '#10b981', color: 'white', border: 'none', borderRadius: '0.5rem', cursor: 'pointer' }}>
-          <CreditCard size={16} /> Pagar Taxa ({stats.weeklyPayment.toLocaleString()} Kz)
-        </button>
-      </div>
+        {/* Action Buttons */}
+        <div style={{ display: 'flex', gap: '12px', marginBottom: '24px', flexWrap: 'wrap' }}>
+          <button onClick={() => setShowAddRider(true)} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: isMobile ? '10px 20px' : '12px 24px', background: 'linear-gradient(135deg, #f59e0b, #ea580c)', color: 'white', border: 'none', borderRadius: '12px', cursor: 'pointer', fontWeight: 600, fontSize: isMobile ? '13px' : '14px' }}>
+            <UserPlus size={isMobile ? 16 : 18} /> Novo Motoqueiro
+          </button>
+          <button onClick={() => setShowPaymentModal(true)} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: isMobile ? '10px 20px' : '12px 24px', background: 'linear-gradient(135deg, #10b981, #059669)', color: 'white', border: 'none', borderRadius: '12px', cursor: 'pointer', fontWeight: 600, fontSize: isMobile ? '13px' : '14px' }}>
+            <CreditCard size={isMobile ? 16 : 18} /> Pagar Taxa ({stats.weeklyPayment.toLocaleString()} Kz)
+          </button>
+        </div>
 
-      {/* Lista de Motoqueiros */}
-      <div style={{ maxWidth: '1280px', margin: '0 auto', padding: '0 1rem 2rem' }}>
-        <div style={{ backgroundColor: 'white', borderRadius: '0.75rem' }}>
-          <div style={{ padding: '1rem', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <h2 style={{ fontWeight: '600' }}>Motoqueiros ({stats.totalRiders})</h2>
+        {/* Riders List */}
+        <div style={{ backgroundColor: 'white', borderRadius: '20px', overflow: 'hidden', border: '1px solid #f0f0f0' }}>
+          <div style={{ padding: isMobile ? '16px' : '20px', borderBottom: '1px solid #f0f0f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+            <h2 style={{ fontWeight: 'bold', fontSize: '16px' }}>Motoqueiros ({stats.totalRiders})</h2>
             <div style={{ position: 'relative' }}>
-              <Search size={16} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: '#9ca3af' }} />
-              <input type="text" placeholder="Buscar..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} style={{ padding: '0.5rem 0.5rem 0.5rem 2rem', border: '1px solid #d1d5db', borderRadius: '0.5rem', width: '16rem' }} />
+              <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#9ca3af' }} />
+              <input type="text" placeholder="Buscar..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} style={{ padding: '10px 12px 10px 36px', border: '1px solid #e5e7eb', borderRadius: '10px', width: isMobile ? '200px' : '250px', fontSize: isMobile ? '14px' : '13px', outline: 'none' }} />
             </div>
           </div>
+          
           <div>
             {filteredRiders.map((rider) => (
-              <div key={rider.id} style={{ padding: '1rem', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <div key={rider.id} style={{ padding: isMobile ? '16px' : '20px', borderBottom: '1px solid #f0f0f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1 }}>
                   {rider.photo_url ? (
-                    <img src={rider.photo_url} alt={rider.name} style={{ width: '2.5rem', height: '2.5rem', borderRadius: '9999px', objectFit: 'cover' }} />
+                    <img src={rider.photo_url} alt={rider.name} style={{ width: '48px', height: '48px', borderRadius: '50%', objectFit: 'cover', border: '2px solid #fcd34d' }} />
                   ) : (
-                    <div style={{ width: '2.5rem', height: '2.5rem', backgroundColor: '#fef3c7', borderRadius: '9999px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <Bike size={20} color="#d97706" />
+                    <div style={{ width: '48px', height: '48px', background: 'linear-gradient(135deg, #fef3c7, #fffbeb)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <Bike size={24} color="#d97706" />
                     </div>
                   )}
                   <div>
-                    <p style={{ fontWeight: '500' }}>{rider.name}</p>
-                    <p style={{ fontSize: '0.75rem', color: '#6b7280' }}>{rider.phone} • BI: {rider.bi}</p>
-                    {rider.is_online && <span style={{ fontSize: '0.75rem', color: '#059669' }}>● Online</span>}
+                    <p style={{ fontWeight: 'bold', fontSize: '16px', color: '#111827' }}>{rider.name}</p>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', marginTop: '4px' }}>
+                      <p style={{ fontSize: '12px', color: '#6b7280', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <Phone size={10} /> {rider.phone}
+                      </p>
+                      <p style={{ fontSize: '12px', color: '#6b7280', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <MapPin size={10} /> BI: {rider.bi}
+                      </p>
+                      {rider.is_online && (
+                        <span style={{ fontSize: '11px', color: '#10b981', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <Wifi size={10} /> Online
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <span style={{ padding: '0.25rem 0.5rem', borderRadius: '9999px', fontSize: '0.75rem', backgroundColor: rider.status === 'active' ? '#d1fae5' : '#fee2e2', color: rider.status === 'active' ? '#065f46' : '#991b1b' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ padding: '4px 12px', borderRadius: '20px', fontSize: '11px', fontWeight: 500, backgroundColor: rider.status === 'active' ? '#d1fae5' : '#fee2e2', color: rider.status === 'active' ? '#065f46' : '#991b1b' }}>
                     {rider.status === 'active' ? 'Ativo' : 'Inativo'}
                   </span>
-                  <button onClick={() => { setSelectedRider(rider); setShowEditRider(true) }} style={{ padding: '0.5rem', background: 'none', border: 'none', cursor: 'pointer', color: '#3b82f6', borderRadius: '0.5rem' }}>
+                  <button onClick={() => { setSelectedRider(rider); setShowEditRider(true) }} style={{ padding: '8px', background: 'none', border: 'none', cursor: 'pointer', color: '#3b82f6', borderRadius: '8px' }}>
                     <Edit size={16} />
                   </button>
-                  <button onClick={() => deleteRider(rider.id)} style={{ padding: '0.5rem', background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444', borderRadius: '0.5rem' }}>
+                  <button onClick={() => deleteRider(rider.id)} style={{ padding: '8px', background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444', borderRadius: '8px' }}>
                     <Trash2 size={16} />
                   </button>
                 </div>
               </div>
             ))}
-            {riders.length === 0 && (
-              <div style={{ padding: '2rem', textAlign: 'center', color: '#6b7280' }}>
-                <Users size={48} style={{ margin: '0 auto 0.75rem', color: '#d1d5db' }} />
-                <p>Nenhum motoqueiro cadastrado</p>
+            {filteredRiders.length === 0 && (
+              <div style={{ padding: '48px', textAlign: 'center' }}>
+                <Users size={48} style={{ margin: '0 auto 12px', color: '#d1d5db' }} />
+                <p style={{ color: '#6b7280' }}>Nenhum motoqueiro cadastrado</p>
               </div>
             )}
           </div>
@@ -569,6 +793,18 @@ export default function BossDashboard() {
       {showEditRider && selectedRider && <EditRiderModal rider={selectedRider} onClose={() => { setShowEditRider(false); setSelectedRider(null) }} onSuccess={() => { setShowEditRider(false); setSelectedRider(null); const bossId = localStorage.getItem('boss_id'); if (bossId) loadData(bossId) }} />}
       {showPaymentModal && <PaymentModal plateId={plate?.id} plateName={plate?.plate_number} amount={stats.weeklyPayment} totalRiders={stats.totalRiders} feePerRider={stats.feePerRider} maxRiders={stats.maxRiders} onClose={() => setShowPaymentModal(false)} onSuccess={() => { setShowPaymentModal(false); alert('Pagamento registrado com sucesso!') }} />}
       {showConfigModal && plate && <PlateConfigModal plate={plate} onClose={() => setShowConfigModal(false)} onSuccess={async (maxRiders: number, feePerRider: number) => { const success = await updatePlateConfig(maxRiders, feePerRider); if (success) setShowConfigModal(false) }} />}
+
+      <style jsx>{`
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+        @media (max-width: 768px) {
+          input, button, select {
+            font-size: 16px !important;
+          }
+        }
+      `}</style>
     </div>
   )
 }

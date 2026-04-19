@@ -1,9 +1,9 @@
 // app/login/motoqueiro/page.tsx
 'use client'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
-import { Bike, Phone, Lock, AlertCircle, Eye, EyeOff } from 'lucide-react'
+import { Bike, Phone, Lock, AlertCircle, Eye, EyeOff, ArrowRight, Shield } from 'lucide-react'
 
 export default function RiderLogin() {
   const [phone, setPhone] = useState('')
@@ -11,7 +11,15 @@ export default function RiderLogin() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [showPassword, setShowPassword] = useState(false)
+  const [isMobile, setIsMobile] = useState(false)
   const router = useRouter()
+
+  useEffect(() => {
+    setIsMobile(window.innerWidth < 768)
+    const handleResize = () => setIsMobile(window.innerWidth < 768)
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -56,84 +64,285 @@ export default function RiderLogin() {
     setLoading(false)
   }
 
+  const styles = {
+    container: {
+      minHeight: '100vh',
+      background: 'linear-gradient(135deg, #fef3c7 0%, #fed7aa 100%)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: '16px',
+      position: 'relative' as const,
+      overflow: 'hidden'
+    },
+    backgroundPattern: {
+      position: 'absolute' as const,
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      backgroundImage: 'radial-gradient(circle at 20% 80%, rgba(245, 158, 11, 0.1) 0%, transparent 50%)',
+      pointerEvents: 'none' as const
+    },
+    card: {
+      backgroundColor: 'white',
+      borderRadius: '32px',
+      boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+      maxWidth: '450px',
+      width: '100%',
+      padding: isMobile ? '32px 24px' : '48px 40px',
+      position: 'relative' as const,
+      zIndex: 1,
+      transition: 'transform 0.3s ease'
+    },
+    logoContainer: {
+      display: 'flex',
+      flexDirection: 'column' as const,
+      alignItems: 'center',
+      marginBottom: '32px'
+    },
+    logoIcon: {
+      width: isMobile ? '64px' : '80px',
+      height: isMobile ? '64px' : '80px',
+      background: 'linear-gradient(135deg, #f59e0b, #ea580c)',
+      borderRadius: '24px',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginBottom: '20px',
+      boxShadow: '0 10px 25px -5px rgba(245, 158, 11, 0.4)'
+    },
+    title: {
+      fontSize: isMobile ? '24px' : '28px',
+      fontWeight: 'bold',
+      background: 'linear-gradient(135deg, #f59e0b, #ea580c)',
+      WebkitBackgroundClip: 'text',
+      WebkitTextFillColor: 'transparent',
+      marginBottom: '4px'
+    },
+    subtitle: {
+      fontSize: '14px',
+      color: '#6b7280',
+      textAlign: 'center' as const
+    },
+    form: {
+      display: 'flex',
+      flexDirection: 'column' as const,
+      gap: '20px'
+    },
+    inputGroup: {
+      display: 'flex',
+      flexDirection: 'column' as const,
+      gap: '8px'
+    },
+    label: {
+      fontSize: '13px',
+      fontWeight: 600,
+      color: '#374151',
+      display: 'flex',
+      alignItems: 'center',
+      gap: '6px'
+    },
+    inputWrapper: {
+      position: 'relative' as const
+    },
+    inputIcon: {
+      position: 'absolute' as const,
+      left: '14px',
+      top: '50%',
+      transform: 'translateY(-50%)',
+      color: '#9ca3af'
+    },
+    input: {
+      width: '100%',
+      padding: '14px 14px 14px 44px',
+      border: '2px solid #e5e7eb',
+      borderRadius: '16px',
+      fontSize: isMobile ? '16px' : '15px',
+      outline: 'none',
+      transition: 'all 0.3s ease',
+      backgroundColor: '#f9fafb'
+    },
+    passwordToggle: {
+      position: 'absolute' as const,
+      right: '14px',
+      top: '50%',
+      transform: 'translateY(-50%)',
+      cursor: 'pointer',
+      color: '#9ca3af',
+      background: 'none',
+      border: 'none',
+      padding: '4px',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center'
+    },
+    errorBox: {
+      backgroundColor: '#fef2f2',
+      border: '1px solid #fecaca',
+      borderRadius: '14px',
+      padding: '12px 16px',
+      display: 'flex',
+      alignItems: 'center',
+      gap: '10px',
+      color: '#dc2626',
+      fontSize: '13px'
+    },
+    button: {
+      width: '100%',
+      background: 'linear-gradient(135deg, #f59e0b, #ea580c)',
+      color: 'white',
+      padding: '14px',
+      borderRadius: '16px',
+      border: 'none',
+      fontWeight: 'bold',
+      fontSize: '16px',
+      cursor: 'pointer',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: '10px',
+      transition: 'all 0.3s ease',
+      marginTop: '8px'
+    },
+    footer: {
+      marginTop: '24px',
+      textAlign: 'center' as const,
+      fontSize: '12px',
+      color: '#9ca3af'
+    },
+    link: {
+      color: '#f59e0b',
+      textDecoration: 'none',
+      fontWeight: 500
+    }
+  }
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-amber-500 to-red-600 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-8">
-        <div className="flex flex-col items-center mb-8">
-          <div className="bg-amber-100 p-4 rounded-full mb-4">
-            <Bike className="w-12 h-12 text-amber-600" />
+    <div style={styles.container}>
+      <div style={styles.backgroundPattern} />
+      
+      <div style={styles.card}>
+        <div style={styles.logoContainer}>
+          <div style={styles.logoIcon}>
+            <Bike size={isMobile ? 32 : 40} color="white" />
           </div>
-          <h1 className="text-2xl font-bold text-gray-900">MeuPiloto!</h1>
-          <p className="text-gray-600">Acesso Motoqueiro</p>
+          <h1 style={styles.title}>MeuPiloto!</h1>
+          <p style={styles.subtitle}>Acesso para Motoqueiros</p>
         </div>
 
-        <form onSubmit={handleLogin} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Telefone
+        <form onSubmit={handleLogin} style={styles.form}>
+          <div style={styles.inputGroup}>
+            <label style={styles.label}>
+              <Phone size={14} /> Telefone
             </label>
-            <div className="relative">
-              <Phone className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+            <div style={styles.inputWrapper}>
+              <Phone size={18} style={styles.inputIcon} />
               <input
                 type="tel"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
-                className="pl-10 w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                style={{
+                  ...styles.input,
+                  borderColor: error ? '#fecaca' : '#e5e7eb'
+                }}
                 placeholder="923456001"
                 required
+                onFocus={(e) => e.currentTarget.style.borderColor = '#f59e0b'}
+                onBlur={(e) => e.currentTarget.style.borderColor = error ? '#fecaca' : '#e5e7eb'}
               />
             </div>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Senha
+          <div style={styles.inputGroup}>
+            <label style={styles.label}>
+              <Lock size={14} /> Senha
             </label>
-            <div className="relative">
-              <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+            <div style={styles.inputWrapper}>
+              <Lock size={18} style={styles.inputIcon} />
               <input
                 type={showPassword ? 'text' : 'password'}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="pl-10 pr-10 w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
-                placeholder="senha123"
+                style={{
+                  ...styles.input,
+                  paddingRight: '44px',
+                  borderColor: error ? '#fecaca' : '#e5e7eb'
+                }}
+                placeholder="••••••"
                 required
+                onFocus={(e) => e.currentTarget.style.borderColor = '#f59e0b'}
+                onBlur={(e) => e.currentTarget.style.borderColor = error ? '#fecaca' : '#e5e7eb'}
               />
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                style={styles.passwordToggle}
               >
-                {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
               </button>
             </div>
           </div>
 
           {error && (
-            <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm flex items-center gap-2">
-              <AlertCircle className="w-4 h-4" />
-              {error}
+            <div style={styles.errorBox}>
+              <AlertCircle size={16} />
+              <span>{error}</span>
             </div>
           )}
 
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-amber-600 text-white py-3 rounded-lg font-semibold hover:bg-amber-700 transition disabled:opacity-50 flex items-center justify-center gap-2"
+            style={{
+              ...styles.button,
+              opacity: loading ? 0.7 : 1,
+              cursor: loading ? 'not-allowed' : 'pointer'
+            }}
           >
             {loading ? (
               <>
-                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                <div style={{ animation: 'spin 1s linear infinite', width: '18px', height: '18px', border: '2px solid white', borderTopColor: 'transparent', borderRadius: '50%' }} />
                 Entrando...
               </>
             ) : (
-              'Entrar'
+              <>
+                Entrar
+                <ArrowRight size={18} />
+              </>
             )}
           </button>
         </form>
 
-       
+        <div style={styles.footer}>
+          <p>
+            Receba e aceite corridas em tempo real
+          </p>
+          <p style={{ marginTop: '8px' }}>
+            <Shield size={12} style={{ display: 'inline', marginRight: '4px' }} />
+            Ambiente Seguro
+          </p>
+        </div>
       </div>
+
+      <style jsx>{`
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+        input:focus {
+          box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.1);
+        }
+        button:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 10px 25px -5px rgba(245, 158, 11, 0.4);
+        }
+        @media (max-width: 768px) {
+          input, button {
+            font-size: 16px !important;
+          }
+        }
+      `}</style>
     </div>
   )
 }

@@ -5,7 +5,7 @@ import { supabase } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import { 
   Power, Phone, MapPin, Navigation, CheckCircle, LogOut, Bell, History, Clock, CheckSquare, XCircle,
-  User, Wallet, Star, BellRing, BellOff, Edit, Camera, Loader2, X
+  User, Wallet, Star, BellRing, BellOff, Edit, Camera, Loader2, X, Menu, Home, TrendingUp, Award
 } from 'lucide-react'
 import dynamic from 'next/dynamic'
 import 'leaflet/dist/leaflet.css'
@@ -57,9 +57,23 @@ export default function RiderDashboard() {
   const [riderLocation, setRiderLocation] = useState<{ lat: number; lng: number } | null>(null)
   const [customerLocation, setCustomerLocation] = useState<{ lat: number; lng: number } | null>(null)
   const [locationInterval, setLocationInterval] = useState<NodeJS.Timeout | null>(null)
+  const [isMobile, setIsMobile] = useState(false)
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const router = useRouter()
   const channelRef = useRef<any>(null)
   const audioRef = useRef<HTMLAudioElement | null>(null)
+
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768)
+      if (window.innerWidth >= 768) {
+        setMobileMenuOpen(false)
+      }
+    }
+    checkMobile()
+    window.addEventListener('resize', checkMobile)
+    return () => window.removeEventListener('resize', checkMobile)
+  }, [])
 
   useEffect(() => {
     if (typeof Audio !== 'undefined') audioRef.current = new Audio('/notification.mp3')
@@ -107,7 +121,7 @@ export default function RiderDashboard() {
           console.error('Erro ao obter localização:', error)
         })
       }
-    }, 5000) // Atualiza a cada 5 segundos
+    }, 5000)
     
     setLocationInterval(interval)
   }
@@ -224,7 +238,6 @@ export default function RiderDashboard() {
     
     setSelectedOrder(order)
     
-    // Carregar localização do cliente
     if (order.customer_lat && order.customer_lng) {
       setCustomerLocation({ lat: order.customer_lat, lng: order.customer_lng })
     }
@@ -278,40 +291,24 @@ export default function RiderDashboard() {
 
   const getStatusBadge = (status: string) => {
     switch(status) {
-      case 'pending': return <span className="bg-yellow-100 text-yellow-800 px-3 py-1 rounded-full text-sm font-medium"><Clock className="w-3 h-3 inline mr-1" /> Pendente</span>
-      case 'accepted': return <span className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm font-medium"><CheckCircle className="w-3 h-3 inline mr-1" /> Em rota</span>
-      case 'completed': return <span className="bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm font-medium"><CheckSquare className="w-3 h-3 inline mr-1" /> Concluído</span>
-      default: return <span className="bg-gray-100 text-gray-800 px-3 py-1 rounded-full text-sm font-medium">Cancelado</span>
+      case 'pending': return <span style={{ backgroundColor: '#fef3c7', color: '#d97706', padding: '4px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: 500, display: 'inline-flex', alignItems: 'center', gap: '4px' }}><Clock size={12} /> Pendente</span>
+      case 'accepted': return <span style={{ backgroundColor: '#dbeafe', color: '#2563eb', padding: '4px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: 500, display: 'inline-flex', alignItems: 'center', gap: '4px' }}><CheckCircle size={12} /> Em rota</span>
+      case 'completed': return <span style={{ backgroundColor: '#d1fae5', color: '#059669', padding: '4px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: 500, display: 'inline-flex', alignItems: 'center', gap: '4px' }}><CheckSquare size={12} /> Concluído</span>
+      default: return <span style={{ backgroundColor: '#f3f4f6', color: '#6b7280', padding: '4px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: 500, display: 'inline-flex', alignItems: 'center', gap: '4px' }}><XCircle size={12} /> Cancelado</span>
     }
   }
 
   const getNotificationIcon = (type: string) => {
     switch(type) {
-      case 'order': return <BellRing className="w-4 h-4 text-amber-500" />
-      case 'success': return <CheckCircle className="w-4 h-4 text-green-500" />
-      default: return <Bell className="w-4 h-4 text-blue-500" />
+      case 'order': return <BellRing size={16} color="#f59e0b" />
+      case 'success': return <CheckCircle size={16} color="#10b981" />
+      default: return <Bell size={16} color="#3b82f6" />
     }
   }
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-amber-50 to-red-50">
-        <div className="text-center"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-amber-500 mx-auto mb-4"></div><p className="text-gray-600">Carregando dashboard...</p></div>
-      </div>
-    )
-  }
-
-  // Tela do mapa com navegação
-  // app/dashboard/motoqueiro/page.tsx - Adicione estas melhorias
-
-// Na tela do mapa, adicione mais informações e botões
-if (showMap && selectedOrder) {
-  const center = riderLocation || customerLocation || { lat: -8.8383, lng: 13.2344 }
-  
-  // Calcular distância aproximada (fórmula de Haversine simplificada)
   const calculateDistance = () => {
     if (!riderLocation || !customerLocation) return null
-    const R = 6371 // Raio da Terra em km
+    const R = 6371
     const dLat = (customerLocation.lat - riderLocation.lat) * Math.PI / 180
     const dLon = (customerLocation.lng - riderLocation.lng) * Math.PI / 180
     const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
@@ -320,185 +317,394 @@ if (showMap && selectedOrder) {
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a))
     return (R * c).toFixed(1)
   }
-  
-  const distance = calculateDistance()
-  
-  return (
-    <div className="min-h-screen bg-gray-100">
-      <div className="bg-white shadow-sm p-4 sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto">
-          <div className="flex justify-between items-center flex-wrap gap-3">
-            <div className="flex items-center gap-3">
-              <button onClick={() => { setShowMap(false); stopLocationTracking(); }} className="flex items-center gap-2 text-gray-600 hover:text-gray-900">
-                <XCircle className="w-5 h-5" /> Fechar
-              </button>
-              <div>
-                <h1 className="text-xl font-bold text-gray-900">Em Rota</h1>
-                <p className="text-gray-600 text-sm">{selectedOrder.customer_name}</p>
+
+  if (loading) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, #fffbeb, #fff0f0)' }}>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ animation: 'spin 1s linear infinite', width: '48px', height: '48px', border: '3px solid #f59e0b', borderTopColor: 'transparent', borderRadius: '50%', margin: '0 auto 16px' }}></div>
+          <p style={{ color: '#6b7280' }}>Carregando dashboard...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Tela do mapa com navegação
+  if (showMap && selectedOrder) {
+    const center = riderLocation || customerLocation || { lat: -8.8383, lng: 13.2344 }
+    const distance = calculateDistance()
+    
+    return (
+      <div style={{ minHeight: '100vh', background: '#f3f4f6' }}>
+        <div style={{ background: 'white', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', padding: isMobile ? '12px 16px' : '16px 24px', position: 'sticky', top: 0, zIndex: 10 }}>
+          <div style={{ maxWidth: '1280px', margin: '0 auto' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <button onClick={() => { setShowMap(false); stopLocationTracking(); }} style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#6b7280', background: 'none', border: 'none', cursor: 'pointer', fontSize: '14px' }}>
+                  <XCircle size={18} /> Fechar
+                </button>
+                <div>
+                  <h1 style={{ fontSize: isMobile ? '18px' : '20px', fontWeight: 'bold', color: '#111827' }}>Em Rota</h1>
+                  <p style={{ fontSize: '12px', color: '#6b7280' }}>{selectedOrder.customer_name}</p>
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button onClick={() => window.location.href = `tel:${selectedOrder.customer_phone}`} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: isMobile ? '8px 14px' : '10px 20px', background: '#10b981', color: 'white', border: 'none', borderRadius: '30px', fontWeight: 600, fontSize: isMobile ? '12px' : '14px', cursor: 'pointer' }}>
+                  <Phone size={14} /> Ligar
+                </button>
+                <button onClick={() => completeOrder(selectedOrder)} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: isMobile ? '8px 14px' : '10px 20px', background: '#3b82f6', color: 'white', border: 'none', borderRadius: '30px', fontWeight: 600, fontSize: isMobile ? '12px' : '14px', cursor: 'pointer' }}>
+                  <CheckCircle size={14} /> Concluir
+                </button>
               </div>
             </div>
-            <div className="flex gap-2">
-              <button 
-                onClick={() => window.location.href = `tel:${selectedOrder.customer_phone}`} 
-                className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-full font-semibold hover:bg-green-600 transition"
-              >
-                <Phone className="w-4 h-4" /> Ligar Cliente
+          </div>
+        </div>
+
+        <div style={{ padding: isMobile ? '12px' : '24px' }}>
+          <div style={{ background: 'white', borderRadius: '20px', overflow: 'hidden', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
+            <div style={{ height: isMobile ? '350px' : '450px', width: '100%' }}>
+              <MapContainer center={[center.lat, center.lng]} zoom={13} style={{ height: '100%', width: '100%' }}>
+                <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution='&copy; OpenStreetMap contributors' />
+                {customerLocation && (
+                  <Marker position={[customerLocation.lat, customerLocation.lng]}>
+                    <Popup>📍 Cliente: {selectedOrder.customer_name}</Popup>
+                  </Marker>
+                )}
+                {riderLocation && (
+                  <Marker position={[riderLocation.lat, riderLocation.lng]}>
+                    <Popup>🏍️ Você está aqui</Popup>
+                  </Marker>
+                )}
+              </MapContainer>
+            </div>
+          </div>
+
+          <div style={{ marginTop: '16px', background: 'white', borderRadius: '16px', padding: '16px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '16px' }}>
+              <div>
+                <p style={{ fontSize: '12px', color: '#6b7280' }}>Cliente</p>
+                <p style={{ fontWeight: 600, fontSize: '16px' }}>{selectedOrder.customer_name}</p>
+                <p style={{ fontSize: '13px', color: '#6b7280' }}>{selectedOrder.customer_phone}</p>
+              </div>
+              <div>
+                <p style={{ fontSize: '12px', color: '#6b7280' }}>Destino</p>
+                <p style={{ fontWeight: 600, fontSize: '14px' }}>{selectedOrder.dropoff_address || 'Não informado'}</p>
+              </div>
+            </div>
+            
+            {distance && (
+              <div style={{ marginTop: '16px', padding: '12px', background: '#eff6ff', borderRadius: '12px' }}>
+                <p style={{ fontSize: '13px', color: '#1d4ed8', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Navigation size={16} />
+                  Distância até o cliente: <strong>{distance} km</strong>
+                </p>
+              </div>
+            )}
+            
+            <div style={{ marginTop: '16px', display: 'flex', gap: '12px' }}>
+              <button onClick={() => window.open(`https://www.google.com/maps/dir/${riderLocation?.lat || -8.8383},${riderLocation?.lng || 13.2344}/${customerLocation?.lat || -8.8383},${customerLocation?.lng || 13.2344}`, '_blank')} style={{ flex: 1, background: '#f59e0b', color: 'white', padding: '14px', border: 'none', borderRadius: '12px', fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', cursor: 'pointer' }}>
+                <Navigation size={18} /> Google Maps
               </button>
-              <button 
-                onClick={() => completeOrder(selectedOrder)} 
-                className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-full font-semibold hover:bg-blue-600 transition"
-              >
-                <CheckCircle className="w-4 h-4" /> Concluir
+              <button onClick={() => window.location.href = `tel:${selectedOrder.customer_phone}`} style={{ flex: 1, background: '#10b981', color: 'white', padding: '14px', border: 'none', borderRadius: '12px', fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', cursor: 'pointer' }}>
+                <Phone size={18} /> Ligar
               </button>
+            </div>
+          </div>
+          
+          <div style={{ marginTop: '16px' }}>
+            <button onClick={() => { if (confirm(`✅ Confirma que chegou ao destino de ${selectedOrder.customer_name}?`)) completeOrder(selectedOrder) }} style={{ width: '100%', background: 'linear-gradient(135deg, #10b981, #059669)', color: 'white', padding: '16px', border: 'none', borderRadius: '14px', fontWeight: 'bold', fontSize: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', cursor: 'pointer', boxShadow: '0 4px 12px rgba(16,185,129,0.3)' }}>
+              <CheckCircle size={22} /> CHEGUEI AO DESTINO - CONCLUIR CORRIDA
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  const styles = {
+    container: { minHeight: '100vh', background: 'linear-gradient(135deg, #f9fafb 0%, #fffbeb 100%)' },
+    card: { background: 'white', borderRadius: '16px', padding: '16px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)', border: '1px solid #f0f0f0' },
+    buttonPrimary: { background: 'linear-gradient(135deg, #f59e0b, #ea580c)', color: 'white', padding: '10px 20px', borderRadius: '30px', border: 'none', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', transition: 'all 0.3s ease' },
+    mobileMenu: {
+      position: 'fixed' as const,
+      top: 0,
+      right: 0,
+      bottom: 0,
+      width: '280px',
+      backgroundColor: 'white',
+      boxShadow: '-2px 0 8px rgba(0,0,0,0.1)',
+      zIndex: 20,
+      transform: mobileMenuOpen ? 'translateX(0)' : 'translateX(100%)',
+      transition: 'transform 0.3s ease-in-out',
+      overflowY: 'auto' as const,
+    },
+    overlay: {
+      position: 'fixed' as const,
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      backgroundColor: 'rgba(0,0,0,0.5)',
+      zIndex: 19,
+      display: mobileMenuOpen ? 'block' : 'none',
+    }
+  }
+
+  return (
+    <div style={styles.container}>
+      {/* Overlay do menu mobile */}
+      <div style={styles.overlay} onClick={() => setMobileMenuOpen(false)} />
+
+      {/* Menu Mobile */}
+      <div style={styles.mobileMenu}>
+        <div style={{ padding: '20px', borderBottom: '1px solid #f0f0f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <User size={24} color="#f59e0b" />
+            <span style={{ fontWeight: 'bold', fontSize: '16px' }}>Menu</span>
+          </div>
+          <button onClick={() => setMobileMenuOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
+            <X size={24} color="#6b7280" />
+          </button>
+        </div>
+        <div style={{ padding: '16px' }}>
+          <button onClick={() => { setActiveTab('pending'); setMobileMenuOpen(false) }} style={{ width: '100%', padding: '12px 16px', display: 'flex', alignItems: 'center', gap: '12px', background: 'none', border: 'none', borderRadius: '12px', cursor: 'pointer', marginBottom: '4px' }}>
+            <Phone size={20} color="#6b7280" /> Pedidos
+          </button>
+          <button onClick={() => { setActiveTab('history'); setMobileMenuOpen(false) }} style={{ width: '100%', padding: '12px 16px', display: 'flex', alignItems: 'center', gap: '12px', background: 'none', border: 'none', borderRadius: '12px', cursor: 'pointer', marginBottom: '4px' }}>
+            <History size={20} color="#6b7280" /> Histórico
+          </button>
+          <button onClick={() => { setShowEditProfile(true); setMobileMenuOpen(false) }} style={{ width: '100%', padding: '12px 16px', display: 'flex', alignItems: 'center', gap: '12px', background: 'none', border: 'none', borderRadius: '12px', cursor: 'pointer', marginBottom: '4px' }}>
+            <Edit size={20} color="#6b7280" /> Editar Perfil
+          </button>
+          <button onClick={toggleOnline} style={{ width: '100%', padding: '12px 16px', display: 'flex', alignItems: 'center', gap: '12px', background: 'none', border: 'none', borderRadius: '12px', cursor: 'pointer', marginBottom: '4px', color: isOnline ? '#10b981' : '#6b7280' }}>
+            <Power size={20} /> {isOnline ? 'Online' : 'Offline'}
+          </button>
+          <div style={{ borderTop: '1px solid #f0f0f0', marginTop: '16px', paddingTop: '16px' }}>
+            <button onClick={handleLogout} style={{ width: '100%', padding: '12px 16px', display: 'flex', alignItems: 'center', gap: '12px', background: 'none', border: 'none', borderRadius: '12px', cursor: 'pointer', color: '#ef4444' }}>
+              <LogOut size={20} /> Sair
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Header */}
+      <div style={{ background: 'white', boxShadow: '0 1px 3px rgba(0,0,0,0.05)', borderBottom: '1px solid #f0f0f0', position: 'sticky', top: 0, zIndex: 10 }}>
+        <div style={{ maxWidth: '1280px', margin: '0 auto', padding: isMobile ? '12px 16px' : '16px 24px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              {rider?.photo_url ? (
+                <img src={rider.photo_url} alt={rider.name} style={{ width: isMobile ? '48px' : '56px', height: isMobile ? '48px' : '56px', borderRadius: '50%', objectFit: 'cover', border: '3px solid #f59e0b' }} />
+              ) : (
+                <div style={{ width: isMobile ? '48px' : '56px', height: isMobile ? '48px' : '56px', background: 'linear-gradient(135deg, #f59e0b, #ea580c)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <User size={isMobile ? 24 : 28} color="white" />
+                </div>
+              )}
+              <div>
+                <h1 style={{ fontSize: isMobile ? '18px' : '20px', fontWeight: 'bold', color: '#111827' }}>{rider?.name}</h1>
+                <p style={{ fontSize: '12px', color: '#6b7280' }}>{rider?.plate?.plate_number || 'Placa não definida'}</p>
+              </div>
+            </div>
+
+            {/* Desktop Actions */}
+            {!isMobile && (
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                <button onClick={() => setShowEditProfile(true)} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 16px', background: '#3b82f6', color: 'white', border: 'none', borderRadius: '30px', fontSize: '13px', fontWeight: 500, cursor: 'pointer' }}>
+                  <Edit size={14} /> Editar
+                </button>
+                {isNotificationSupported() && pushPermission === 'default' && (
+                  <button onClick={requestPushPermission} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 16px', background: '#8b5cf6', color: 'white', border: 'none', borderRadius: '30px', fontSize: '13px', fontWeight: 500, cursor: 'pointer' }}>
+                    <Bell size={14} /> Ativar Notif.
+                  </button>
+                )}
+                {isNotificationSupported() && pushPermission === 'granted' && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 16px', background: '#d1fae5', color: '#059669', borderRadius: '30px', fontSize: '12px' }}>
+                    <BellRing size={14} /> Notif. ativas
+                  </div>
+                )}
+                <div style={{ position: 'relative' }}>
+                  <button onClick={() => setShowNotifications(!showNotifications)} style={{ position: 'relative', padding: '8px', background: 'none', border: 'none', cursor: 'pointer', borderRadius: '50%' }}>
+                    <Bell size={20} color="#6b7280" />
+                    {unreadCount > 0 && <span style={{ position: 'absolute', top: '-4px', right: '-4px', background: '#ef4444', color: 'white', fontSize: '10px', borderRadius: '50%', width: '18px', height: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{unreadCount}</span>}
+                  </button>
+                  {showNotifications && (
+                    <div style={{ position: 'absolute', right: 0, top: '40px', width: '320px', background: 'white', borderRadius: '12px', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', zIndex: 20 }}>
+                      <div style={{ padding: '12px', borderBottom: '1px solid #f0f0f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <h3 style={{ fontWeight: 'bold', fontSize: '14px' }}>Notificações</h3>
+                        {unreadCount > 0 && <button onClick={markAllAsRead} style={{ fontSize: '11px', color: '#3b82f6', background: 'none', border: 'none', cursor: 'pointer' }}>Marcar todas</button>}
+                      </div>
+                      <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
+                        {notifications.length === 0 ? (
+                          <p style={{ padding: '20px', textAlign: 'center', color: '#9ca3af', fontSize: '13px' }}>Sem notificações</p>
+                        ) : (
+                          notifications.map((notif) => (
+                            <div key={notif.id} onClick={() => markNotificationAsRead(notif.id)} style={{ padding: '12px', borderBottom: '1px solid #f0f0f0', cursor: 'pointer', background: notif.is_read ? 'white' : '#eff6ff' }}>
+                              <div style={{ display: 'flex', gap: '10px' }}>
+                                {getNotificationIcon(notif.type)}
+                                <div style={{ flex: 1 }}>
+                                  <p style={{ fontWeight: 500, fontSize: '13px' }}>{notif.title}</p>
+                                  <p style={{ fontSize: '11px', color: '#6b7280', marginTop: '2px' }}>{notif.message}</p>
+                                  <p style={{ fontSize: '10px', color: '#9ca3af', marginTop: '4px' }}>{new Date(notif.created_at).toLocaleTimeString()}</p>
+                                </div>
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+                <button onClick={toggleOnline} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 20px', borderRadius: '30px', fontWeight: 600, fontSize: '13px', cursor: 'pointer', background: isOnline ? '#10b981' : '#9ca3af', color: 'white', border: 'none' }}>
+                  <Power size={14} /> {isOnline ? 'Online' : 'Offline'}
+                </button>
+                <button onClick={handleLogout} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 16px', background: '#ef4444', color: 'white', border: 'none', borderRadius: '30px', fontSize: '13px', fontWeight: 500, cursor: 'pointer' }}>
+                  <LogOut size={14} /> Sair
+                </button>
+              </div>
+            )}
+
+            {/* Mobile Menu Button */}
+            {isMobile && (
+              <button onClick={() => setMobileMenuOpen(true)} style={{ padding: '8px', background: 'none', border: 'none', cursor: 'pointer' }}>
+                <Menu size={24} color="#374151" />
+              </button>
+            )}
+          </div>
+
+          {/* Stats Cards */}
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(3, 1fr)' : 'repeat(3, 1fr)', gap: isMobile ? '8px' : '12px', marginTop: '16px' }}>
+            <div style={{ background: 'linear-gradient(135deg, #f59e0b, #ea580c)', borderRadius: '12px', padding: isMobile ? '10px' : '12px', color: 'white' }}>
+              <Wallet size={isMobile ? 16 : 20} style={{ marginBottom: '4px', opacity: 0.8 }} />
+              <p style={{ fontSize: isMobile ? '16px' : '18px', fontWeight: 'bold' }}>{stats.totalEarnings.toLocaleString()} Kz</p>
+              <p style={{ fontSize: '10px', opacity: 0.8 }}>Total ganho</p>
+            </div>
+            <div style={{ background: 'linear-gradient(135deg, #3b82f6, #1d4ed8)', borderRadius: '12px', padding: isMobile ? '10px' : '12px', color: 'white' }}>
+              <Navigation size={isMobile ? 16 : 20} style={{ marginBottom: '4px', opacity: 0.8 }} />
+              <p style={{ fontSize: isMobile ? '16px' : '18px', fontWeight: 'bold' }}>{stats.totalRides}</p>
+              <p style={{ fontSize: '10px', opacity: 0.8 }}>Corridas</p>
+            </div>
+            <div style={{ background: 'linear-gradient(135deg, #8b5cf6, #7c3aed)', borderRadius: '12px', padding: isMobile ? '10px' : '12px', color: 'white' }}>
+              <Star size={isMobile ? 16 : 20} style={{ marginBottom: '4px', opacity: 0.8 }} />
+              <p style={{ fontSize: isMobile ? '16px' : '18px', fontWeight: 'bold' }}>{stats.rating}</p>
+              <p style={{ fontSize: '10px', opacity: 0.8 }}>Avaliação</p>
             </div>
           </div>
         </div>
       </div>
 
-      <div className="p-4">
-        <div className="bg-white rounded-xl overflow-hidden shadow-lg">
-          <div style={{ height: '500px', width: '100%' }}>
-            <MapContainer center={[center.lat, center.lng]} zoom={13} style={{ height: '100%', width: '100%' }}>
-              <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution='&copy; OpenStreetMap contributors' />
-              {customerLocation && (
-                <Marker position={[customerLocation.lat, customerLocation.lng]}>
-                  <Popup>
-                    <div className="text-center">
-                      <strong>📍 Cliente</strong>
-                      <p>{selectedOrder.customer_name}</p>
-                      <p>{selectedOrder.pickup_address || 'Ponto de partida'}</p>
-                      <button 
-                        onClick={() => window.location.href = `tel:${selectedOrder.customer_phone}`}
-                        className="mt-2 bg-green-500 text-white px-3 py-1 rounded-lg text-sm"
-                      >
-                        <Phone className="w-3 h-3 inline mr-1" /> Ligar
-                      </button>
-                    </div>
-                  </Popup>
-                </Marker>
-              )}
-              {riderLocation && (
-                <Marker position={[riderLocation.lat, riderLocation.lng]}>
-                  <Popup>
-                    <div className="text-center">
-                      <strong>🏍️ Você está aqui</strong>
-                      <p>Rumo ao cliente</p>
-                      {distance && <p className="text-sm text-blue-600">Distância: {distance} km</p>}
-                    </div>
-                  </Popup>
-                </Marker>
-              )}
-            </MapContainer>
-          </div>
+      {/* Offline Alert */}
+      {!isOnline && activeTab === 'pending' && (
+        <div style={{ background: '#fef3c7', borderLeft: '4px solid #f59e0b', padding: '12px 16px', margin: '16px', borderRadius: '12px' }}>
+          <p style={{ color: '#92400e', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <BellOff size={16} /> Você está offline. Ative o modo online para receber pedidos.
+          </p>
         </div>
+      )}
 
-        <div className="mt-4 bg-white rounded-xl p-4 shadow">
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <p className="text-sm text-gray-500">Cliente</p>
-              <p className="font-medium">{selectedOrder.customer_name}</p>
-              <p className="text-sm text-gray-600">{selectedOrder.customer_phone}</p>
-            </div>
-            <div>
-              <p className="text-sm text-gray-500">Destino</p>
-              <p className="font-medium">{selectedOrder.dropoff_address || 'Não informado'}</p>
-            </div>
-          </div>
-          
-          {distance && (
-            <div className="mt-3 p-3 bg-blue-50 rounded-lg">
-              <p className="text-sm text-blue-700 flex items-center gap-2">
-                <Navigation className="w-4 h-4" />
-                Distância até o cliente: <strong>{distance} km</strong>
-              </p>
-            </div>
-          )}
-          
-          <div className="mt-3 pt-3 border-t flex gap-2">
-            <button 
-              onClick={() => window.open(`https://www.google.com/maps/dir/${riderLocation?.lat || -8.8383},${riderLocation?.lng || 13.2344}/${customerLocation?.lat || -8.8383},${customerLocation?.lng || 13.2344}`, '_blank')}
-              className="flex-1 bg-amber-500 text-white py-3 rounded-xl font-semibold flex items-center justify-center gap-2 hover:bg-amber-600 transition"
-            >
-              <Navigation className="w-5 h-5" /> Abrir no Google Maps
-            </button>
-            <button 
-              onClick={() => window.location.href = `tel:${selectedOrder.customer_phone}`}
-              className="flex-1 bg-green-500 text-white py-3 rounded-xl font-semibold flex items-center justify-center gap-2 hover:bg-green-600 transition"
-            >
-              <Phone className="w-5 h-5" /> Ligar Cliente
-            </button>
-          </div>
-        </div>
-        
-        {/* Botão para quando chegar ao destino */}
-        <div className="mt-4">
-          <button 
-            onClick={() => {
-              if (confirm(`✅ Confirma que chegou ao destino de ${selectedOrder.customer_name}?`)) {
-                completeOrder(selectedOrder)
-              }
-            }}
-            className="w-full bg-gradient-to-r from-green-500 to-emerald-600 text-white py-4 rounded-xl font-bold text-lg flex items-center justify-center gap-3 hover:from-green-600 hover:to-emerald-700 transition shadow-lg"
-          >
-            <CheckCircle className="w-6 h-6" />
-            CHEGUEI AO DESTINO - CONCLUIR CORRIDA
+      {/* Tabs */}
+      <div style={{ maxWidth: '1280px', margin: '0 auto', padding: isMobile ? '0 12px' : '0 24px', marginTop: '16px' }}>
+        <div style={{ display: 'flex', gap: '4px', borderBottom: '1px solid #e5e7eb' }}>
+          <button onClick={() => setActiveTab('pending')} style={{ padding: isMobile ? '10px 16px' : '12px 24px', border: 'none', background: 'none', cursor: 'pointer', fontWeight: 600, fontSize: isMobile ? '14px' : '15px', color: activeTab === 'pending' ? '#f59e0b' : '#6b7280', borderBottom: activeTab === 'pending' ? '2px solid #f59e0b' : 'none', display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <Phone size={isMobile ? 14 : 16} /> Pedidos {pendingOrders.length > 0 && <span style={{ background: '#fef3c7', color: '#d97706', padding: '2px 8px', borderRadius: '20px', fontSize: '11px', marginLeft: '4px' }}>{pendingOrders.length}</span>}
+          </button>
+          <button onClick={() => setActiveTab('history')} style={{ padding: isMobile ? '10px 16px' : '12px 24px', border: 'none', background: 'none', cursor: 'pointer', fontWeight: 600, fontSize: isMobile ? '14px' : '15px', color: activeTab === 'history' ? '#f59e0b' : '#6b7280', borderBottom: activeTab === 'history' ? '2px solid #f59e0b' : 'none', display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <History size={isMobile ? 14 : 16} /> Histórico
           </button>
         </div>
       </div>
-    </div>
-  )
-}
 
-  return (
-    <div className="min-h-screen bg-gray-100">
-      <div className="bg-white shadow-sm p-4 sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto">
-          <div className="flex justify-between items-center flex-wrap gap-3">
-            <div className="flex items-center gap-3">
-              {rider?.photo_url ? <img src={rider.photo_url} alt={rider.name} className="w-12 h-12 rounded-full object-cover border-2 border-amber-500" /> : <div className="w-12 h-12 bg-gradient-to-r from-amber-500 to-red-500 rounded-full flex items-center justify-center"><User className="w-6 h-6 text-white" /></div>}
-              <div><h1 className="text-xl font-bold text-gray-900">{rider?.name}</h1><p className="text-gray-600 text-sm">{rider?.plate?.plate_number || 'Placa não definida'}</p></div>
-            </div>
-            <div className="flex gap-2 flex-wrap">
-              <button onClick={() => setShowEditProfile(true)} className="flex items-center gap-2 px-4 py-2 rounded-full font-semibold transition bg-blue-500 text-white hover:bg-blue-600 shadow-md"><Edit className="w-4 h-4" /> Editar Perfil</button>
-              {isNotificationSupported() && pushPermission === 'default' && <button onClick={requestPushPermission} className="flex items-center gap-2 px-3 py-1.5 bg-blue-500 text-white text-sm rounded-full"><Bell className="w-4 h-4" /> Ativar Notificações</button>}
-              {isNotificationSupported() && pushPermission === 'granted' && <div className="flex items-center gap-2 text-xs text-green-600 bg-green-50 px-3 py-1.5 rounded-full"><BellRing className="w-4 h-4" /> Notificações ativas</div>}
-              <div className="relative">
-                <button onClick={() => setShowNotifications(!showNotifications)} className="relative p-2 hover:bg-gray-100 rounded-full"><Bell className="w-5 h-5 text-gray-600" />{unreadCount > 0 && <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">{unreadCount}</span>}</button>
-                {showNotifications && <div className="absolute right-0 top-12 w-80 bg-white rounded-xl shadow-lg border z-20"><div className="p-3 border-b flex justify-between items-center"><h3 className="font-semibold">Notificações</h3>{unreadCount > 0 && <button onClick={markAllAsRead} className="text-xs text-blue-500">Marcar todas como lidas</button>}</div><div className="max-h-96 overflow-y-auto">{notifications.length === 0 ? <p className="p-4 text-center text-gray-500">Sem notificações</p> : notifications.map((notif) => (<div key={notif.id} className={`p-3 border-b hover:bg-gray-50 cursor-pointer ${!notif.is_read ? 'bg-blue-50' : ''}`} onClick={() => markNotificationAsRead(notif.id)}><div className="flex items-start gap-2">{getNotificationIcon(notif.type)}<div className="flex-1"><p className="font-medium text-sm">{notif.title}</p><p className="text-xs text-gray-500">{notif.message}</p><p className="text-xs text-gray-400 mt-1">{new Date(notif.created_at).toLocaleTimeString()}</p></div>{!notif.is_read && <div className="w-2 h-2 bg-blue-500 rounded-full"></div>}</div></div>))}</div></div>}
-              </div>
-              <button onClick={toggleOnline} className={`flex items-center gap-2 px-4 py-2 rounded-full font-semibold shadow-md ${isOnline ? 'bg-green-500 text-white hover:bg-green-600' : 'bg-gray-300 text-gray-700 hover:bg-gray-400'}`}><Power className="w-4 h-4" /> {isOnline ? 'Online' : 'Offline'}</button>
-              <button onClick={handleLogout} className="flex items-center gap-2 px-4 py-2 rounded-full font-semibold bg-red-500 text-white hover:bg-red-600 shadow-md"><LogOut className="w-4 h-4" /> Sair</button>
-            </div>
-          </div>
-          <div className="grid grid-cols-3 gap-3 mt-4">
-            <div className="bg-gradient-to-r from-amber-500 to-orange-500 rounded-xl p-3 text-white"><Wallet className="w-5 h-5 mb-1 opacity-80" /><p className="text-lg font-bold">{stats.totalEarnings.toLocaleString()} Kz</p><p className="text-xs opacity-80">Total ganho</p></div>
-            <div className="bg-gradient-to-r from-blue-500 to-cyan-500 rounded-xl p-3 text-white"><Navigation className="w-5 h-5 mb-1 opacity-80" /><p className="text-lg font-bold">{stats.totalRides}</p><p className="text-xs opacity-80">Corridas</p></div>
-            <div className="bg-gradient-to-r from-purple-500 to-pink-500 rounded-xl p-3 text-white"><Star className="w-5 h-5 mb-1 opacity-80" /><p className="text-lg font-bold">{stats.rating}</p><p className="text-xs opacity-80">Avaliação</p></div>
-          </div>
-        </div>
-      </div>
-
-      {!isOnline && activeTab === 'pending' && <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 m-4 rounded"><p className="text-yellow-700"><BellOff className="w-4 h-4 inline mr-2" /> Você está offline. Ative o modo online para receber pedidos.</p></div>}
-
-      <div className="max-w-7xl mx-auto px-4 pt-4">
-        <div className="flex gap-2 border-b border-gray-200">
-          <button onClick={() => setActiveTab('pending')} className={`px-6 py-3 font-semibold flex items-center gap-2 ${activeTab === 'pending' ? 'text-amber-600 border-b-2 border-amber-600' : 'text-gray-600'}`}><Phone className="w-4 h-4" /> Pedidos {pendingOrders.length > 0 && <span className="bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full text-xs ml-1">{pendingOrders.length}</span>}</button>
-          <button onClick={() => setActiveTab('history')} className={`px-6 py-3 font-semibold flex items-center gap-2 ${activeTab === 'history' ? 'text-amber-600 border-b-2 border-amber-600' : 'text-gray-600'}`}><History className="w-4 h-4" /> Histórico</button>
-        </div>
-      </div>
-
-      <div className="max-w-7xl mx-auto p-4">
+      {/* Content */}
+      <div style={{ maxWidth: '1280px', margin: '0 auto', padding: isMobile ? '16px' : '24px' }}>
         {activeTab === 'pending' ? (
           pendingOrders.length === 0 ? (
-            <div className="bg-white rounded-xl p-12 text-center text-gray-500"><Navigation className="w-16 h-16 mx-auto mb-4 text-gray-400" /><p className="text-lg font-medium">Nenhum pedido no momento</p><p className="text-sm">Aguardando clientes solicitarem corrida...</p></div>
+            <div style={{ background: 'white', borderRadius: '20px', padding: isMobile ? '40px 20px' : '60px', textAlign: 'center', border: '1px solid #f0f0f0' }}>
+              <Navigation size={isMobile ? 48 : 64} style={{ margin: '0 auto 16px', color: '#d1d5db' }} />
+              <p style={{ fontSize: isMobile ? '16px' : '18px', fontWeight: 500, color: '#6b7280' }}>Nenhum pedido no momento</p>
+              <p style={{ fontSize: '13px', color: '#9ca3af', marginTop: '8px' }}>Aguardando clientes solicitarem corrida...</p>
+            </div>
           ) : (
-            <div className="space-y-4">{pendingOrders.map((order) => (<div key={order.id} className="bg-white rounded-xl p-5 shadow-md"><div className="flex justify-between items-start mb-4"><div><p className="font-semibold text-lg">{order.customer_name || 'Cliente'}</p><p className="text-gray-500 text-sm"><Phone className="w-3 h-3 inline mr-1" />{order.customer_phone || 'Sem telefone'}</p></div><div className="bg-amber-100 text-amber-700 px-3 py-1 rounded-full text-sm font-medium">{order.price?.toLocaleString()} Kz</div></div><div className="space-y-2 mb-4"><p className="flex items-start gap-2 text-sm"><MapPin className="w-4 h-4 mt-0.5 text-green-600" /><span><strong>Origem:</strong> {order.pickup_address || 'Não informado'}</span></p><p className="flex items-start gap-2 text-sm"><MapPin className="w-4 h-4 mt-0.5 text-red-600" /><span><strong>Destino:</strong> {order.dropoff_address || 'Não informado'}</span></p></div><div className="flex gap-3"><button onClick={() => acceptOrder(order)} disabled={!isOnline} className="flex-1 bg-amber-500 text-white py-3 rounded-xl font-semibold hover:bg-amber-600 flex items-center justify-center gap-2"><CheckCircle className="w-5 h-5" /> Aceitar</button><button onClick={() => cancelOrder(order)} className="flex-1 bg-red-500 text-white py-3 rounded-xl font-semibold hover:bg-red-600 flex items-center justify-center gap-2"><XCircle className="w-5 h-5" /> Recusar</button></div></div>))}</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              {pendingOrders.map((order) => (
+                <div key={order.id} style={{ background: 'white', borderRadius: '20px', padding: '20px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)', border: '1px solid #f0f0f0' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px', flexWrap: 'wrap', gap: '8px' }}>
+                    <div>
+                      <p style={{ fontSize: '18px', fontWeight: 'bold', color: '#111827' }}>{order.customer_name || 'Cliente'}</p>
+                      <p style={{ fontSize: '13px', color: '#6b7280', display: 'flex', alignItems: 'center', gap: '4px', marginTop: '4px' }}>
+                        <Phone size={12} /> {order.customer_phone || 'Sem telefone'}
+                      </p>
+                    </div>
+                    <div style={{ background: '#fef3c7', color: '#d97706', padding: '6px 14px', borderRadius: '30px', fontWeight: 'bold', fontSize: '16px' }}>
+                      {order.price?.toLocaleString()} Kz
+                    </div>
+                  </div>
+                  
+                  <div style={{ marginBottom: '20px', background: '#f9fafb', padding: '12px', borderRadius: '12px' }}>
+                    <p style={{ display: 'flex', gap: '8px', fontSize: '13px', marginBottom: '8px' }}>
+                      <MapPin size={14} color="#10b981" style={{ flexShrink: 0 }} />
+                      <span><strong>Origem:</strong> {order.pickup_address || 'Não informado'}</span>
+                    </p>
+                    <p style={{ display: 'flex', gap: '8px', fontSize: '13px' }}>
+                      <MapPin size={14} color="#ef4444" style={{ flexShrink: 0 }} />
+                      <span><strong>Destino:</strong> {order.dropoff_address || 'Não informado'}</span>
+                    </p>
+                  </div>
+                  
+                  <div style={{ display: 'flex', gap: '12px' }}>
+                    <button onClick={() => acceptOrder(order)} disabled={!isOnline} style={{ flex: 1, background: isOnline ? 'linear-gradient(135deg, #f59e0b, #ea580c)' : '#d1d5db', color: 'white', padding: '14px', border: 'none', borderRadius: '12px', fontWeight: 'bold', cursor: isOnline ? 'pointer' : 'not-allowed', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                      <CheckCircle size={18} /> Aceitar
+                    </button>
+                    <button onClick={() => cancelOrder(order)} style={{ flex: 1, background: '#ef4444', color: 'white', padding: '14px', border: 'none', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                      <XCircle size={18} /> Recusar
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
           )
         ) : (
           completedOrders.length === 0 ? (
-            <div className="bg-white rounded-xl p-12 text-center text-gray-500"><History className="w-16 h-16 mx-auto mb-4 text-gray-400" /><p className="text-lg font-medium">Nenhum pedido no histórico</p><p className="text-sm">Os pedidos aceitos aparecerão aqui</p></div>
+            <div style={{ background: 'white', borderRadius: '20px', padding: isMobile ? '40px 20px' : '60px', textAlign: 'center', border: '1px solid #f0f0f0' }}>
+              <History size={isMobile ? 48 : 64} style={{ margin: '0 auto 16px', color: '#d1d5db' }} />
+              <p style={{ fontSize: isMobile ? '16px' : '18px', fontWeight: 500, color: '#6b7280' }}>Nenhum pedido no histórico</p>
+              <p style={{ fontSize: '13px', color: '#9ca3af', marginTop: '8px' }}>Os pedidos aceitos aparecerão aqui</p>
+            </div>
           ) : (
-            <div className="space-y-4">{completedOrders.map((order) => (<div key={order.id} className="bg-white rounded-xl p-5 shadow-md"><div className="flex justify-between items-start mb-4"><div><p className="font-semibold text-lg">{order.customer_name || 'Cliente'}</p><p className="text-gray-500 text-sm">{order.customer_phone || 'Sem telefone'}</p></div><div className="text-right">{getStatusBadge(order.status)}<p className="text-sm font-semibold mt-1">{order.price?.toLocaleString()} Kz</p></div></div><div className="space-y-2 mb-4"><p className="flex items-start gap-2 text-sm"><MapPin className="w-4 h-4 mt-0.5 text-green-600" /><span><strong>Origem:</strong> {order.pickup_address || 'Não informado'}</span></p><p className="flex items-start gap-2 text-sm"><MapPin className="w-4 h-4 mt-0.5 text-red-600" /><span><strong>Destino:</strong> {order.dropoff_address || 'Não informado'}</span></p></div><div className="text-xs text-gray-400 border-t pt-3"><span>Solicitado: {new Date(order.created_at).toLocaleString()}</span></div>{order.status === 'accepted' && <button onClick={() => completeOrder(order)} className="w-full mt-4 bg-green-500 text-white py-2.5 rounded-xl font-semibold hover:bg-green-600 flex items-center justify-center gap-2"><CheckSquare className="w-4 h-4" /> Confirmar Conclusão</button>}</div>))}</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              {completedOrders.map((order) => (
+                <div key={order.id} style={{ background: 'white', borderRadius: '20px', padding: '20px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)', border: '1px solid #f0f0f0' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px', flexWrap: 'wrap', gap: '8px' }}>
+                    <div>
+                      <p style={{ fontSize: '16px', fontWeight: 'bold', color: '#111827' }}>{order.customer_name || 'Cliente'}</p>
+                      <p style={{ fontSize: '12px', color: '#6b7280', marginTop: '4px' }}>{order.customer_phone || 'Sem telefone'}</p>
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      {getStatusBadge(order.status)}
+                      <p style={{ fontSize: '14px', fontWeight: 'bold', color: '#111827', marginTop: '8px' }}>{order.price?.toLocaleString()} Kz</p>
+                    </div>
+                  </div>
+                  
+                  <div style={{ marginBottom: '16px', background: '#f9fafb', padding: '12px', borderRadius: '12px' }}>
+                    <p style={{ display: 'flex', gap: '8px', fontSize: '12px', marginBottom: '6px' }}>
+                      <MapPin size={12} color="#10b981" style={{ flexShrink: 0 }} />
+                      <span><strong>Origem:</strong> {order.pickup_address || 'Não informado'}</span>
+                    </p>
+                    <p style={{ display: 'flex', gap: '8px', fontSize: '12px' }}>
+                      <MapPin size={12} color="#ef4444" style={{ flexShrink: 0 }} />
+                      <span><strong>Destino:</strong> {order.dropoff_address || 'Não informado'}</span>
+                    </p>
+                  </div>
+                  
+                  <div style={{ fontSize: '11px', color: '#9ca3af', borderTop: '1px solid #f0f0f0', paddingTop: '12px', marginBottom: order.status === 'accepted' ? '0' : '0' }}>
+                    📅 {new Date(order.created_at).toLocaleString()}
+                  </div>
+                  
+                  {order.status === 'accepted' && (
+                    <button onClick={() => completeOrder(order)} style={{ width: '100%', marginTop: '16px', background: '#10b981', color: 'white', padding: '12px', border: 'none', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                      <CheckSquare size={16} /> Confirmar Conclusão
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
           )
         )}
       </div>
@@ -511,34 +717,33 @@ if (showMap && selectedOrder) {
           left: 0,
           right: 0,
           bottom: 0,
-          backgroundColor: 'rgba(0,0,0,0.5)',
+          backgroundColor: 'rgba(0,0,0,0.6)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
           zIndex: 9999,
-          padding: '1rem'
+          padding: '16px',
+          backdropFilter: 'blur(4px)'
         }}>
           <div style={{
             backgroundColor: 'white',
-            borderRadius: '1rem',
-            maxWidth: '28rem',
+            borderRadius: '24px',
+            maxWidth: '500px',
             width: '100%',
             maxHeight: '90vh',
             overflow: 'auto'
           }}>
             <div style={{
-              background: 'linear-gradient(135deg, #f59e0b, #ef4444)',
-              padding: '1rem',
-              borderRadius: '1rem 1rem 0 0',
+              background: 'linear-gradient(135deg, #f59e0b, #ea580c)',
+              padding: '20px',
+              borderRadius: '24px 24px 0 0',
               display: 'flex',
               justifyContent: 'space-between',
               alignItems: 'center',
-              color: 'white',
-              position: 'sticky',
-              top: 0
+              color: 'white'
             }}>
-              <h3 style={{ fontWeight: 'bold', fontSize: '1.125rem' }}>Editar Perfil</h3>
-              <button onClick={() => setShowEditProfile(false)} style={{ background: 'none', border: 'none', color: 'white', fontSize: '1.5rem', cursor: 'pointer', lineHeight: 1 }}>&times;</button>
+              <h3 style={{ fontWeight: 'bold', fontSize: '18px' }}>Editar Perfil</h3>
+              <button onClick={() => setShowEditProfile(false)} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white', width: '32px', height: '32px', borderRadius: '50%', cursor: 'pointer', fontSize: '20px' }}>✕</button>
             </div>
             
             <form onSubmit={async (e) => {
@@ -582,40 +787,55 @@ if (showMap && selectedOrder) {
               } else {
                 alert('Erro ao atualizar: ' + error.message)
               }
-            }} style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            }} style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                 <div style={{ position: 'relative' }}>
-                  <img src={rider?.photo_url || 'https://via.placeholder.com/96'} alt="Foto do perfil" style={{ width: '6rem', height: '6rem', borderRadius: '9999px', objectFit: 'cover', border: '4px solid #fcd34d' }} />
-                  <label style={{ position: 'absolute', bottom: 0, right: 0, backgroundColor: '#f59e0b', borderRadius: '9999px', padding: '0.375rem', cursor: 'pointer' }}>
+                  <img src={rider?.photo_url || 'https://via.placeholder.com/96'} alt="Foto" style={{ width: '96px', height: '96px', borderRadius: '50%', objectFit: 'cover', border: '4px solid #fcd34d' }} />
+                  <label style={{ position: 'absolute', bottom: 0, right: 0, background: '#f59e0b', borderRadius: '50%', padding: '6px', cursor: 'pointer' }}>
                     <Camera size={16} color="white" />
                     <input type="file" name="photo" accept="image/*" style={{ display: 'none' }} />
                   </label>
                 </div>
-                <p style={{ fontSize: '0.75rem', color: '#9ca3af', marginTop: '0.5rem' }}>Clique na câmera para trocar a foto</p>
+                <p style={{ fontSize: '11px', color: '#9ca3af', marginTop: '8px' }}>Clique na câmera para trocar a foto</p>
               </div>
               
               <div>
-                <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: '500', marginBottom: '0.25rem' }}>Nome</label>
-                <input type="text" name="name" defaultValue={rider.name} required style={{ width: '100%', padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} />
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, marginBottom: '6px' }}>Nome</label>
+                <input type="text" name="name" defaultValue={rider.name} required style={{ width: '100%', padding: '12px', border: '1px solid #e5e7eb', borderRadius: '12px', fontSize: '14px' }} />
               </div>
               <div>
-                <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: '500', marginBottom: '0.25rem' }}>Telefone</label>
-                <input type="tel" name="phone" defaultValue={rider.phone} required style={{ width: '100%', padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} />
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, marginBottom: '6px' }}>Telefone</label>
+                <input type="tel" name="phone" defaultValue={rider.phone} required style={{ width: '100%', padding: '12px', border: '1px solid #e5e7eb', borderRadius: '12px', fontSize: '14px' }} />
               </div>
               <div>
-                <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: '500', marginBottom: '0.25rem' }}>BI</label>
-                <input type="text" name="bi" defaultValue={rider.bi} required style={{ width: '100%', padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} />
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, marginBottom: '6px' }}>BI</label>
+                <input type="text" name="bi" defaultValue={rider.bi} required style={{ width: '100%', padding: '12px', border: '1px solid #e5e7eb', borderRadius: '12px', fontSize: '14px' }} />
               </div>
               <div>
-                <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: '500', marginBottom: '0.25rem' }}>Nova Senha (opcional)</label>
-                <input type="password" name="password" style={{ width: '100%', padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} placeholder="Deixe em branco para manter a atual" />
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, marginBottom: '6px' }}>Nova Senha (opcional)</label>
+                <input type="password" name="password" placeholder="Deixe em branco para manter" style={{ width: '100%', padding: '12px', border: '1px solid #e5e7eb', borderRadius: '12px', fontSize: '14px' }} />
               </div>
               
-              <button type="submit" style={{ width: '100%', backgroundColor: '#f59e0b', color: 'white', padding: '0.75rem', borderRadius: '0.5rem', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}>Salvar Alterações</button>
+              <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
+                <button type="button" onClick={() => setShowEditProfile(false)} style={{ flex: 1, padding: '12px', border: '1px solid #e5e7eb', borderRadius: '12px', cursor: 'pointer', background: 'white', fontWeight: 500 }}>Cancelar</button>
+                <button type="submit" style={{ flex: 1, padding: '12px', background: 'linear-gradient(135deg, #f59e0b, #ea580c)', color: 'white', border: 'none', borderRadius: '12px', cursor: 'pointer', fontWeight: 'bold' }}>Salvar</button>
+              </div>
             </form>
           </div>
         </div>
       )}
+
+      <style jsx>{`
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+        @media (max-width: 768px) {
+          input, button, select {
+            font-size: 16px !important;
+          }
+        }
+      `}</style>
     </div>
   )
 }
