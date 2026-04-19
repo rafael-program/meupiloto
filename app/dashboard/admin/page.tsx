@@ -7,7 +7,8 @@ import {
   Plus, Edit, Trash2, Search, AlertCircle, Menu, X, 
   UserCog, Store, ClipboardList, RefreshCw, Phone,
   DollarSign, Calendar, CheckCircle, XCircle, Building2,
-  UserPlus, UserCheck, UserX, Link2, Link2Off
+  UserPlus, UserCheck, UserX, Link2, Link2Off, 
+  Eye, EyeOff, Download, Filter, Snowflake, Sun
 } from 'lucide-react'
 
 // ============================================
@@ -58,8 +59,25 @@ type Rider = {
   plate_id: string | null
   is_online: boolean
   status: string
+  is_frozen: boolean
+  frozen_reason: string | null
+  frozen_at: string | null
   created_at: string
   plate?: { plate_number: string }
+}
+
+type RiderPayment = {
+  id: string
+  rider_id: string
+  amount: number
+  payment_method: string
+  status: string
+  proof_url: string
+  transaction_id: string
+  payment_date: string
+  approved_by: string | null
+  approved_at: string | null
+  created_at: string
 }
 
 type Order = {
@@ -89,13 +107,21 @@ type Operador = {
   created_by: string | null
 }
 
+type Admin = {
+  id: string
+  name: string
+  email: string
+  password: string
+  created_at: string
+}
+
 // ============================================
 // COMPONENTE PRINCIPAL
 // ============================================
 
 export default function AdminDashboard() {
   const router = useRouter()
-  const [admin, setAdmin] = useState<any>(null)
+  const [admin, setAdmin] = useState<Admin | null>(null)
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [isMobile, setIsMobile] = useState(false)
   const [associations, setAssociations] = useState<Association[]>([])
@@ -104,17 +130,24 @@ export default function AdminDashboard() {
   const [riders, setRiders] = useState<Rider[]>([])
   const [orders, setOrders] = useState<Order[]>([])
   const [operadores, setOperadores] = useState<Operador[]>([])
+  const [riderPayments, setRiderPayments] = useState<RiderPayment[]>([])
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<string>('dashboard')
   const [searchTerm, setSearchTerm] = useState('')
+  const [riderFilter, setRiderFilter] = useState<string>('all')
   const [showAddAssociation, setShowAddAssociation] = useState(false)
   const [showAddBoss, setShowAddBoss] = useState(false)
   const [showAddPlate, setShowAddPlate] = useState(false)
   const [showAddOperador, setShowAddOperador] = useState(false)
-  const [showAssignPlates, setShowAssignPlates] = useState(false)
+  const [showAddRider, setShowAddRider] = useState(false)
+  const [showPaymentModal, setShowPaymentModal] = useState(false)
+  const [selectedRider, setSelectedRider] = useState<Rider | null>(null)
+  const [selectedPayment, setSelectedPayment] = useState<RiderPayment | null>(null)
+  const [newRiderPlateId, setNewRiderPlateId] = useState<string>('')
   const [selectedOperador, setSelectedOperador] = useState<string>('')
   const [selectedPlates, setSelectedPlates] = useState<Set<string>>(new Set())
   const [assignSearchTerm, setAssignSearchTerm] = useState('')
+  const [paymentFilter, setPaymentFilter] = useState<string>('pending')
   const [assignLoading, setAssignLoading] = useState(false)
   const [assignMessage, setAssignMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [stats, setStats] = useState({
@@ -128,7 +161,8 @@ export default function AdminDashboard() {
     activePlates: 0,
     totalOperadores: 0,
     activeOperadores: 0,
-    assignedPlates: 0
+    assignedPlates: 0,
+    pendingPayments: 0
   })
 
   useEffect(() => {
@@ -148,7 +182,7 @@ export default function AdminDashboard() {
     }
     loadAdmin(adminId)
     loadAllData()
-  }, [])
+  }, [router])
 
   const loadAdmin = async (adminId: string) => {
     const { data } = await supabase.from('admins').select('*').eq('id', adminId).single()
@@ -188,12 +222,19 @@ export default function AdminDashboard() {
     const { data: operadoresData } = await supabase.from('operadores').select('*').order('created_at', { ascending: false })
     setOperadores(operadoresData || [])
 
+    const { data: paymentsData } = await supabase
+      .from('rider_payments')
+      .select('*')
+      .order('payment_date', { ascending: false })
+    setRiderPayments(paymentsData || [])
+
     const completedOrders = ordersData?.filter(o => o.status === 'completed') || []
     const totalRevenue = completedOrders.reduce((sum, o) => sum + (o.price || 0), 0)
     const onlineRiders = ridersData?.filter(r => r.is_online === true) || []
     const activePlates = platesData?.filter(p => p.is_active === true) || []
     const activeOperadores = operadoresData?.filter(o => o.is_active === true) || []
     const assignedPlates = platesData?.filter(p => p.operador_id) || []
+    const pendingPayments = paymentsData?.filter(p => p.status === 'pending') || []
 
     setStats({
       totalAssociations: associationsData?.length || 0,
@@ -206,12 +247,108 @@ export default function AdminDashboard() {
       activePlates: activePlates.length,
       totalOperadores: operadoresData?.length || 0,
       activeOperadores: activeOperadores.length,
-      assignedPlates: assignedPlates.length
+      assignedPlates: assignedPlates.length,
+      pendingPayments: pendingPayments.length
     })
 
     setLoading(false)
   }
 
+  // Funções de Pagamento
+  const approvePayment = async (paymentId: string) => {
+    if (!confirm('Aprovar este pagamento?')) return
+    
+    const adminId = localStorage.getItem('admin_id')
+    const { error } = await supabase
+      .from('rider_payments')
+      .update({
+        status: 'approved',
+        approved_by: adminId,
+        approved_at: new Date().toISOString()
+      })
+      .eq('id', paymentId)
+    
+    if (!error) {
+      alert('✅ Pagamento aprovado com sucesso!')
+      loadAllData()
+      setSelectedPayment(null)
+      setShowPaymentModal(false)
+    } else {
+      alert('Erro ao aprovar pagamento: ' + error.message)
+    }
+  }
+
+  const rejectPayment = async (paymentId: string) => {
+    if (!confirm('Rejeitar este pagamento? O motoqueiro será notificado.')) return
+    
+    const { error } = await supabase
+      .from('rider_payments')
+      .update({ status: 'rejected' })
+      .eq('id', paymentId)
+    
+    if (!error) {
+      alert('❌ Pagamento rejeitado!')
+      loadAllData()
+      setSelectedPayment(null)
+      setShowPaymentModal(false)
+    } else {
+      alert('Erro ao rejeitar pagamento: ' + error.message)
+    }
+  }
+
+  // Funções de Congelamento de Motoqueiro
+  const toggleFreezeRider = async (riderId: string, currentStatus: boolean, reason?: string) => {
+    const action = !currentStatus ? 'congelar' : 'descongelar'
+    const message = !currentStatus 
+      ? `Deseja congelar este motoqueiro?${reason ? `\nMotivo: ${reason}` : ''}`
+      : `Deseja descongelar este motoqueiro?`
+    
+    if (!confirm(message)) return
+    
+    const updateData: any = {
+      is_frozen: !currentStatus,
+      frozen_at: !currentStatus ? new Date().toISOString() : null,
+      frozen_reason: !currentStatus ? (reason || 'Administrador') : null
+    }
+    
+    const { error } = await supabase
+      .from('riders')
+      .update(updateData)
+      .eq('id', riderId)
+    
+    if (!error) {
+      alert(`✅ Motoqueiro ${!currentStatus ? 'congelado' : 'descongelado'} com sucesso!`)
+      loadAllData()
+    } else {
+      alert('Erro ao alterar status: ' + error.message)
+    }
+  }
+
+  // Funções de Criação de Motoqueiro
+  const createRider = async (formData: any) => {
+    const { error } = await supabase.from('riders').insert({
+      name: formData.name,
+      phone: formData.phone,
+      bi: formData.bi,
+      password_hash: formData.password || 'senha123',
+      plate_id: formData.plate_id || null,
+      status: 'active',
+      is_online: false,
+      is_frozen: false,
+      created_at: new Date().toISOString()
+    })
+    
+    if (!error) {
+      alert('✅ Motoqueiro criado com sucesso!')
+      loadAllData()
+      return true
+    } else {
+      alert('Erro ao criar motoqueiro: ' + error.message)
+      return false
+    }
+  }
+
+  // Funções de Atribuição de Placas
   const handleAssignPlates = async () => {
     if (!selectedOperador || selectedPlates.size === 0) return
     
@@ -219,33 +356,23 @@ export default function AdminDashboard() {
     setAssignMessage(null)
     
     const results = []
-    
     for (const plateId of selectedPlates) {
       const { error } = await supabase
         .from('plates')
-        .update({ 
-          operador_id: selectedOperador,
-          assigned_at: new Date().toISOString()
-        })
+        .update({ operador_id: selectedOperador, assigned_at: new Date().toISOString() })
         .eq('id', plateId)
-      
       results.push(!error)
     }
     
     const successCount = results.filter(r => r).length
-    
     if (successCount > 0) {
-      setAssignMessage({ 
-        type: 'success', 
-        text: `${successCount} placa(s) atribuída(s) com sucesso!` 
-      })
+      setAssignMessage({ type: 'success', text: `${successCount} placa(s) atribuída(s) com sucesso!` })
       setSelectedPlates(new Set())
       loadAllData()
       setTimeout(() => setAssignMessage(null), 3000)
     } else {
       setAssignMessage({ type: 'error', text: 'Erro ao atribuir placas' })
     }
-    
     setAssignLoading(false)
   }
 
@@ -319,25 +446,38 @@ export default function AdminDashboard() {
 
   const filteredPlates = plates.filter(p => 
     p.plate_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    p.boss?.name?.toLowerCase().includes(searchTerm.toLowerCase())
+    (p.boss?.name?.toLowerCase() || '').includes(searchTerm.toLowerCase())
   )
 
-  const filteredRiders = riders.filter(r => 
-    r.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    r.phone.includes(searchTerm) || r.bi.toLowerCase().includes(searchTerm.toLowerCase())
-  )
+  const filteredRiders = riders.filter(r => {
+    const matchesSearch = r.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      r.phone.includes(searchTerm) || r.bi.toLowerCase().includes(searchTerm.toLowerCase())
+    
+    if (!matchesSearch) return false
+    
+    switch (riderFilter) {
+      case 'active': return r.status === 'active' && !r.is_frozen
+      case 'frozen': return r.is_frozen === true
+      case 'pending_payment': return r.status === 'active' && !r.is_frozen
+      default: return true
+    }
+  })
 
   const filteredOrders = orders.filter(o => 
-    o.customer_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (o.customer_name?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
     o.customer_phone.includes(searchTerm) ||
-    o.rider?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    o.rider?.phone?.includes(searchTerm)
+    (o.rider?.name?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
+    (o.rider?.phone || '').includes(searchTerm)
   )
 
   const filteredOperadores = operadores.filter(op => 
     op.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     op.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
     op.phone.includes(searchTerm)
+  )
+
+  const filteredPayments = riderPayments.filter(p => 
+    p.status === 'pending'
   )
 
   const selectedOperadorInfo = operadores.find(o => o.id === selectedOperador)
@@ -398,11 +538,19 @@ export default function AdminDashboard() {
     buttonCall: { backgroundColor: '#10b981', color: 'white', padding: '0.25rem 0.75rem', borderRadius: '0.5rem', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.75rem' },
     badgeActive: { backgroundColor: '#d1fae5', color: '#065f46', padding: '0.25rem 0.5rem', borderRadius: '9999px', fontSize: '0.75rem' },
     badgeInactive: { backgroundColor: '#fee2e2', color: '#991b1b', padding: '0.25rem 0.5rem', borderRadius: '9999px', fontSize: '0.75rem' },
+    badgeWarning: { backgroundColor: '#fef3c7', color: '#d97706', padding: '0.25rem 0.5rem', borderRadius: '9999px', fontSize: '0.75rem' },
     input: { padding: '0.5rem', border: '1px solid #d1d5db', borderRadius: '0.5rem', outline: 'none' }
   }
 
   return (
     <div style={styles.container}>
+      <style>{`
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+      `}</style>
+      
       {/* Overlay para mobile */}
       <div style={styles.sidebarOverlay} onClick={() => setSidebarOpen(false)} />
       
@@ -424,6 +572,7 @@ export default function AdminDashboard() {
               { id: 'dashboard', label: 'Dashboard', icon: TrendingUp },
               { id: 'associations', label: 'Associações', icon: Building2 },
               { id: 'operadores', label: 'Operadores', icon: Users },
+              { id: 'payments', label: 'Pagamentos', icon: CreditCard, badge: stats.pendingPayments },
               { id: 'assign', label: 'Atribuir Placas', icon: Link2 },
               { id: 'orders', label: 'Pedidos', icon: ClipboardList },
               { id: 'plates', label: 'Placas', icon: Store },
@@ -437,14 +586,21 @@ export default function AdminDashboard() {
                   if (isMobile) setSidebarOpen(false)
                 }}
                 style={{
-                  width: '100%', display: 'flex', alignItems: 'center', gap: '0.75rem',
+                  width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                   padding: '0.75rem 1rem', background: activeTab === item.id ? '#4f46e5' : 'transparent',
                   color: activeTab === item.id ? 'white' : '#9ca3af', border: 'none', cursor: 'pointer',
                   transition: 'all 0.2s'
                 }}
               >
-                <item.icon size={20} />
-                {sidebarOpen && <span style={{ fontSize: '0.875rem' }}>{item.label}</span>}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                  <item.icon size={20} />
+                  {sidebarOpen && <span style={{ fontSize: '0.875rem' }}>{item.label}</span>}
+                </div>
+                {sidebarOpen && item.badge && item.badge > 0 && (
+                  <span style={{ backgroundColor: '#ef4444', color: 'white', padding: '0.125rem 0.5rem', borderRadius: '9999px', fontSize: '0.75rem' }}>
+                    {item.badge}
+                  </span>
+                )}
               </button>
             ))}
           </nav>
@@ -482,6 +638,7 @@ export default function AdminDashboard() {
                   {activeTab === 'dashboard' && 'Dashboard'}
                   {activeTab === 'associations' && 'Associações'}
                   {activeTab === 'operadores' && 'Operadores'}
+                  {activeTab === 'payments' && 'Pagamentos Pendentes'}
                   {activeTab === 'assign' && 'Atribuir Placas a Operadores'}
                   {activeTab === 'orders' && 'Pedidos'}
                   {activeTab === 'plates' && 'Placas'}
@@ -503,13 +660,14 @@ export default function AdminDashboard() {
                     style={{ padding: '0.5rem 0.5rem 0.5rem 2rem', border: '1px solid #e5e7eb', borderRadius: '0.5rem', width: isMobile ? '100%' : '16rem' }}
                   />
                 </div>
-                {(activeTab === 'associations' || activeTab === 'bosses' || activeTab === 'plates' || activeTab === 'operadores') && (
+                {(activeTab === 'associations' || activeTab === 'bosses' || activeTab === 'plates' || activeTab === 'operadores' || activeTab === 'riders') && (
                   <button 
                     onClick={() => {
                       if (activeTab === 'associations') setShowAddAssociation(true)
                       else if (activeTab === 'bosses') setShowAddBoss(true)
                       else if (activeTab === 'plates') setShowAddPlate(true)
                       else if (activeTab === 'operadores') setShowAddOperador(true)
+                      else if (activeTab === 'riders') setShowAddRider(true)
                     }} 
                     style={styles.buttonPrimary}
                   >
@@ -535,6 +693,10 @@ export default function AdminDashboard() {
                 <p style={{ fontSize: '0.75rem', opacity: 0.8 }}>Receita Total</p>
                 <p style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>{stats.totalRevenue.toLocaleString()} Kz</p>
               </div>
+              <div style={{ ...styles.card, background: 'linear-gradient(135deg, #f59e0b, #ea580c)', color: 'white' }}>
+                <p style={{ fontSize: '0.75rem', opacity: 0.8 }}>Pagamentos Pendentes</p>
+                <p style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>{stats.pendingPayments}</p>
+              </div>
             </div>
           </div>
         )}
@@ -559,24 +721,12 @@ export default function AdminDashboard() {
                       <td style={styles.td}>{assoc.name}</td>
                       <td style={styles.td}>{assoc.email}</td>
                       <td style={styles.td}>{assoc.phone}</td>
-                      <td style={styles.td}>
-                        <span style={assoc.is_active ? styles.badgeActive : styles.badgeInactive}>
-                          {assoc.is_active ? 'Ativo' : 'Inativo'}
-                        </span>
-                      </td>
-                      <td style={styles.td}>
-                        <button onClick={() => deleteItem('associations', assoc.id, assoc.name)} style={styles.buttonDanger}>
-                          <Trash2 size={16} />
-                        </button>
-                      </td>
+                      <td style={styles.td}><span style={assoc.is_active ? styles.badgeActive : styles.badgeInactive}>{assoc.is_active ? 'Ativo' : 'Inativo'}</span></td>
+                      <td style={styles.td}><button onClick={() => deleteItem('associations', assoc.id, assoc.name)} style={styles.buttonDanger}><Trash2 size={16} /></button></td>
                     </tr>
                   ))}
                   {filteredAssociations.length === 0 && (
-                    <tr>
-                      <td colSpan={5} style={{ padding: '2rem', textAlign: 'center', color: '#6b7280' }}>
-                        Nenhuma associação encontrada
-                      </td>
-                    </tr>
+                    <tr><td colSpan={5} style={{ padding: '2rem', textAlign: 'center', color: '#6b7280' }}>Nenhuma associação encontrada</td></tr>
                   )}
                 </tbody>
               </table>
@@ -616,27 +766,17 @@ export default function AdminDashboard() {
                         <td style={styles.td}>
                           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
                             {opPlates.length > 0 ? opPlates.map(p => (
-                              <span key={p.id} style={{ backgroundColor: '#fef3c7', color: '#d97706', padding: '2px 6px', borderRadius: '12px', fontSize: '11px' }}>
-                                {p.plate_number}
-                              </span>
+                              <span key={p.id} style={{ backgroundColor: '#fef3c7', color: '#d97706', padding: '2px 6px', borderRadius: '12px', fontSize: '11px' }}>{p.plate_number}</span>
                             )) : <span style={{ color: '#9ca3af', fontSize: '12px' }}>Nenhuma</span>}
                           </div>
                         </td>
                         <td style={styles.td}>{new Date(op.created_at).toLocaleDateString('pt-AO')}</td>
-                        <td style={styles.td}>
-                          <button onClick={() => deleteItem('operadores', op.id, op.name)} style={styles.buttonDanger}>
-                            <Trash2 size={16} />
-                          </button>
-                        </td>
+                        <td style={styles.td}><button onClick={() => deleteItem('operadores', op.id, op.name)} style={styles.buttonDanger}><Trash2 size={16} /></button></td>
                       </tr>
                     )
                   })}
                   {filteredOperadores.length === 0 && (
-                    <tr>
-                      <td colSpan={7} style={{ padding: '2rem', textAlign: 'center', color: '#6b7280' }}>
-                        Nenhum operador encontrado
-                      </td>
-                    </tr>
+                    <tr><td colSpan={7} style={{ padding: '2rem', textAlign: 'center', color: '#6b7280' }}>Nenhum operador encontrado</td></tr>
                   )}
                 </tbody>
               </table>
@@ -644,344 +784,345 @@ export default function AdminDashboard() {
           </div>
         )}
 
-       {/* Atribuir Placas */}
-{activeTab === 'assign' && (
-  <div style={{ padding: '1.5rem' }}>
-    <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
-      {assignMessage && (
-        <div style={{
-          padding: '12px 16px',
-          borderRadius: '12px',
-          marginBottom: '20px',
-          backgroundColor: assignMessage.type === 'success' ? '#d1fae5' : '#fee2e2',
-          color: assignMessage.type === 'success' ? '#065f46' : '#dc2626',
-        }}>
-          {assignMessage.text}
-        </div>
-      )}
-      
-      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '24px' }}>
-        {/* Coluna Esquerda - Selecionar Operador */}
-        <div style={{ backgroundColor: 'white', borderRadius: '16px', padding: '20px', border: '1px solid #e5e7eb' }}>
-          <h3 style={{ fontSize: '18px', fontWeight: 'bold', marginBottom: '16px' }}>1. Selecione o Operador</h3>
-          
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '400px', overflowY: 'auto' }}>
-            {operadores.filter(o => o.is_active).map((op) => {
-              const opPlatesCount = plates.filter(p => p.operador_id === op.id).length
-              return (
-                <button
-                  key={op.id}
-                  onClick={() => {
-                    setSelectedOperador(op.id)
-                    setSelectedPlates(new Set())
-                    setAssignSearchTerm('')
-                  }}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '12px',
-                    padding: '12px 16px',
-                    backgroundColor: selectedOperador === op.id ? '#fef3c7' : 'white',
-                    border: `1px solid ${selectedOperador === op.id ? '#f59e0b' : '#e5e7eb'}`,
-                    borderRadius: '12px',
-                    cursor: 'pointer',
-                    transition: 'all 0.2s',
-                  }}
-                >
-                  <div style={{
-                    width: '40px',
-                    height: '40px',
-                    background: 'linear-gradient(135deg, #f59e0b, #ea580c)',
-                    borderRadius: '10px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}>
-                    <span style={{ color: 'white', fontWeight: 'bold' }}>{op.name.charAt(0)}</span>
-                  </div>
-                  <div style={{ flex: 1, textAlign: 'left' }}>
-                    <p style={{ fontWeight: 'bold' }}>{op.name}</p>
-                    <p style={{ fontSize: '12px', color: '#6b7280' }}>{op.phone}</p>
-                  </div>
-                  <div>
-                    <span style={{
-                      backgroundColor: '#f3f4f6',
-                      padding: '2px 8px',
-                      borderRadius: '20px',
-                      fontSize: '12px',
-                    }}>
-                      {opPlatesCount} placas
-                    </span>
-                  </div>
-                </button>
-              )
-            })}
-            {operadores.filter(o => o.is_active).length === 0 && (
-              <p style={{ textAlign: 'center', color: '#6b7280', padding: '20px' }}>Nenhum operador ativo</p>
-            )}
+         {/* Pagamentos */}
+      {activeTab === 'payments' && (
+        <div style={{ padding: '1.5rem' }}>
+          {/* Tabs para navegação */}
+          <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', borderBottom: '1px solid #e5e7eb' }}>
+            <button 
+              onClick={() => setPaymentFilter('pending')}
+              style={{ 
+                padding: '10px 20px', 
+                border: 'none', 
+                background: paymentFilter === 'pending' ? '#4f46e5' : 'transparent',
+                color: paymentFilter === 'pending' ? 'white' : '#6b7280',
+                borderRadius: '8px 8px 0 0',
+                cursor: 'pointer',
+                fontWeight: 500,
+                transition: 'all 0.2s'
+              }}
+            >
+              Pendentes ({riderPayments.filter(p => p.status === 'pending').length})
+            </button>
+            <button 
+              onClick={() => setPaymentFilter('approved')}
+              style={{ 
+                padding: '10px 20px', 
+                border: 'none', 
+                background: paymentFilter === 'approved' ? '#10b981' : 'transparent',
+                color: paymentFilter === 'approved' ? 'white' : '#6b7280',
+                borderRadius: '8px 8px 0 0',
+                cursor: 'pointer',
+                fontWeight: 500,
+                transition: 'all 0.2s'
+              }}
+            >
+              Aprovados ({riderPayments.filter(p => p.status === 'approved').length})
+            </button>
+            <button 
+              onClick={() => setPaymentFilter('rejected')}
+              style={{ 
+                padding: '10px 20px', 
+                border: 'none', 
+                background: paymentFilter === 'rejected' ? '#ef4444' : 'transparent',
+                color: paymentFilter === 'rejected' ? 'white' : '#6b7280',
+                borderRadius: '8px 8px 0 0',
+                cursor: 'pointer',
+                fontWeight: 500,
+                transition: 'all 0.2s'
+              }}
+            >
+              Rejeitados ({riderPayments.filter(p => p.status === 'rejected').length})
+            </button>
           </div>
-        </div>
-        
-        {/* Coluna Direita - Gerenciar Placas */}
-        {selectedOperador && (
-          <div style={{ backgroundColor: 'white', borderRadius: '16px', padding: '20px', border: '1px solid #e5e7eb' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '8px' }}>
-              <h3 style={{ fontSize: '18px', fontWeight: 'bold' }}>
-                Gerenciar Placas - {selectedOperadorInfo?.name}
-              </h3>
-              {selectedPlates.size > 0 && (
-                <button
-                  onClick={handleAssignPlates}
-                  disabled={assignLoading}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                    padding: '8px 16px',
-                    backgroundColor: '#f59e0b',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '8px',
-                    cursor: 'pointer',
-                    fontWeight: 500,
-                  }}
-                >
-                  <UserCheck size={16} />
-                  Atribuir ({selectedPlates.size})
-                </button>
-              )}
-            </div>
-            
-            {/* Abas para alternar visão */}
-            <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', borderBottom: '1px solid #e5e7eb' }}>
-              <button
-                onClick={() => setAssignSearchTerm('todas')}
-                style={{
-                  padding: '8px 16px',
-                  border: 'none',
-                  background: 'none',
-                  cursor: 'pointer',
-                  color: assignSearchTerm === 'todas' ? '#f59e0b' : '#6b7280',
-                  borderBottom: assignSearchTerm === 'todas' ? '2px solid #f59e0b' : 'none',
-                  fontWeight: assignSearchTerm === 'todas' ? 'bold' : 'normal',
-                }}
-              >
-                Todas as Placas
-              </button>
-              <button
-                onClick={() => setAssignSearchTerm('disponiveis')}
-                style={{
-                  padding: '8px 16px',
-                  border: 'none',
-                  background: 'none',
-                  cursor: 'pointer',
-                  color: assignSearchTerm === 'disponiveis' ? '#f59e0b' : '#6b7280',
-                  borderBottom: assignSearchTerm === 'disponiveis' ? '2px solid #f59e0b' : 'none',
-                  fontWeight: assignSearchTerm === 'disponiveis' ? 'bold' : 'normal',
-                }}
-              >
-                Disponíveis ({availablePlates.length})
-              </button>
-              <button
-                onClick={() => setAssignSearchTerm('atribuidas')}
-                style={{
-                  padding: '8px 16px',
-                  border: 'none',
-                  background: 'none',
-                  cursor: 'pointer',
-                  color: assignSearchTerm === 'atribuidas' ? '#f59e0b' : '#6b7280',
-                  borderBottom: assignSearchTerm === 'atribuidas' ? '2px solid #f59e0b' : 'none',
-                  fontWeight: assignSearchTerm === 'atribuidas' ? 'bold' : 'normal',
-                }}
-              >
-                Atribuídas a este Operador ({operadorPlates.length})
-              </button>
-            </div>
-            
-            {/* Busca */}
-            <div style={{ position: 'relative', marginBottom: '16px' }}>
-              <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#9ca3af' }} />
-              <input
-                type="text"
-                placeholder="Buscar placa por número..."
-                value={assignSearchTerm === 'todas' || assignSearchTerm === 'disponiveis' || assignSearchTerm === 'atribuidas' ? '' : assignSearchTerm}
-                onChange={(e) => setAssignSearchTerm(e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: '10px 12px 10px 36px',
-                  border: '1px solid #e5e7eb',
-                  borderRadius: '10px',
-                  fontSize: '14px',
-                }}
-              />
-            </div>
-            
-            {/* Lista de Placas */}
-            <div style={{ maxHeight: '500px', overflowY: 'auto' }}>
-              {(() => {
-                let platesToShow = [];
-                
-                // Filtrar por tipo de visualização
-                if (assignSearchTerm === 'disponiveis') {
-                  platesToShow = availablePlates;
-                } else if (assignSearchTerm === 'atribuidas') {
-                  platesToShow = operadorPlates;
-                } else {
-                  // 'todas' ou qualquer outro termo de busca
-                  platesToShow = [...availablePlates, ...operadorPlates];
+
+          {/* Tabela de Pagamentos */}
+          <div style={{ backgroundColor: 'white', borderRadius: '0.75rem', overflow: 'auto' }}>
+            <table style={styles.table}>
+              <thead>
+                <tr>
+                  <th style={styles.th}>Motoqueiro</th>
+                  <th style={styles.th}>Telefone</th>
+                  <th style={styles.th}>Valor</th>
+                  <th style={styles.th}>Método</th>
+                  <th style={styles.th}>Data</th>
+                  <th style={styles.th}>Transação</th>
+                  <th style={styles.th}>Comprovante</th>
+                  <th style={styles.th}>Status</th>
+                  <th style={styles.th}>Ações</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(() => {
+                  let filteredPaymentsList = []
+                  if (paymentFilter === 'pending') filteredPaymentsList = riderPayments.filter(p => p.status === 'pending')
+                  else if (paymentFilter === 'approved') filteredPaymentsList = riderPayments.filter(p => p.status === 'approved')
+                  else filteredPaymentsList = riderPayments.filter(p => p.status === 'rejected')
                   
-                  // Se não for uma das abas especiais, aplicar filtro de busca textual
-                  if (assignSearchTerm && assignSearchTerm !== 'todas') {
-                    platesToShow = platesToShow.filter(p =>
-                      p.plate_number.toLowerCase().includes(assignSearchTerm.toLowerCase())
-                    );
-                  }
-                }
-                
-                if (platesToShow.length === 0) {
-                  return (
-                    <div style={{ textAlign: 'center', padding: '40px', color: '#9ca3af' }}>
-                      <Store size={48} style={{ marginBottom: '12px', opacity: 0.5 }} />
-                      <p>Nenhuma placa encontrada</p>
-                    </div>
-                  );
-                }
-                
-                return platesToShow.map((plate) => (
-                  <div
-                    key={plate.id}
-                    onClick={() => {
-                      // Só permite selecionar placas disponíveis (não atribuídas a ninguém)
-                      if (!plate.operador_id && assignSearchTerm !== 'atribuidas') {
-                        togglePlateSelection(plate.id);
-                      }
-                    }}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      padding: '12px 16px',
-                      marginBottom: '8px',
-                      borderRadius: '12px',
-                      border: '1px solid',
-                      borderColor: selectedPlates.has(plate.id) ? '#f59e0b' : '#e5e7eb',
-                      backgroundColor: selectedPlates.has(plate.id) ? '#fef3c7' : 'white',
-                      cursor: (!plate.operador_id && assignSearchTerm !== 'atribuidas') ? 'pointer' : 'default',
-                      transition: 'all 0.2s',
-                      opacity: plate.operador_id && plate.operador_id !== selectedOperador ? 0.5 : 1,
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1 }}>
-                      <Store size={24} color={plate.operador_id ? '#f59e0b' : '#6b7280'} />
-                      <div>
-                        <p style={{ fontWeight: 600, fontSize: '16px' }}>{plate.plate_number}</p>
-                        <p style={{ fontSize: '12px', color: '#6b7280', marginTop: '2px' }}>
-                          Chefe: {plate.boss?.name || 'Não definido'} | 
-                          Taxa: {plate.weekly_fee?.toLocaleString()} Kz
-                        </p>
-                        {plate.operador_id && plate.operador_id !== selectedOperador && (
-                          <p style={{ fontSize: '11px', color: '#ef4444', marginTop: '2px' }}>
-                            ⚠️ Atribuída a outro operador
-                          </p>
-                        )}
-                        {plate.operador_id === selectedOperador && (
-                          <p style={{ fontSize: '11px', color: '#10b981', marginTop: '2px' }}>
-                            ✓ Atribuída a este operador
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                    <div>
-                      {plate.operador_id === selectedOperador ? (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleUnassignPlate(plate.id, plate.plate_number);
-                          }}
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '6px',
-                            padding: '6px 12px',
-                            backgroundColor: '#fee2e2',
-                            color: '#dc2626',
-                            border: 'none',
-                            borderRadius: '8px',
-                            cursor: 'pointer',
+                  return filteredPaymentsList.map((payment) => {
+                    const rider = riders.find(r => r.id === payment.rider_id)
+                    return (
+                      <tr key={payment.id} style={{ 
+                        backgroundColor: payment.status === 'approved' ? '#f0fdf4' : payment.status === 'rejected' ? '#fef2f2' : 'white'
+                      }}>
+                        <td style={styles.td}>
+                          {rider?.name || 'Desconhecido'}
+                          {payment.approved_by && payment.status === 'approved' && (
+                            <div style={{ fontSize: '10px', color: '#6b7280', marginTop: '2px' }}>
+                              Aprovado por: Admin
+                            </div>
+                          )}
+                        </td>
+                        <td style={styles.td}>{rider?.phone || '-'}</td>
+                        <td style={styles.td}><strong>{payment.amount.toLocaleString()} Kz</strong></td>
+                        <td style={styles.td}>
+                          <span style={payment.payment_method === 'unitel' ? styles.badgeWarning : styles.badgeActive}>
+                            {payment.payment_method === 'unitel' ? 'Unitel Money' : 'Transferência'}
+                          </span>
+                        </td>
+                        <td style={styles.td}>{new Date(payment.payment_date).toLocaleDateString('pt-AO')}</td>
+                        <td style={styles.td}>
+                          <span style={{ fontSize: '12px', fontFamily: 'monospace' }}>{payment.transaction_id}</span>
+                        </td>
+                        <td style={styles.td}>
+                          {payment.proof_url && (
+                            <a href={payment.proof_url} target="_blank" rel="noopener noreferrer" style={{ color: '#3b82f6', textDecoration: 'none' }}>
+                              Ver Comprovante
+                            </a>
+                          )}
+                        </td>
+                        <td style={styles.td}>
+                          <span style={{
+                            padding: '4px 8px',
+                            borderRadius: '20px',
                             fontSize: '12px',
                             fontWeight: 500,
-                          }}
-                          onMouseEnter={(e) => {
-                            e.currentTarget.style.backgroundColor = '#fecaca';
-                          }}
-                          onMouseLeave={(e) => {
-                            e.currentTarget.style.backgroundColor = '#fee2e2';
-                          }}
+                            backgroundColor: payment.status === 'approved' ? '#d1fae5' : payment.status === 'rejected' ? '#fee2e2' : '#fef3c7',
+                            color: payment.status === 'approved' ? '#065f46' : payment.status === 'rejected' ? '#991b1b' : '#92400e'
+                          }}>
+                            {payment.status === 'approved' ? '✓ Aprovado' : payment.status === 'rejected' ? '✗ Rejeitado' : '⏳ Pendente'}
+                          </span>
+                          {payment.approved_at && (
+                            <div style={{ fontSize: '10px', color: '#6b7280', marginTop: '4px' }}>
+                              {new Date(payment.approved_at).toLocaleDateString('pt-AO')}
+                            </div>
+                          )}
+                        </td>
+                        <td style={styles.td}>
+                          {payment.status === 'pending' ? (
+                            <div style={{ display: 'flex', gap: '8px' }}>
+                              <button 
+                                onClick={() => approvePayment(payment.id)} 
+                                style={{ backgroundColor: '#10b981', color: 'white', padding: '6px 12px', borderRadius: '6px', border: 'none', cursor: 'pointer', fontSize: '12px', fontWeight: 500 }}
+                              >
+                                Aprovar
+                              </button>
+                              <button 
+                                onClick={() => rejectPayment(payment.id)} 
+                                style={{ backgroundColor: '#ef4444', color: 'white', padding: '6px 12px', borderRadius: '6px', border: 'none', cursor: 'pointer', fontSize: '12px', fontWeight: 500 }}
+                              >
+                                Rejeitar
+                              </button>
+                            </div>
+                          ) : payment.status === 'approved' ? (
+                            <span style={{ fontSize: '12px', color: '#10b981', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                              <CheckCircle size={14} /> Concluído
+                            </span>
+                          ) : (
+                            <span style={{ fontSize: '12px', color: '#ef4444', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                              <XCircle size={14} /> Recusado
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    )
+                  })
+                })()}
+                {(() => {
+                  let count = 0
+                  if (paymentFilter === 'pending') count = riderPayments.filter(p => p.status === 'pending').length
+                  else if (paymentFilter === 'approved') count = riderPayments.filter(p => p.status === 'approved').length
+                  else count = riderPayments.filter(p => p.status === 'rejected').length
+                  
+                  return count === 0 && (
+                    <tr>
+                      <td colSpan={9} style={{ padding: '3rem', textAlign: 'center', color: '#6b7280' }}>
+                        {paymentFilter === 'pending' ? '💰 Nenhum pagamento pendente' : 
+                         paymentFilter === 'approved' ? '✅ Nenhum pagamento aprovado' : 
+                         '❌ Nenhum pagamento rejeitado'}
+                      </td>
+                    </tr>
+                  )
+                })()}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+        {/* Atribuir Placas */}
+        {activeTab === 'assign' && (
+          <div style={{ padding: '1.5rem' }}>
+            <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
+              {assignMessage && (
+                <div style={{ padding: '12px 16px', borderRadius: '12px', marginBottom: '20px', backgroundColor: assignMessage.type === 'success' ? '#d1fae5' : '#fee2e2', color: assignMessage.type === 'success' ? '#065f46' : '#dc2626' }}>
+                  {assignMessage.text}
+                </div>
+              )}
+              <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '24px' }}>
+                <div style={{ backgroundColor: 'white', borderRadius: '16px', padding: '20px', border: '1px solid #e5e7eb' }}>
+                  <h3 style={{ fontSize: '18px', fontWeight: 'bold', marginBottom: '16px' }}>1. Selecione o Operador</h3>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '400px', overflowY: 'auto' }}>
+                    {operadores.filter(o => o.is_active).map((op) => {
+                      const opPlatesCount = plates.filter(p => p.operador_id === op.id).length
+                      return (
+                        <button 
+                          key={op.id} 
+                          onClick={() => { setSelectedOperador(op.id); setSelectedPlates(new Set()); setAssignSearchTerm('') }} 
+                          style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 16px', backgroundColor: selectedOperador === op.id ? '#fef3c7' : 'white', border: `1px solid ${selectedOperador === op.id ? '#f59e0b' : '#e5e7eb'}`, borderRadius: '12px', cursor: 'pointer', width: '100%' }}
                         >
-                          <Link2Off size={14} />
-                          Remover
+                          <div style={{ width: '40px', height: '40px', background: 'linear-gradient(135deg, #f59e0b, #ea580c)', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <span style={{ color: 'white', fontWeight: 'bold' }}>{op.name.charAt(0)}</span>
+                          </div>
+                          <div style={{ flex: 1, textAlign: 'left' }}>
+                            <p style={{ fontWeight: 'bold' }}>{op.name}</p>
+                            <p style={{ fontSize: '12px', color: '#6b7280' }}>{op.phone}</p>
+                          </div>
+                          <div><span style={{ backgroundColor: '#f3f4f6', padding: '2px 8px', borderRadius: '20px', fontSize: '12px' }}>{opPlatesCount} placas</span></div>
                         </button>
-                      ) : plate.operador_id ? (
-                        <span style={{
-                          fontSize: '12px',
-                          color: '#9ca3af',
-                          backgroundColor: '#f3f4f6',
-                          padding: '6px 12px',
-                          borderRadius: '8px',
-                        }}>
-                          Indisponível
-                        </span>
-                      ) : selectedPlates.has(plate.id) ? (
-                        <div style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '6px',
-                          color: '#10b981',
-                          backgroundColor: '#d1fae5',
-                          padding: '6px 12px',
-                          borderRadius: '8px',
-                        }}>
-                          <CheckCircle size={16} />
-                          <span style={{ fontSize: '12px', fontWeight: 500 }}>Selecionada</span>
-                        </div>
-                      ) : (
-                        <div style={{
-                          width: '24px',
-                          height: '24px',
-                          border: '2px solid #d1d5db',
-                          borderRadius: '6px',
-                          backgroundColor: 'white',
-                        }} />
+                      )
+                    })}
+                    {operadores.filter(o => o.is_active).length === 0 && <p style={{ textAlign: 'center', color: '#6b7280', padding: '20px' }}>Nenhum operador ativo</p>}
+                  </div>
+                </div>
+                {selectedOperador && (
+                  <div style={{ backgroundColor: 'white', borderRadius: '16px', padding: '20px', border: '1px solid #e5e7eb' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '8px' }}>
+                      <h3 style={{ fontSize: '18px', fontWeight: 'bold' }}>Gerenciar Placas - {selectedOperadorInfo?.name}</h3>
+                      {selectedPlates.size > 0 && (
+                        <button 
+                          onClick={handleAssignPlates} 
+                          disabled={assignLoading} 
+                          style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 16px', backgroundColor: '#f59e0b', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 500 }}
+                        >
+                          <UserCheck size={16} /> Atribuir ({selectedPlates.size})
+                        </button>
                       )}
                     </div>
+                    <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', borderBottom: '1px solid #e5e7eb' }}>
+                      <button 
+                        onClick={() => setAssignSearchTerm('todas')} 
+                        style={{ padding: '8px 16px', border: 'none', background: 'none', cursor: 'pointer', color: assignSearchTerm === 'todas' ? '#f59e0b' : '#6b7280', borderBottom: assignSearchTerm === 'todas' ? '2px solid #f59e0b' : 'none', fontWeight: assignSearchTerm === 'todas' ? 'bold' : 'normal' }}
+                      >
+                        Todas as Placas
+                      </button>
+                      <button 
+                        onClick={() => setAssignSearchTerm('disponiveis')} 
+                        style={{ padding: '8px 16px', border: 'none', background: 'none', cursor: 'pointer', color: assignSearchTerm === 'disponiveis' ? '#f59e0b' : '#6b7280', borderBottom: assignSearchTerm === 'disponiveis' ? '2px solid #f59e0b' : 'none', fontWeight: assignSearchTerm === 'disponiveis' ? 'bold' : 'normal' }}
+                      >
+                        Disponíveis ({availablePlates.length})
+                      </button>
+                      <button 
+                        onClick={() => setAssignSearchTerm('atribuidas')} 
+                        style={{ padding: '8px 16px', border: 'none', background: 'none', cursor: 'pointer', color: assignSearchTerm === 'atribuidas' ? '#f59e0b' : '#6b7280', borderBottom: assignSearchTerm === 'atribuidas' ? '2px solid #f59e0b' : 'none', fontWeight: assignSearchTerm === 'atribuidas' ? 'bold' : 'normal' }}
+                      >
+                        Atribuídas ({operadorPlates.length})
+                      </button>
+                    </div>
+                    <div style={{ position: 'relative', marginBottom: '16px' }}>
+                      <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#9ca3af' }} />
+                      <input 
+                        type="text" 
+                        placeholder="Buscar placa..." 
+                        value={assignSearchTerm === 'todas' || assignSearchTerm === 'disponiveis' || assignSearchTerm === 'atribuidas' ? '' : assignSearchTerm} 
+                        onChange={(e) => setAssignSearchTerm(e.target.value)} 
+                        style={{ width: '100%', padding: '10px 12px 10px 36px', border: '1px solid #e5e7eb', borderRadius: '10px', fontSize: '14px' }} 
+                      />
+                    </div>
+                    <div style={{ maxHeight: '500px', overflowY: 'auto' }}>
+                      {(() => {
+                        let platesToShow: Plate[] = []
+                        if (assignSearchTerm === 'disponiveis') platesToShow = availablePlates
+                        else if (assignSearchTerm === 'atribuidas') platesToShow = operadorPlates
+                        else { 
+                          platesToShow = [...availablePlates, ...operadorPlates]
+                          if (assignSearchTerm && assignSearchTerm !== 'todas' && assignSearchTerm !== 'disponiveis' && assignSearchTerm !== 'atribuidas') {
+                            platesToShow = platesToShow.filter(p => p.plate_number.toLowerCase().includes(assignSearchTerm.toLowerCase()))
+                          }
+                        }
+                        if (platesToShow.length === 0) return (
+                          <div style={{ textAlign: 'center', padding: '40px', color: '#9ca3af' }}>
+                            <Store size={48} style={{ marginBottom: '12px', opacity: 0.5 }} />
+                            <p>Nenhuma placa encontrada</p>
+                          </div>
+                        )
+                        return platesToShow.map((plate) => (
+                          <div 
+                            key={plate.id} 
+                            onClick={() => { 
+                              if (!plate.operador_id && assignSearchTerm !== 'atribuidas') togglePlateSelection(plate.id) 
+                            }} 
+                            style={{ 
+                              display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', marginBottom: '8px', 
+                              borderRadius: '12px', border: '1px solid', 
+                              borderColor: selectedPlates.has(plate.id) ? '#f59e0b' : '#e5e7eb', 
+                              backgroundColor: selectedPlates.has(plate.id) ? '#fef3c7' : 'white', 
+                              cursor: (!plate.operador_id && assignSearchTerm !== 'atribuidas') ? 'pointer' : 'default', 
+                              opacity: plate.operador_id && plate.operador_id !== selectedOperador ? 0.5 : 1 
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1 }}>
+                              <Store size={24} color={plate.operador_id ? '#f59e0b' : '#6b7280'} />
+                              <div>
+                                <p style={{ fontWeight: 600, fontSize: '16px' }}>{plate.plate_number}</p>
+                                <p style={{ fontSize: '12px', color: '#6b7280' }}>
+                                  Chefe: {plate.boss?.name || 'Não definido'} | Taxa: {plate.weekly_fee?.toLocaleString()} Kz
+                                </p>
+                                {plate.operador_id && plate.operador_id !== selectedOperador && (
+                                  <p style={{ fontSize: '11px', color: '#ef4444', marginTop: '2px' }}>⚠️ Atribuída a outro operador</p>
+                                )}
+                                {plate.operador_id === selectedOperador && (
+                                  <p style={{ fontSize: '11px', color: '#10b981', marginTop: '2px' }}>✓ Atribuída a este operador</p>
+                                )}
+                              </div>
+                            </div>
+                            <div>
+                              {plate.operador_id === selectedOperador ? (
+                                <button 
+                                  onClick={(e) => { e.stopPropagation(); handleUnassignPlate(plate.id, plate.plate_number) }} 
+                                  style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 12px', backgroundColor: '#fee2e2', color: '#dc2626', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: 500 }}
+                                >
+                                  <Link2Off size={14} /> Remover
+                                </button>
+                              ) : plate.operador_id ? (
+                                <span style={{ fontSize: '12px', color: '#9ca3af', backgroundColor: '#f3f4f6', padding: '6px 12px', borderRadius: '8px' }}>Indisponível</span>
+                              ) : selectedPlates.has(plate.id) ? (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#10b981', backgroundColor: '#d1fae5', padding: '6px 12px', borderRadius: '8px' }}>
+                                  <CheckCircle size={16} /><span>Selecionada</span>
+                                </div>
+                              ) : (
+                                <div style={{ width: '24px', height: '24px', border: '2px solid #d1d5db', borderRadius: '6px', backgroundColor: 'white' }} />
+                              )}
+                            </div>
+                          </div>
+                        ))
+                      })()}
+                    </div>
+                    <div style={{ marginTop: '20px', padding: '12px', backgroundColor: '#fef3c7', borderRadius: '8px', fontSize: '13px', color: '#92400e' }}>
+                      <strong>💡 Como funciona:</strong>
+                      <ul style={{ marginTop: '8px', marginLeft: '20px', marginBottom: 0 }}>
+                        <li>Selecione as placas disponíveis (sem dono)</li>
+                        <li>Clique em "Atribuir" para vincular as placas selecionadas ao operador</li>
+                        <li>Na aba "Atribuídas" você pode remover placas do operador</li>
+                        <li>Use a busca para encontrar placas específicas</li>
+                      </ul>
+                    </div>
                   </div>
-                ));
-              })()}
-            </div>
-            
-            {/* Instruções */}
-            <div style={{
-              marginTop: '20px',
-              padding: '12px',
-              backgroundColor: '#fef3c7',
-              borderRadius: '8px',
-              fontSize: '13px',
-              color: '#92400e',
-            }}>
-              <strong>💡 Como funciona:</strong>
-              <ul style={{ marginTop: '8px', marginLeft: '20px', marginBottom: 0 }}>
-                <li>Selecione as placas disponíveis (sem dono)</li>
-                <li>Clique em "Atribuir" para vincular as placas selecionadas ao operador</li>
-                <li>Na aba "Atribuídas" você pode remover placas do operador</li>
-                <li>Use a busca para encontrar placas específicas</li>
-              </ul>
+                )}
+              </div>
             </div>
           </div>
         )}
-      </div>
-    </div>
-  </div>
-)}
 
         {/* Pedidos */}
         {activeTab === 'orders' && (
@@ -1009,7 +1150,10 @@ export default function AdminDashboard() {
                         {order.rider ? (
                           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                             <span>{order.rider.name}</span>
-                            {order.rider.is_online ? <span style={{ fontSize: '0.7rem', color: '#10b981' }}>● Online</span> : <span style={{ fontSize: '0.7rem', color: '#ef4444' }}>● Offline</span>}
+                            {order.rider.is_online ? 
+                              <span style={{ fontSize: '0.7rem', color: '#10b981' }}>● Online</span> : 
+                              <span style={{ fontSize: '0.7rem', color: '#ef4444' }}>● Offline</span>
+                            }
                           </div>
                         ) : <span style={{ color: '#9ca3af' }}>Não atribuído</span>}
                       </td>
@@ -1017,16 +1161,18 @@ export default function AdminDashboard() {
                         {order.rider?.phone ? (
                           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                             <span>{order.rider.phone}</span>
-                            <button onClick={() => callRider(order.rider!.phone, order.rider!.name)} style={styles.buttonCall}><Phone size={12} /> Ligar</button>
+                            <button onClick={() => callRider(order.rider!.phone, order.rider!.name)} style={styles.buttonCall}>
+                              <Phone size={12} /> Ligar
+                            </button>
                           </div>
-                        ) : (<span style={{ color: '#9ca3af' }}>-</span>)}
+                        ) : <span>-</span>}
                       </td>
                       <td style={styles.td}>{order.price?.toLocaleString()} Kz</td>
                       <td style={styles.td}>
-                        <span style={{
-                          padding: '0.25rem 0.5rem', borderRadius: '9999px', fontSize: '0.75rem',
-                          backgroundColor: order.status === 'completed' ? '#d1fae5' : order.status === 'pending' ? '#fef3c7' : order.status === 'accepted' ? '#dbeafe' : '#fee2e2',
-                          color: order.status === 'completed' ? '#065f46' : order.status === 'pending' ? '#92400e' : order.status === 'accepted' ? '#1e40af' : '#991b1b'
+                        <span style={{ 
+                          padding: '0.25rem 0.5rem', borderRadius: '9999px', fontSize: '0.75rem', 
+                          backgroundColor: order.status === 'completed' ? '#d1fae5' : order.status === 'pending' ? '#fef3c7' : order.status === 'accepted' ? '#dbeafe' : '#fee2e2', 
+                          color: order.status === 'completed' ? '#065f46' : order.status === 'pending' ? '#92400e' : order.status === 'accepted' ? '#1e40af' : '#991b1b' 
                         }}>
                           {order.status === 'completed' ? 'Concluído' : order.status === 'pending' ? 'Pendente' : order.status === 'accepted' ? 'Aceito' : 'Cancelado'}
                         </span>
@@ -1040,11 +1186,7 @@ export default function AdminDashboard() {
                     </tr>
                   ))}
                   {filteredOrders.length === 0 && (
-                    <tr>
-                      <td colSpan={8} style={{ padding: '2rem', textAlign: 'center', color: '#6b7280' }}>
-                        Nenhum pedido encontrado
-                      </td>
-                    </tr>
+                    <tr><td colSpan={8} style={{ padding: '2rem', textAlign: 'center', color: '#6b7280' }}>Nenhum pedido encontrado</td></tr>
                   )}
                 </tbody>
               </table>
@@ -1083,13 +1225,10 @@ export default function AdminDashboard() {
                         <td style={styles.td}>{plate.weekly_fee?.toLocaleString()} Kz</td>
                         <td style={styles.td}>{riders.filter(r => r.plate_id === plate.id).length} / {plate.max_riders || 20}</td>
                         <td style={styles.td}>
-                          {assignedOperador ? (
-                            <span style={{ backgroundColor: '#fef3c7', color: '#d97706', padding: '2px 8px', borderRadius: '20px', fontSize: '12px' }}>
-                              {assignedOperador.name}
-                            </span>
-                          ) : (
+                          {assignedOperador ? 
+                            <span style={{ backgroundColor: '#fef3c7', color: '#d97706', padding: '2px 8px', borderRadius: '20px', fontSize: '12px' }}>{assignedOperador.name}</span> : 
                             <span style={{ color: '#9ca3af', fontSize: '12px' }}>Não atribuído</span>
-                          )}
+                          }
                         </td>
                         <td style={styles.td}>
                           <button onClick={() => togglePlateStatus(plate.id, plate.is_active)} style={plate.is_active ? styles.badgeActive : styles.badgeInactive}>
@@ -1105,11 +1244,7 @@ export default function AdminDashboard() {
                     )
                   })}
                   {filteredPlates.length === 0 && (
-                    <tr>
-                      <td colSpan={7} style={{ padding: '2rem', textAlign: 'center', color: '#6b7280' }}>
-                        Nenhuma placa encontrada
-                      </td>
-                    </tr>
+                    <tr><td colSpan={7} style={{ padding: '2rem', textAlign: 'center', color: '#6b7280' }}>Nenhuma placa encontrada</td></tr>
                   )}
                 </tbody>
               </table>
@@ -1117,7 +1252,7 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* Chefes */}
+              {/* Chefes */}
         {activeTab === 'bosses' && (
           <div style={{ padding: '1.5rem', overflowX: 'auto' }}>
             <div style={{ backgroundColor: 'white', borderRadius: '0.75rem', overflow: 'auto' }}>
@@ -1147,9 +1282,7 @@ export default function AdminDashboard() {
                   ))}
                   {filteredBosses.length === 0 && (
                     <tr>
-                      <td colSpan={5} style={{ padding: '2rem', textAlign: 'center', color: '#6b7280' }}>
-                        Nenhum chefe encontrado
-                      </td>
+                      <td colSpan={5} style={{ padding: '2rem', textAlign: 'center', color: '#6b7280' }}>Nenhum chefe encontrado</td>
                     </tr>
                   )}
                 </tbody>
@@ -1161,6 +1294,28 @@ export default function AdminDashboard() {
         {/* Motoqueiros */}
         {activeTab === 'riders' && (
           <div style={{ padding: '1.5rem', overflowX: 'auto' }}>
+            {/* Filtros */}
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', flexWrap: 'wrap' }}>
+              <button 
+                onClick={() => setRiderFilter('all')} 
+                style={{ padding: '6px 12px', borderRadius: '20px', border: 'none', backgroundColor: riderFilter === 'all' ? '#4f46e5' : '#e5e7eb', color: riderFilter === 'all' ? 'white' : '#374151', cursor: 'pointer' }}
+              >
+                Todos
+              </button>
+              <button 
+                onClick={() => setRiderFilter('active')} 
+                style={{ padding: '6px 12px', borderRadius: '20px', border: 'none', backgroundColor: riderFilter === 'active' ? '#10b981' : '#e5e7eb', color: riderFilter === 'active' ? 'white' : '#374151', cursor: 'pointer' }}
+              >
+                Ativos
+              </button>
+              <button 
+                onClick={() => setRiderFilter('frozen')} 
+                style={{ padding: '6px 12px', borderRadius: '20px', border: 'none', backgroundColor: riderFilter === 'frozen' ? '#f59e0b' : '#e5e7eb', color: riderFilter === 'frozen' ? 'white' : '#374151', cursor: 'pointer' }}
+              >
+                Congelados
+              </button>
+            </div>
+            
             <div style={{ backgroundColor: 'white', borderRadius: '0.75rem', overflow: 'auto' }}>
               <table style={styles.table}>
                 <thead>
@@ -1175,29 +1330,36 @@ export default function AdminDashboard() {
                 </thead>
                 <tbody>
                   {filteredRiders.map((rider) => (
-                    <tr key={rider.id}>
-                      <td style={styles.td}>{rider.name}</td>
+                    <tr key={rider.id} style={{ backgroundColor: rider.is_frozen ? '#fef3c7' : 'white' }}>
+                      <td style={styles.td}>
+                        {rider.name} {rider.is_frozen && <span style={{ color: '#d97706', fontSize: '11px', marginLeft: '4px' }}>(Congelado)</span>}
+                      </td>
                       <td style={styles.td}>{rider.phone}</td>
                       <td style={styles.td}>{rider.bi}</td>
                       <td style={styles.td}>{rider.plate?.plate_number || '-'}</td>
                       <td style={styles.td}>
-                        <span style={rider.status === 'active' ? styles.badgeActive : styles.badgeInactive}>
-                          {rider.status === 'active' ? 'Ativo' : 'Inativo'}
+                        <span style={rider.is_frozen ? styles.badgeWarning : (rider.status === 'active' ? styles.badgeActive : styles.badgeInactive)}>
+                          {rider.is_frozen ? 'Congelado' : (rider.status === 'active' ? 'Ativo' : 'Inativo')}
                         </span>
                       </td>
                       <td style={styles.td}>
-                        <button onClick={() => deleteItem('riders', rider.id, rider.name)} style={styles.buttonDanger}>
-                          <Trash2 size={16} />
-                        </button>
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                          <button 
+                            onClick={() => toggleFreezeRider(rider.id, rider.is_frozen)} 
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: rider.is_frozen ? '#10b981' : '#f59e0b' }} 
+                            title={rider.is_frozen ? 'Descongelar' : 'Congelar'}
+                          >
+                            {rider.is_frozen ? <Sun size={16} /> : <Snowflake size={16} />}
+                          </button>
+                          <button onClick={() => deleteItem('riders', rider.id, rider.name)} style={styles.buttonDanger}>
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
                   {filteredRiders.length === 0 && (
-                    <tr>
-                      <td colSpan={6} style={{ padding: '2rem', textAlign: 'center', color: '#6b7280' }}>
-                        Nenhum motoqueiro encontrado
-                      </td>
-                    </tr>
+                    <tr><td colSpan={6} style={{ padding: '2rem', textAlign: 'center', color: '#6b7280' }}>Nenhum motoqueiro encontrado</td></tr>
                   )}
                 </tbody>
               </table>
@@ -1211,29 +1373,19 @@ export default function AdminDashboard() {
       {showAddBoss && <AddBossModal onClose={() => setShowAddBoss(false)} onSuccess={() => { setShowAddBoss(false); loadAllData() }} />}
       {showAddPlate && <AddPlateModal bosses={bosses} onClose={() => setShowAddPlate(false)} onSuccess={() => { setShowAddPlate(false); loadAllData() }} />}
       {showAddOperador && <AddOperadorModal onClose={() => setShowAddOperador(false)} onSuccess={() => { setShowAddOperador(false); loadAllData() }} adminId={admin?.id} />}
-      
-      <style jsx>{`
-        @keyframes spin {
-          from { transform: rotate(0deg); }
-          to { transform: rotate(360deg); }
-        }
-      `}</style>
+      {showAddRider && <AddRiderModal plates={plates} onClose={() => setShowAddRider(false)} onSuccess={() => { setShowAddRider(false); loadAllData() }} />}
     </div>
   )
 }
 
-// Modais
-function AddAssociationModal({ onClose, onSuccess }: any) {
+// Modal de Adicionar Associação
+function AddAssociationModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
   const [formData, setFormData] = useState({ name: '', email: '', phone: '', password: 'associacao123', address: '' })
   const [loading, setLoading] = useState(false)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault(); setLoading(true)
-    const { error } = await supabase.from('associations').insert({ 
-      ...formData, 
-      is_active: true,
-      created_at: new Date().toISOString() 
-    })
+    const { error } = await supabase.from('associations').insert({ ...formData, is_active: true, created_at: new Date().toISOString() })
     if (!error) onSuccess(); else alert('Erro: ' + error.message)
     setLoading(false)
   }
@@ -1243,22 +1395,25 @@ function AddAssociationModal({ onClose, onSuccess }: any) {
       <div style={{ backgroundColor: 'white', borderRadius: '1rem', maxWidth: '28rem', width: '90%' }}>
         <div style={{ background: 'linear-gradient(135deg, #4f46e5, #4338ca)', padding: '1rem', borderRadius: '1rem 1rem 0 0', display: 'flex', justifyContent: 'space-between', color: 'white' }}>
           <h3 style={{ fontWeight: 'bold' }}>Nova Associação</h3>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer' }}>✕</button>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer', fontSize: '1.25rem' }}>✕</button>
         </div>
         <form onSubmit={handleSubmit} style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          <input type="text" required placeholder="Nome da Associação" value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} />
+          <input type="text" required placeholder="Nome" value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} />
           <input type="email" required placeholder="Email" value={formData.email} onChange={(e) => setFormData({...formData, email: e.target.value})} style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} />
           <input type="tel" required placeholder="Telefone" value={formData.phone} onChange={(e) => setFormData({...formData, phone: e.target.value})} style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} />
           <input type="text" placeholder="Endereço" value={formData.address} onChange={(e) => setFormData({...formData, address: e.target.value})} style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} />
           <input type="text" placeholder="Senha" value={formData.password} onChange={(e) => setFormData({...formData, password: e.target.value})} style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem', backgroundColor: '#f9fafb' }} />
-          <button type="submit" disabled={loading} style={{ backgroundColor: '#4f46e5', color: 'white', padding: '0.75rem', borderRadius: '0.5rem', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}>{loading ? 'Cadastrando...' : 'Cadastrar'}</button>
+          <button type="submit" disabled={loading} style={{ backgroundColor: '#4f46e5', color: 'white', padding: '0.75rem', borderRadius: '0.5rem', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}>
+            {loading ? 'Cadastrando...' : 'Cadastrar'}
+          </button>
         </form>
       </div>
     </div>
   )
 }
 
-function AddBossModal({ onClose, onSuccess }: any) {
+// Modal de Adicionar Chefe
+function AddBossModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
   const [formData, setFormData] = useState({ name: '', email: '', phone: '', password: 'senha123' })
   const [loading, setLoading] = useState(false)
 
@@ -1274,21 +1429,24 @@ function AddBossModal({ onClose, onSuccess }: any) {
       <div style={{ backgroundColor: 'white', borderRadius: '1rem', maxWidth: '28rem', width: '90%' }}>
         <div style={{ background: 'linear-gradient(135deg, #4f46e5, #4338ca)', padding: '1rem', borderRadius: '1rem 1rem 0 0', display: 'flex', justifyContent: 'space-between', color: 'white' }}>
           <h3 style={{ fontWeight: 'bold' }}>Novo Chefe</h3>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer' }}>✕</button>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer', fontSize: '1.25rem' }}>✕</button>
         </div>
         <form onSubmit={handleSubmit} style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          <input type="text" required placeholder="Nome completo" value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} />
+          <input type="text" required placeholder="Nome" value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} />
           <input type="email" required placeholder="Email" value={formData.email} onChange={(e) => setFormData({...formData, email: e.target.value})} style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} />
           <input type="tel" required placeholder="Telefone" value={formData.phone} onChange={(e) => setFormData({...formData, phone: e.target.value})} style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} />
           <input type="text" placeholder="Senha" value={formData.password} onChange={(e) => setFormData({...formData, password: e.target.value})} style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem', backgroundColor: '#f9fafb' }} />
-          <button type="submit" disabled={loading} style={{ backgroundColor: '#4f46e5', color: 'white', padding: '0.75rem', borderRadius: '0.5rem', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}>{loading ? 'Cadastrando...' : 'Cadastrar'}</button>
+          <button type="submit" disabled={loading} style={{ backgroundColor: '#4f46e5', color: 'white', padding: '0.75rem', borderRadius: '0.5rem', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}>
+            {loading ? 'Cadastrando...' : 'Cadastrar'}
+          </button>
         </form>
       </div>
     </div>
   )
 }
 
-function AddPlateModal({ bosses, onClose, onSuccess }: any) {
+// Modal de Adicionar Placa
+function AddPlateModal({ bosses, onClose, onSuccess }: { bosses: Boss[]; onClose: () => void; onSuccess: () => void }) {
   const [formData, setFormData] = useState({ plate_number: '', boss_id: '', weekly_fee: 75000, max_riders: 20, fee_per_rider: 300 })
   const [loading, setLoading] = useState(false)
 
@@ -1310,35 +1468,33 @@ function AddPlateModal({ bosses, onClose, onSuccess }: any) {
       <div style={{ backgroundColor: 'white', borderRadius: '1rem', maxWidth: '28rem', width: '90%' }}>
         <div style={{ background: 'linear-gradient(135deg, #4f46e5, #4338ca)', padding: '1rem', borderRadius: '1rem 1rem 0 0', display: 'flex', justifyContent: 'space-between', color: 'white' }}>
           <h3 style={{ fontWeight: 'bold' }}>Nova Placa</h3>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer' }}>✕</button>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer', fontSize: '1.25rem' }}>✕</button>
         </div>
         <form onSubmit={handleSubmit} style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
           <input type="text" required placeholder="Número da Placa" value={formData.plate_number} onChange={(e) => setFormData({...formData, plate_number: e.target.value})} style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} />
           <select value={formData.boss_id} onChange={(e) => setFormData({...formData, boss_id: e.target.value})} style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }}>
             <option value="">Nenhum chefe</option>
-            {bosses.map((boss: any) => <option key={boss.id} value={boss.id}>{boss.name}</option>)}
+            {bosses.map((boss: Boss) => <option key={boss.id} value={boss.id}>{boss.name}</option>)}
           </select>
           <input type="number" placeholder="Taxa Semanal" value={formData.weekly_fee} onChange={(e) => setFormData({...formData, weekly_fee: parseInt(e.target.value)})} style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} />
           <input type="number" placeholder="Máximo de Motoqueiros" value={formData.max_riders} onChange={(e) => setFormData({...formData, max_riders: parseInt(e.target.value)})} style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} />
-          <button type="submit" disabled={loading} style={{ backgroundColor: '#4f46e5', color: 'white', padding: '0.75rem', borderRadius: '0.5rem', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}>{loading ? 'Cadastrando...' : 'Cadastrar'}</button>
+          <button type="submit" disabled={loading} style={{ backgroundColor: '#4f46e5', color: 'white', padding: '0.75rem', borderRadius: '0.5rem', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}>
+            {loading ? 'Cadastrando...' : 'Cadastrar'}
+          </button>
         </form>
       </div>
     </div>
   )
 }
 
-function AddOperadorModal({ onClose, onSuccess, adminId }: any) {
+// Modal de Adicionar Operador
+function AddOperadorModal({ onClose, onSuccess, adminId }: { onClose: () => void; onSuccess: () => void; adminId?: string }) {
   const [formData, setFormData] = useState({ name: '', email: '', phone: '', password: 'operador123' })
   const [loading, setLoading] = useState(false)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault(); setLoading(true)
-    const { error } = await supabase.from('operadores').insert({ 
-      ...formData, 
-      is_active: true,
-      created_by: adminId,
-      created_at: new Date().toISOString() 
-    })
+    const { error } = await supabase.from('operadores').insert({ ...formData, is_active: true, created_by: adminId, created_at: new Date().toISOString() })
     if (!error) onSuccess(); else alert('Erro: ' + error.message)
     setLoading(false)
   }
@@ -1348,14 +1504,63 @@ function AddOperadorModal({ onClose, onSuccess, adminId }: any) {
       <div style={{ backgroundColor: 'white', borderRadius: '1rem', maxWidth: '28rem', width: '90%' }}>
         <div style={{ background: 'linear-gradient(135deg, #4f46e5, #4338ca)', padding: '1rem', borderRadius: '1rem 1rem 0 0', display: 'flex', justifyContent: 'space-between', color: 'white' }}>
           <h3 style={{ fontWeight: 'bold' }}>Novo Operador</h3>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer' }}>✕</button>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer', fontSize: '1.25rem' }}>✕</button>
         </div>
         <form onSubmit={handleSubmit} style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          <input type="text" required placeholder="Nome completo" value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} />
+          <input type="text" required placeholder="Nome" value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} />
           <input type="email" placeholder="Email (opcional)" value={formData.email} onChange={(e) => setFormData({...formData, email: e.target.value})} style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} />
-          <input type="tel" required placeholder="Telefone (usado para login)" value={formData.phone} onChange={(e) => setFormData({...formData, phone: e.target.value})} style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} />
+          <input type="tel" required placeholder="Telefone" value={formData.phone} onChange={(e) => setFormData({...formData, phone: e.target.value})} style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} />
           <input type="text" placeholder="Senha" value={formData.password} onChange={(e) => setFormData({...formData, password: e.target.value})} style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem', backgroundColor: '#f9fafb' }} />
-          <button type="submit" disabled={loading} style={{ backgroundColor: '#4f46e5', color: 'white', padding: '0.75rem', borderRadius: '0.5rem', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}>{loading ? 'Cadastrando...' : 'Cadastrar'}</button>
+          <button type="submit" disabled={loading} style={{ backgroundColor: '#4f46e5', color: 'white', padding: '0.75rem', borderRadius: '0.5rem', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}>
+            {loading ? 'Cadastrando...' : 'Cadastrar'}
+          </button>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+// Modal de Adicionar Motoqueiro
+function AddRiderModal({ plates, onClose, onSuccess }: { plates: Plate[]; onClose: () => void; onSuccess: () => void }) {
+  const [formData, setFormData] = useState({ name: '', phone: '', bi: '', password: 'senha123', plate_id: '' })
+  const [loading, setLoading] = useState(false)
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault(); setLoading(true)
+    const { error } = await supabase.from('riders').insert({
+      name: formData.name,
+      phone: formData.phone,
+      bi: formData.bi,
+      password_hash: formData.password,
+      plate_id: formData.plate_id || null,
+      status: 'active',
+      is_online: false,
+      is_frozen: false,
+      created_at: new Date().toISOString()
+    })
+    if (!error) { onSuccess(); onClose() } else { alert('Erro: ' + error.message) }
+    setLoading(false)
+  }
+
+  return (
+    <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 }}>
+      <div style={{ backgroundColor: 'white', borderRadius: '1rem', maxWidth: '28rem', width: '90%' }}>
+        <div style={{ background: 'linear-gradient(135deg, #4f46e5, #4338ca)', padding: '1rem', borderRadius: '1rem 1rem 0 0', display: 'flex', justifyContent: 'space-between', color: 'white' }}>
+          <h3 style={{ fontWeight: 'bold' }}>Novo Motoqueiro</h3>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer', fontSize: '1.25rem' }}>✕</button>
+        </div>
+        <form onSubmit={handleSubmit} style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          <input type="text" required placeholder="Nome" value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} />
+          <input type="tel" required placeholder="Telefone" value={formData.phone} onChange={(e) => setFormData({...formData, phone: e.target.value})} style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} />
+          <input type="text" required placeholder="BI" value={formData.bi} onChange={(e) => setFormData({...formData, bi: e.target.value})} style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} />
+          <input type="text" placeholder="Senha" value={formData.password} onChange={(e) => setFormData({...formData, password: e.target.value})} style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem', backgroundColor: '#f9fafb' }} />
+          <select value={formData.plate_id} onChange={(e) => setFormData({...formData, plate_id: e.target.value})} style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }}>
+            <option value="">Selecione uma placa (opcional)</option>
+            {plates.map((plate: Plate) => <option key={plate.id} value={plate.id}>{plate.plate_number}</option>)}
+          </select>
+          <button type="submit" disabled={loading} style={{ backgroundColor: '#4f46e5', color: 'white', padding: '0.75rem', borderRadius: '0.5rem', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}>
+            {loading ? 'Cadastrando...' : 'Cadastrar'}
+          </button>
         </form>
       </div>
     </div>

@@ -1,14 +1,15 @@
-// app/dashboard/motoqueiro/page.tsx
 'use client'
 import { useEffect, useState, useRef } from 'react'
 import { supabase } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import { 
   Power, Phone, MapPin, Navigation, CheckCircle, LogOut, Bell, History, Clock, CheckSquare, XCircle,
-  User, Wallet, Star, BellRing, BellOff, Edit, Camera, Loader2, X, Menu, Home, TrendingUp, Award
+  User, Wallet, Star, BellRing, BellOff, Edit, Camera, Loader2, X, Menu, Home, TrendingUp, Award,
+  Smartphone, Building, CreditCard, AlertCircle, Send
 } from 'lucide-react'
 import dynamic from 'next/dynamic'
 import 'leaflet/dist/leaflet.css'
+
 
 // Importar componentes do mapa dinamicamente
 const MapContainer = dynamic(
@@ -59,6 +60,18 @@ export default function RiderDashboard() {
   const [locationInterval, setLocationInterval] = useState<NodeJS.Timeout | null>(null)
   const [isMobile, setIsMobile] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  
+  // Pagamento states
+  const [showPaymentModal, setShowPaymentModal] = useState(false)
+  const [paymentMethod, setPaymentMethod] = useState<'unitel' | 'bank'>('unitel')
+  const [paymentProof, setPaymentProof] = useState<File | null>(null)
+  const [paymentLoading, setPaymentLoading] = useState(false)
+  const [paymentHistory, setPaymentHistory] = useState<any[]>([])
+  const [uploadingProof, setUploadingProof] = useState(false)
+  const [transactionId, setTransactionId] = useState('')
+  const [weeklyFee] = useState(500)
+  const [showPaymentHistory, setShowPaymentHistory] = useState(false)
+  
   const router = useRouter()
   const channelRef = useRef<any>(null)
   const audioRef = useRef<HTMLAudioElement | null>(null)
@@ -84,6 +97,7 @@ export default function RiderDashboard() {
     loadPendingOrders(riderId)
     loadCompletedOrders(riderId)
     loadNotifications(riderId)
+    loadPaymentHistory(riderId)
     if (channelRef.current) supabase.removeChannel(channelRef.current)
     channelRef.current = subscribeToOrders(riderId)
     const timer = setTimeout(() => {
@@ -101,7 +115,106 @@ export default function RiderDashboard() {
     }
   }, [])
 
-  // Enviar localização do motoqueiro periodicamente
+  const loadPaymentHistory = async (riderId: string) => {
+    const { data } = await supabase
+      .from('rider_payments')
+      .select('*')
+      .eq('rider_id', riderId)
+      .order('payment_date', { ascending: false })
+    setPaymentHistory(data || [])
+  }
+
+  const isPaymentUpToDate = () => {
+    if (paymentHistory.length === 0) return false
+    const lastPayment = paymentHistory[0]
+    if (lastPayment.status !== 'approved') return false
+    const lastPaymentDate = new Date(lastPayment.payment_date)
+    const now = new Date()
+    const diffDays = Math.floor((now.getTime() - lastPaymentDate.getTime()) / (1000 * 60 * 60 * 24))
+    return diffDays <= 7
+  }
+
+  const sendToWhatsApp = (paymentData: any) => {
+    const message = `🏍️ *MEUPILOTO! - COMPROVANTE DE PAGAMENTO*\n\n` +
+      `📋 *DETALHES DO PAGAMENTO*\n` +
+      `─────────────────────\n` +
+      `👤 *Motoqueiro:* ${rider?.name}\n` +
+      `🏢 *Placa:* ${rider?.plate?.plate_number || 'N/A'}\n` +
+      `💰 *Valor:* ${paymentData.amount.toLocaleString()} Kz\n` +
+      `📅 *Data:* ${new Date(paymentData.payment_date).toLocaleString('pt-AO')}\n` +
+      `🆔 *Transação:* ${paymentData.transaction_id}\n` +
+      `💳 *Método:* ${paymentData.payment_method === 'unitel' ? 'Unitel Money' : 'Transferência Bancária'}\n` +
+      `✅ *Status:* ${paymentData.status === 'approved' ? 'APROVADO' : 'PENDENTE'}\n` +
+      `─────────────────────\n\n` +
+      `Obrigado por utilizar o MeuPiloto! 🚀`
+    window.open(`https://wa.me/244926572603?text=${encodeURIComponent(message)}`, '_blank')
+  }
+
+  const handlePaymentSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!transactionId) {
+      alert('Por favor, informe o número da transação')
+      return
+    }
+    if (!paymentProof) {
+      alert('Por favor, anexe o comprovativo de pagamento')
+      return
+    }
+    
+    setPaymentLoading(true)
+    setUploadingProof(true)
+    
+    const fileExt = paymentProof.name.split('.').pop()
+    const fileName = `payment-${rider.id}-${Date.now()}.${fileExt}`
+    const filePath = `payments/${fileName}`
+    
+    const { error: uploadError } = await supabase.storage
+      .from('payment-proofs')
+      .upload(filePath, paymentProof)
+    
+    let proofUrl = ''
+    if (!uploadError) {
+      const { data: { publicUrl } } = supabase.storage
+        .from('payment-proofs')
+        .getPublicUrl(filePath)
+      proofUrl = publicUrl
+    }
+    setUploadingProof(false)
+    
+    const weekStart = new Date()
+    weekStart.setDate(weekStart.getDate() - weekStart.getDay())
+    const weekEnd = new Date(weekStart)
+    weekEnd.setDate(weekEnd.getDate() + 6)
+    
+    const { data, error } = await supabase
+      .from('rider_payments')
+      .insert({
+        rider_id: rider.id,
+        amount: weeklyFee,
+        payment_method: paymentMethod,
+        proof_url: proofUrl,
+        transaction_id: transactionId,
+        payment_date: new Date().toISOString(),
+        week_start: weekStart.toISOString(),
+        week_end: weekEnd.toISOString(),
+        status: 'pending'
+      })
+      .select()
+      .single()
+    
+    if (!error && data) {
+      sendToWhatsApp(data)
+      alert('✅ Comprovante enviado! Aguarde aprovação do administrador.')
+      setShowPaymentModal(false)
+      setTransactionId('')
+      setPaymentProof(null)
+      loadPaymentHistory(rider.id)
+    } else {
+      alert('Erro ao enviar comprovante: ' + error?.message)
+    }
+    setPaymentLoading(false)
+  }
+
   const startLocationTracking = () => {
     if (locationInterval) clearInterval(locationInterval)
     
@@ -237,11 +350,9 @@ export default function RiderDashboard() {
     if (!rider?.id) { alert('❌ Sessão expirada. Faça login novamente.'); router.push('/login/motoqueiro'); return }
     
     setSelectedOrder(order)
-    
     if (order.customer_lat && order.customer_lng) {
       setCustomerLocation({ lat: order.customer_lat, lng: order.customer_lng })
     }
-    
     setShowMap(true)
     startLocationTracking()
     
@@ -329,7 +440,6 @@ export default function RiderDashboard() {
     )
   }
 
-  // Tela do mapa com navegação
   if (showMap && selectedOrder) {
     const center = riderLocation || customerLocation || { lat: -8.8383, lng: 13.2344 }
     const distance = calculateDistance()
@@ -452,10 +562,8 @@ export default function RiderDashboard() {
 
   return (
     <div style={styles.container}>
-      {/* Overlay do menu mobile */}
       <div style={styles.overlay} onClick={() => setMobileMenuOpen(false)} />
 
-      {/* Menu Mobile */}
       <div style={styles.mobileMenu}>
         <div style={{ padding: '20px', borderBottom: '1px solid #f0f0f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -473,6 +581,9 @@ export default function RiderDashboard() {
           <button onClick={() => { setActiveTab('history'); setMobileMenuOpen(false) }} style={{ width: '100%', padding: '12px 16px', display: 'flex', alignItems: 'center', gap: '12px', background: 'none', border: 'none', borderRadius: '12px', cursor: 'pointer', marginBottom: '4px' }}>
             <History size={20} color="#6b7280" /> Histórico
           </button>
+          <button onClick={() => { setShowPaymentHistory(true); setMobileMenuOpen(false) }} style={{ width: '100%', padding: '12px 16px', display: 'flex', alignItems: 'center', gap: '12px', background: 'none', border: 'none', borderRadius: '12px', cursor: 'pointer', marginBottom: '4px' }}>
+            <CreditCard size={20} color="#6b7280" /> Pagamentos
+          </button>
           <button onClick={() => { setShowEditProfile(true); setMobileMenuOpen(false) }} style={{ width: '100%', padding: '12px 16px', display: 'flex', alignItems: 'center', gap: '12px', background: 'none', border: 'none', borderRadius: '12px', cursor: 'pointer', marginBottom: '4px' }}>
             <Edit size={20} color="#6b7280" /> Editar Perfil
           </button>
@@ -487,7 +598,6 @@ export default function RiderDashboard() {
         </div>
       </div>
 
-      {/* Header */}
       <div style={{ background: 'white', boxShadow: '0 1px 3px rgba(0,0,0,0.05)', borderBottom: '1px solid #f0f0f0', position: 'sticky', top: 0, zIndex: 10 }}>
         <div style={{ maxWidth: '1280px', margin: '0 auto', padding: isMobile ? '12px 16px' : '16px 24px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
@@ -505,7 +615,6 @@ export default function RiderDashboard() {
               </div>
             </div>
 
-            {/* Desktop Actions */}
             {!isMobile && (
               <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                 <button onClick={() => setShowEditProfile(true)} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 16px', background: '#3b82f6', color: 'white', border: 'none', borderRadius: '30px', fontSize: '13px', fontWeight: 500, cursor: 'pointer' }}>
@@ -562,7 +671,6 @@ export default function RiderDashboard() {
               </div>
             )}
 
-            {/* Mobile Menu Button */}
             {isMobile && (
               <button onClick={() => setMobileMenuOpen(true)} style={{ padding: '8px', background: 'none', border: 'none', cursor: 'pointer' }}>
                 <Menu size={24} color="#374151" />
@@ -570,7 +678,6 @@ export default function RiderDashboard() {
             )}
           </div>
 
-          {/* Stats Cards */}
           <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(3, 1fr)' : 'repeat(3, 1fr)', gap: isMobile ? '8px' : '12px', marginTop: '16px' }}>
             <div style={{ background: 'linear-gradient(135deg, #f59e0b, #ea580c)', borderRadius: '12px', padding: isMobile ? '10px' : '12px', color: 'white' }}>
               <Wallet size={isMobile ? 16 : 20} style={{ marginBottom: '4px', opacity: 0.8 }} />
@@ -588,10 +695,46 @@ export default function RiderDashboard() {
               <p style={{ fontSize: '10px', opacity: 0.8 }}>Avaliação</p>
             </div>
           </div>
+
+          {/* Status de Pagamento */}
+          <div style={{ marginTop: '16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div style={{ 
+                padding: '8px 16px', 
+                borderRadius: '30px', 
+                background: isPaymentUpToDate() ? '#d1fae5' : '#fee2e2',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px'
+              }}>
+                {isPaymentUpToDate() ? (
+                  <CheckCircle size={16} color="#059669" />
+                ) : (
+                  <AlertCircle size={16} color="#dc2626" />
+                )}
+                <span style={{ fontSize: '13px', fontWeight: 500, color: isPaymentUpToDate() ? '#065f46' : '#991b1b' }}>
+                  {isPaymentUpToDate() ? 'Pagamento em dia' : 'Pagamento pendente'}
+                </span>
+              </div>
+              <button 
+                onClick={() => setShowPaymentHistory(true)} 
+                style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 16px', background: '#f3f4f6', border: 'none', borderRadius: '30px', cursor: 'pointer', fontSize: '13px' }}
+              >
+                <History size={14} /> Histórico
+              </button>
+            </div>
+            {!isPaymentUpToDate() && (
+              <button 
+                onClick={() => setShowPaymentModal(true)} 
+                style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 20px', background: 'linear-gradient(135deg, #f59e0b, #ea580c)', color: 'white', border: 'none', borderRadius: '30px', fontWeight: 'bold', cursor: 'pointer' }}
+              >
+                <CreditCard size={16} /> Pagar Taxa ({weeklyFee} Kz)
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
-      {/* Offline Alert */}
       {!isOnline && activeTab === 'pending' && (
         <div style={{ background: '#fef3c7', borderLeft: '4px solid #f59e0b', padding: '12px 16px', margin: '16px', borderRadius: '12px' }}>
           <p style={{ color: '#92400e', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -600,7 +743,6 @@ export default function RiderDashboard() {
         </div>
       )}
 
-      {/* Tabs */}
       <div style={{ maxWidth: '1280px', margin: '0 auto', padding: isMobile ? '0 12px' : '0 24px', marginTop: '16px' }}>
         <div style={{ display: 'flex', gap: '4px', borderBottom: '1px solid #e5e7eb' }}>
           <button onClick={() => setActiveTab('pending')} style={{ padding: isMobile ? '10px 16px' : '12px 24px', border: 'none', background: 'none', cursor: 'pointer', fontWeight: 600, fontSize: isMobile ? '14px' : '15px', color: activeTab === 'pending' ? '#f59e0b' : '#6b7280', borderBottom: activeTab === 'pending' ? '2px solid #f59e0b' : 'none', display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -612,7 +754,6 @@ export default function RiderDashboard() {
         </div>
       </div>
 
-      {/* Content */}
       <div style={{ maxWidth: '1280px', margin: '0 auto', padding: isMobile ? '16px' : '24px' }}>
         {activeTab === 'pending' ? (
           pendingOrders.length === 0 ? (
@@ -821,6 +962,320 @@ export default function RiderDashboard() {
                 <button type="submit" style={{ flex: 1, padding: '12px', background: 'linear-gradient(135deg, #f59e0b, #ea580c)', color: 'white', border: 'none', borderRadius: '12px', cursor: 'pointer', fontWeight: 'bold' }}>Salvar</button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+            {/* Modal de Pagamento */}
+      {showPaymentModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.6)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 9999,
+          padding: '16px',
+          backdropFilter: 'blur(4px)'
+        }}>
+          <div style={{
+            backgroundColor: 'white',
+            borderRadius: '24px',
+            maxWidth: '500px',
+            width: '100%',
+            maxHeight: '90vh',
+            overflow: 'auto'
+          }}>
+            <div style={{
+              background: 'linear-gradient(135deg, #f59e0b, #ea580c)',
+              padding: '20px',
+              borderRadius: '24px 24px 0 0',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              color: 'white'
+            }}>
+              <div>
+                <h3 style={{ fontWeight: 'bold', fontSize: '18px' }}>Pagar Taxa Semanal</h3>
+                <p style={{ fontSize: '13px', opacity: 0.9, marginTop: '4px' }}>Mantenha sua conta ativa</p>
+              </div>
+              <button onClick={() => setShowPaymentModal(false)} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white', width: '32px', height: '32px', borderRadius: '50%', cursor: 'pointer', fontSize: '20px' }}>✕</button>
+            </div>
+            
+            <form onSubmit={handlePaymentSubmit} style={{ padding: '24px' }}>
+              <div style={{ textAlign: 'center', marginBottom: '24px' }}>
+                <p style={{ fontSize: '36px', fontWeight: 'bold', color: '#f59e0b' }}>
+                  {weeklyFee.toLocaleString()} Kz
+                </p>
+                <p style={{ fontSize: '13px', color: '#6b7280' }}>Taxa semanal</p>
+              </div>
+              
+              <div style={{ display: 'flex', gap: '12px', marginBottom: '24px' }}>
+                <button
+                  type="button"
+                  onClick={() => setPaymentMethod('unitel')}
+                  style={{
+                    flex: 1,
+                    padding: '16px',
+                    borderRadius: '16px',
+                    border: paymentMethod === 'unitel' ? '2px solid #f59e0b' : '1px solid #e5e7eb',
+                    backgroundColor: paymentMethod === 'unitel' ? '#fef3c7' : 'white',
+                    cursor: 'pointer',
+                    textAlign: 'center'
+                  }}
+                >
+                  <Smartphone size={28} style={{ margin: '0 auto 8px', color: paymentMethod === 'unitel' ? '#d97706' : '#9ca3af' }} />
+                  <strong style={{ fontSize: '14px', color: paymentMethod === 'unitel' ? '#d97706' : '#374151' }}>Unitel Money</strong>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPaymentMethod('bank')}
+                  style={{
+                    flex: 1,
+                    padding: '16px',
+                    borderRadius: '16px',
+                    border: paymentMethod === 'bank' ? '2px solid #f59e0b' : '1px solid #e5e7eb',
+                    backgroundColor: paymentMethod === 'bank' ? '#fef3c7' : 'white',
+                    cursor: 'pointer',
+                    textAlign: 'center'
+                  }}
+                >
+                  <Building size={28} style={{ margin: '0 auto 8px', color: paymentMethod === 'bank' ? '#d97706' : '#9ca3af' }} />
+                  <strong style={{ fontSize: '14px', color: paymentMethod === 'bank' ? '#d97706' : '#374151' }}>Transferência</strong>
+                </button>
+              </div>
+              
+              {paymentMethod === 'unitel' && (
+                <div style={{ backgroundColor: '#f0fdf4', padding: '16px', borderRadius: '16px', marginBottom: '20px', border: '1px solid #bbf7d0' }}>
+                  <p style={{ fontWeight: 'bold', marginBottom: '8px', color: '#166534' }}>📱 Dados para pagamento:</p>
+                  <p style={{ fontSize: '14px' }}>Número: <strong>926 572 603</strong></p>
+                  <p style={{ fontSize: '14px', marginTop: '4px' }}>Nome: <strong>Rafael Domingos Nzambi</strong></p>
+                </div>
+              )}
+              
+              {paymentMethod === 'bank' && (
+                <div style={{ backgroundColor: '#eff6ff', padding: '16px', borderRadius: '16px', marginBottom: '20px', border: '1px solid #bfdbfe' }}>
+                  <p style={{ fontWeight: 'bold', marginBottom: '8px', color: '#1e40af' }}>🏦 Dados para transferência:</p>
+                  <p style={{ fontSize: '13px' }}>IBAN: <strong>0055.0000.2883.6759.1015.5</strong></p>
+                  <p style={{ fontSize: '13px', marginTop: '4px' }}>Beneficiário: <strong>Rafael Domingos Nzambi</strong></p>
+                </div>
+              )}
+              
+              <div style={{ marginBottom: '20px' }}>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, marginBottom: '8px' }}>
+                  Número da Transação / Referência *
+                </label>
+                <input
+                  type="text"
+                  placeholder="Ex: TRX-123456"
+                  value={transactionId}
+                  onChange={(e) => setTransactionId(e.target.value)}
+                  required
+                  style={{ width: '100%', padding: '14px', border: '1px solid #e5e7eb', borderRadius: '12px', fontSize: '14px' }}
+                />
+                <p style={{ fontSize: '11px', color: '#9ca3af', marginTop: '6px' }}>
+                  Insira o código/número da transação fornecida pelo seu banco ou operadora
+                </p>
+              </div>
+              
+              <div style={{ marginBottom: '24px' }}>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, marginBottom: '8px' }}>
+                  Comprovativo de Pagamento (foto/print) *
+                </label>
+                <div style={{ 
+                  border: paymentProof ? '2px solid #10b981' : '1px dashed #e5e7eb', 
+                  borderRadius: '12px', 
+                  padding: '20px', 
+                  textAlign: 'center', 
+                  cursor: 'pointer', 
+                  background: paymentProof ? '#f0fdf4' : '#f9fafb',
+                  transition: 'all 0.2s'
+                }}>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0]
+                      if (file && file.size > 2 * 1024 * 1024) {
+                        alert('❌ O arquivo não pode ter mais que 2MB')
+                        return
+                      }
+                      setPaymentProof(file || null)
+                    }}
+                    required
+                    style={{ display: 'none' }}
+                    id="payment-proof-input"
+                  />
+                  <label htmlFor="payment-proof-input" style={{ cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                    {paymentProof ? (
+                      <>
+                        <CheckCircle size={32} color="#10b981" />
+                        <span style={{ fontSize: '13px', color: '#065f46' }}>
+                          ✓ {paymentProof.name}
+                        </span>
+                        <span style={{ fontSize: '11px', color: '#6b7280' }}>
+                          Clique para trocar
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        <Camera size={32} color="#9ca3af" />
+                        <span style={{ fontSize: '13px', color: '#6b7280' }}>
+                          Clique para anexar comprovativo
+                        </span>
+                      </>
+                    )}
+                  </label>
+                </div>
+                <p style={{ fontSize: '11px', color: '#9ca3af', marginTop: '8px' }}>
+                  📸 Formatos aceitos: JPG, PNG (máx 2MB)
+                </p>
+              </div>
+              
+              <button
+                type="submit"
+                disabled={paymentLoading || uploadingProof}
+                style={{
+                  width: '100%',
+                  padding: '16px',
+                  background: 'linear-gradient(135deg, #25D366, #128C7E)',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '14px',
+                  fontWeight: 'bold',
+                  fontSize: '16px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '10px',
+                  opacity: (paymentLoading || uploadingProof) ? 0.7 : 1,
+                  transition: 'all 0.2s'
+                }}
+              >
+                {paymentLoading || uploadingProof ? (
+                  <>
+                    <Loader2 size={20} style={{ animation: 'spin 1s linear infinite' }} />
+                    {uploadingProof ? 'Fazendo upload...' : 'Enviando...'}
+                  </>
+                ) : (
+                  <>
+                    <Send size={20} />
+                    Enviar Comprovativo via WhatsApp
+                  </>
+                )}
+              </button>
+              
+              <p style={{ fontSize: '11px', color: '#9ca3af', textAlign: 'center', marginTop: '16px' }}>
+                🔒 Após o envio, aguarde a aprovação do administrador
+              </p>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Histórico de Pagamentos */}
+      {showPaymentHistory && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.6)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 9999,
+          padding: '16px',
+          backdropFilter: 'blur(4px)'
+        }}>
+          <div style={{
+            backgroundColor: 'white',
+            borderRadius: '24px',
+            maxWidth: '550px',
+            width: '100%',
+            maxHeight: '80vh',
+            overflow: 'auto'
+          }}>
+            <div style={{
+              background: 'linear-gradient(135deg, #f59e0b, #ea580c)',
+              padding: '20px',
+              borderRadius: '24px 24px 0 0',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              color: 'white'
+            }}>
+              <div>
+                <h3 style={{ fontWeight: 'bold', fontSize: '18px' }}>Histórico de Pagamentos</h3>
+                <p style={{ fontSize: '13px', opacity: 0.9, marginTop: '4px' }}>Taxa semanal: {weeklyFee} Kz</p>
+              </div>
+              <button onClick={() => setShowPaymentHistory(false)} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white', width: '32px', height: '32px', borderRadius: '50%', cursor: 'pointer', fontSize: '20px' }}>✕</button>
+            </div>
+            
+            <div style={{ padding: '20px' }}>
+              {paymentHistory.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '40px' }}>
+                  <History size={48} style={{ margin: '0 auto 16px', color: '#d1d5db' }} />
+                  <p style={{ color: '#6b7280' }}>Nenhum pagamento registrado</p>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  {paymentHistory.map((payment) => (
+                    <div key={payment.id} style={{
+                      background: '#f9fafb',
+                      borderRadius: '12px',
+                      padding: '16px',
+                      border: '1px solid #f0f0f0'
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+                        <div>
+                          <p style={{ fontWeight: 'bold', fontSize: '14px' }}>
+                            {new Date(payment.payment_date).toLocaleDateString('pt-AO')}
+                          </p>
+                          <p style={{ fontSize: '12px', color: '#6b7280' }}>
+                            {payment.payment_method === 'unitel' ? 'Unitel Money' : 'Transferência Bancária'}
+                          </p>
+                        </div>
+                        <div>
+                          <span style={{
+                            display: 'inline-block',
+                            padding: '4px 12px',
+                            borderRadius: '20px',
+                            fontSize: '11px',
+                            fontWeight: 500,
+                            background: payment.status === 'approved' ? '#d1fae5' : '#fef3c7',
+                            color: payment.status === 'approved' ? '#065f46' : '#d97706'
+                          }}>
+                            {payment.status === 'approved' ? '✓ Aprovado' : '⏳ Pendente'}
+                          </span>
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <p style={{ fontSize: '18px', fontWeight: 'bold', color: '#f59e0b' }}>
+                          {payment.amount.toLocaleString()} Kz
+                        </p>
+                        {payment.proof_url && (
+                          <a href={payment.proof_url} target="_blank" style={{ fontSize: '12px', color: '#3b82f6', textDecoration: 'none' }}>
+                            Ver comprovante
+                          </a>
+                        )}
+                      </div>
+                      {payment.transaction_id && (
+                        <p style={{ fontSize: '10px', color: '#9ca3af', marginTop: '8px' }}>
+                          Transação: {payment.transaction_id}
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
