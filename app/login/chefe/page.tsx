@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
-import { Bike, Phone, Lock, AlertCircle, Shield, Eye, EyeOff, ArrowRight, User } from 'lucide-react'
+import { Phone, Lock, AlertCircle, Shield, Eye, EyeOff, ArrowRight } from 'lucide-react'
 
 export default function BossLogin() {
   const [phone, setPhone] = useState('')
@@ -26,42 +26,84 @@ export default function BossLogin() {
     setLoading(true)
     setError('')
 
-    console.log('Tentando login com:', { phone, password })
+    const cleanPhone = phone.replace(/\D/g, '')
+    
+    console.log('📱 Telefone digitado:', phone)
+    console.log('📱 Telefone limpo:', cleanPhone)
 
-    const { data: boss, error } = await supabase
+    // Buscar TODOS os chefes para debug
+    const { data: allBosses, error: allError } = await supabase
+      .from('bosses')
+      .select('id, name, phone, password')
+
+    console.log('📋 Todos os chefes no banco:', allBosses)
+    console.log('Erro ao buscar todos:', allError)
+
+    // Buscar o chefe específico
+    const { data: boss, error: bossError } = await supabase
       .from('bosses')
       .select('*')
-      .eq('phone', phone)
-      .single()
+      .eq('phone', cleanPhone)
+      .maybeSingle()
 
-    console.log('Resultado da busca:', { boss, error })
+    console.log('🎯 Chefe encontrado:', boss)
+    console.log('Erro na busca:', bossError)
 
-    if (error || !boss) {
-      setError('Chefe não encontrado. Verifique o telefone.')
+    if (bossError) {
+      setError('Erro ao buscar chefe: ' + bossError.message)
       setLoading(false)
       return
     }
 
-    console.log('Senha digitada:', password)
-    console.log('Senha no banco:', boss.password)
-
-    if (boss.password === password) {
-      const { data: plate } = await supabase
-        .from('plates')
+    if (!boss) {
+      // Tentar buscar sem limpar o telefone
+      const { data: bossRaw } = await supabase
+        .from('bosses')
         .select('*')
-        .eq('boss_id', boss.id)
-        .single()
-
-      localStorage.setItem('boss_id', boss.id)
-      localStorage.setItem('boss_name', boss.name)
-      localStorage.setItem('boss_phone', boss.phone)
-      localStorage.setItem('boss_plate_id', plate?.id || '')
-      localStorage.setItem('boss_plate_name', plate?.plate_number || '')
+        .eq('phone', phone)
+        .maybeSingle()
       
-      router.push('/dashboard/chefe')
-    } else {
-      setError('Senha incorreta')
+      if (bossRaw) {
+        console.log('✅ Encontrado com telefone original:', bossRaw)
+        if (bossRaw.password === password) {
+          localStorage.setItem('boss_id', bossRaw.id)
+          localStorage.setItem('boss_name', bossRaw.name)
+          localStorage.setItem('boss_phone', bossRaw.phone)
+          router.push('/dashboard/chefe')
+          setLoading(false)
+          return
+        } else {
+          setError('Senha incorreta')
+          setLoading(false)
+          return
+        }
+      }
+      
+      setError(`Chefe não encontrado. Telefone "${cleanPhone}" não cadastrado. Chefes disponíveis: ${allBosses?.map(b => b.phone).join(', ')}`)
+      setLoading(false)
+      return
     }
+
+    if (boss.password !== password) {
+      setError('Senha incorreta')
+      setLoading(false)
+      return
+    }
+
+    // Buscar placa
+    const { data: plate } = await supabase
+      .from('plates')
+      .select('*')
+      .eq('boss_id', boss.id)
+      .maybeSingle()
+
+    localStorage.setItem('boss_id', boss.id)
+    localStorage.setItem('boss_name', boss.name)
+    localStorage.setItem('boss_phone', boss.phone)
+    localStorage.setItem('boss_plate_id', plate?.id || '')
+    localStorage.setItem('boss_plate_name', plate?.plate_number || '')
+
+    router.push('/dashboard/chefe')
     setLoading(false)
   }
 
@@ -93,8 +135,7 @@ export default function BossLogin() {
       width: '100%',
       padding: isMobile ? '32px 24px' : '48px 40px',
       position: 'relative' as const,
-      zIndex: 1,
-      transition: 'transform 0.3s ease'
+      zIndex: 1
     },
     logoContainer: {
       display: 'flex',
@@ -208,11 +249,6 @@ export default function BossLogin() {
       textAlign: 'center' as const,
       fontSize: '12px',
       color: '#9ca3af'
-    },
-    link: {
-      color: '#f59e0b',
-      textDecoration: 'none',
-      fontWeight: 500
     }
   }
 
@@ -250,6 +286,9 @@ export default function BossLogin() {
                 onBlur={(e) => e.currentTarget.style.borderColor = error ? '#fecaca' : '#e5e7eb'}
               />
             </div>
+            <p style={{ fontSize: '11px', color: '#9ca3af', marginTop: '4px' }}>
+              Digite o telefone exatamente como cadastrado
+            </p>
           </div>
 
           <div style={styles.inputGroup}>
@@ -312,9 +351,7 @@ export default function BossLogin() {
         </form>
 
         <div style={styles.footer}>
-          <p>
-            Gerencie seus motoqueiros e corridas
-          </p>
+          <p>Gerencie seus motoqueiros e corridas</p>
           <p style={{ marginTop: '8px' }}>
             <Shield size={12} style={{ display: 'inline', marginRight: '4px' }} />
             Plataforma Segura

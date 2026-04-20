@@ -140,14 +140,22 @@ export default function AdminDashboard() {
   const [showAddPlate, setShowAddPlate] = useState(false)
   const [showAddOperador, setShowAddOperador] = useState(false)
   const [showAddRider, setShowAddRider] = useState(false)
+  const [showEditBoss, setShowEditBoss] = useState<Boss | null>(null)
+  const [showEditPlate, setShowEditPlate] = useState<Plate | null>(null)
+  const [showEditRider, setShowEditRider] = useState<Rider | null>(null)
   const [showPaymentModal, setShowPaymentModal] = useState(false)
-  const [selectedRider, setSelectedRider] = useState<Rider | null>(null)
   const [selectedPayment, setSelectedPayment] = useState<RiderPayment | null>(null)
   const [newRiderPlateId, setNewRiderPlateId] = useState<string>('')
   const [selectedOperador, setSelectedOperador] = useState<string>('')
   const [selectedPlates, setSelectedPlates] = useState<Set<string>>(new Set())
   const [assignSearchTerm, setAssignSearchTerm] = useState('')
   const [paymentFilter, setPaymentFilter] = useState<string>('pending')
+  const [selectedBoss, setSelectedBoss] = useState<Boss | null>(null)
+  const [showEditBossModal, setShowEditBossModal] = useState(false)
+  const [selectedPlate, setSelectedPlate] = useState<Plate | null>(null)
+  const [showEditPlateModal, setShowEditPlateModal] = useState(false)
+  const [selectedRider, setSelectedRider] = useState<Rider | null>(null)
+  const [showEditRiderModal, setShowEditRiderModal] = useState(false)
   const [assignLoading, setAssignLoading] = useState(false)
   const [assignMessage, setAssignMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [stats, setStats] = useState({
@@ -254,13 +262,92 @@ export default function AdminDashboard() {
     setLoading(false)
   }
 
+  // Funções de Edição
+  const handleEditBoss = async (bossId: string, formData: { name: string; email: string; phone: string; password: string }) => {
+    const updateData: any = {
+      name: formData.name,
+      email: formData.email,
+      phone: formData.phone
+    }
+    if (formData.password) {
+      updateData.password = formData.password
+    }
+    
+    const { error } = await supabase
+      .from('bosses')
+      .update(updateData)
+      .eq('id', bossId)
+    
+    if (!error) {
+      alert('✅ Chefe atualizado com sucesso!')
+      loadAllData()
+      setShowEditBossModal(false)
+      setSelectedBoss(null)
+      return true
+    } else {
+      alert('Erro ao atualizar chefe: ' + error.message)
+      return false
+    }
+  }
+
+  const handleEditPlate = async (plateId: string, formData: { plate_number: string; boss_id: string; weekly_fee: number; max_riders: number }) => {
+    const { error } = await supabase
+      .from('plates')
+      .update({
+        plate_number: formData.plate_number,
+        boss_id: formData.boss_id || null,
+        weekly_fee: formData.weekly_fee,
+        max_riders: formData.max_riders,
+        total_weekly_fee: formData.max_riders * 300
+      })
+      .eq('id', plateId)
+    
+    if (!error) {
+      alert('✅ Placa atualizada com sucesso!')
+      loadAllData()
+      setShowEditPlateModal(false)
+      setSelectedPlate(null)
+      return true
+    } else {
+      alert('Erro ao atualizar placa: ' + error.message)
+      return false
+    }
+  }
+
+  const handleEditRider = async (riderId: string, formData: { name: string; phone: string; bi: string; password: string; plate_id: string }) => {
+    const updateData: any = {
+      name: formData.name,
+      phone: formData.phone,
+      bi: formData.bi,
+      plate_id: formData.plate_id || null
+    }
+    if (formData.password) {
+      updateData.password_hash = formData.password
+    }
+    
+    const { error } = await supabase
+      .from('riders')
+      .update(updateData)
+      .eq('id', riderId)
+    
+    if (!error) {
+      alert('✅ Motoqueiro atualizado com sucesso!')
+      loadAllData()
+      setShowEditRiderModal(false)
+      setSelectedRider(null)
+      return true
+    } else {
+      alert('Erro ao atualizar motoqueiro: ' + error.message)
+      return false
+    }
+  }
+
   // Funções de Pagamento
   const approvePayment = async (paymentId: string) => {
     if (!confirm('Aprovar este pagamento?')) return
     
     const adminId = localStorage.getItem('admin_id')
     
-    // Buscar o pagamento para saber o rider_id
     const { data: payment } = await supabase
       .from('rider_payments')
       .select('rider_id')
@@ -277,7 +364,6 @@ export default function AdminDashboard() {
       .eq('id', paymentId)
     
     if (!error) {
-      // Descongelar o motoqueiro automaticamente
       if (payment) {
         await supabase
           .from('riders')
@@ -319,7 +405,6 @@ export default function AdminDashboard() {
   // Funções de Congelamento de Motoqueiro
   const toggleFreezeRider = async (riderId: string, currentStatus: boolean) => {
     if (!currentStatus) {
-      // Congelar - pedir motivo
       const reason = prompt('Motivo do congelamento:', 'Pagamento pendente')
       if (reason === null) return
       
@@ -342,7 +427,6 @@ export default function AdminDashboard() {
         alert('Erro ao congelar: ' + error.message)
       }
     } else {
-      // Descongelar
       if (!confirm(`Deseja descongelar este motoqueiro?\n\nO motoqueiro precisará ativar o online manualmente.`)) return
       
       const { error } = await supabase
@@ -364,7 +448,6 @@ export default function AdminDashboard() {
     }
   }
 
-  // Função para forçar offline
   const forceOffline = async (riderId: string, riderName: string) => {
     if (!confirm(`⚠️ Tem certeza que deseja FORÇAR OFFLINE o motoqueiro ${riderName}?\n\nEle será desconectado imediatamente.`)) return
     
@@ -378,30 +461,6 @@ export default function AdminDashboard() {
       loadAllData()
     } else {
       alert('Erro: ' + error.message)
-    }
-  }
-
-  // Funções de Criação de Motoqueiro
-  const createRider = async (formData: any) => {
-    const { error } = await supabase.from('riders').insert({
-      name: formData.name,
-      phone: formData.phone,
-      bi: formData.bi,
-      password_hash: formData.password || 'senha123',
-      plate_id: formData.plate_id || null,
-      status: 'active',
-      is_online: false,
-      is_frozen: false,
-      created_at: new Date().toISOString()
-    })
-    
-    if (!error) {
-      alert('✅ Motoqueiro criado com sucesso!')
-      loadAllData()
-      return true
-    } else {
-      alert('Erro ao criar motoqueiro: ' + error.message)
-      return false
     }
   }
 
@@ -670,7 +729,7 @@ export default function AdminDashboard() {
         </div>
       </div>
 
-      {/* Main Content */}
+         {/* Main Content */}
       <div style={styles.mainContent}>
         {/* Header */}
         <div style={{ backgroundColor: 'white', boxShadow: '0 1px 2px 0 rgba(0,0,0,0.05)', position: 'sticky', top: 0, zIndex: 10 }}>
@@ -769,12 +828,24 @@ export default function AdminDashboard() {
                       <td style={styles.td}>{assoc.name}</td>
                       <td style={styles.td}>{assoc.email}</td>
                       <td style={styles.td}>{assoc.phone}</td>
-                      <td style={styles.td}><span style={assoc.is_active ? styles.badgeActive : styles.badgeInactive}>{assoc.is_active ? 'Ativo' : 'Inativo'}</span></td>
-                      <td style={styles.td}><button onClick={() => deleteItem('associations', assoc.id, assoc.name)} style={styles.buttonDanger}><Trash2 size={16} /></button></td>
+                      <td style={styles.td}>
+                        <span style={assoc.is_active ? styles.badgeActive : styles.badgeInactive}>
+                          {assoc.is_active ? 'Ativo' : 'Inativo'}
+                        </span>
+                      </td>
+                      <td style={styles.td}>
+                        <button onClick={() => deleteItem('associations', assoc.id, assoc.name)} style={styles.buttonDanger}>
+                          <Trash2 size={16} />
+                        </button>
+                      </td>
                     </tr>
                   ))}
                   {filteredAssociations.length === 0 && (
-                    <tr><td colSpan={5} style={{ padding: '2rem', textAlign: 'center', color: '#6b7280' }}>Nenhuma associação encontrada</td></tr>
+                    <tr>
+                      <td colSpan={5} style={{ padding: '2rem', textAlign: 'center', color: '#6b7280' }}>
+                        Nenhuma associação encontrada
+                      </td>
+                    </tr>
                   )}
                 </tbody>
               </table>
@@ -819,12 +890,20 @@ export default function AdminDashboard() {
                           </div>
                         </td>
                         <td style={styles.td}>{new Date(op.created_at).toLocaleDateString('pt-AO')}</td>
-                        <td style={styles.td}><button onClick={() => deleteItem('operadores', op.id, op.name)} style={styles.buttonDanger}><Trash2 size={16} /></button></td>
+                        <td style={styles.td}>
+                          <button onClick={() => deleteItem('operadores', op.id, op.name)} style={styles.buttonDanger}>
+                            <Trash2 size={16} />
+                          </button>
+                        </td>
                       </tr>
                     )
                   })}
                   {filteredOperadores.length === 0 && (
-                    <tr><td colSpan={7} style={{ padding: '2rem', textAlign: 'center', color: '#6b7280' }}>Nenhum operador encontrado</td></tr>
+                    <tr>
+                      <td colSpan={7} style={{ padding: '2rem', textAlign: 'center', color: '#6b7280' }}>
+                        Nenhum operador encontrado
+                      </td>
+                    </tr>
                   )}
                 </tbody>
               </table>
@@ -905,6 +984,18 @@ export default function AdminDashboard() {
                     else if (paymentFilter === 'approved') filteredPaymentsList = riderPayments.filter(p => p.status === 'approved')
                     else filteredPaymentsList = riderPayments.filter(p => p.status === 'rejected')
                     
+                    if (filteredPaymentsList.length === 0) {
+                      return (
+                        <tr>
+                          <td colSpan={9} style={{ padding: '3rem', textAlign: 'center', color: '#6b7280' }}>
+                            {paymentFilter === 'pending' ? '💰 Nenhum pagamento pendente' : 
+                             paymentFilter === 'approved' ? '✅ Nenhum pagamento aprovado' : 
+                             '❌ Nenhum pagamento rejeitado'}
+                          </td>
+                        </tr>
+                      )
+                    }
+                    
                     return filteredPaymentsList.map((payment) => {
                       const rider = riders.find(r => r.id === payment.rider_id)
                       return (
@@ -983,22 +1074,6 @@ export default function AdminDashboard() {
                         </tr>
                       )
                     })
-                  })()}
-                  {(() => {
-                    let count = 0
-                    if (paymentFilter === 'pending') count = riderPayments.filter(p => p.status === 'pending').length
-                    else if (paymentFilter === 'approved') count = riderPayments.filter(p => p.status === 'approved').length
-                    else count = riderPayments.filter(p => p.status === 'rejected').length
-                    
-                    return count === 0 && (
-                      <tr>
-                        <td colSpan={9} style={{ padding: '3rem', textAlign: 'center', color: '#6b7280' }}>
-                          {paymentFilter === 'pending' ? '💰 Nenhum pagamento pendente' : 
-                           paymentFilter === 'approved' ? '✅ Nenhum pagamento aprovado' : 
-                           '❌ Nenhum pagamento rejeitado'}
-                        </td>
-                      </tr>
-                    )
                   })()}
                 </tbody>
               </table>
@@ -1170,135 +1245,155 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* Pedidos */}
-        {activeTab === 'orders' && (
-          <div style={{ padding: '1.5rem', overflowX: 'auto' }}>
-            <div style={{ backgroundColor: 'white', borderRadius: '0.75rem', overflow: 'auto' }}>
-              <table style={styles.table}>
-                <thead>
-                  <tr>
-                    <th style={styles.th}>Cliente</th>
-                    <th style={styles.th}>Telefone</th>
-                    <th style={styles.th}>Motoqueiro</th>
-                    <th style={styles.th}>Tel. Motoqueiro</th>
-                    <th style={styles.th}>Valor</th>
-                    <th style={styles.th}>Status</th>
-                    <th style={styles.th}>Data</th>
-                    <th style={styles.th}>Ações</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredOrders.map((order) => (
-                    <tr key={order.id}>
-                      <td style={styles.td}>{order.customer_name || '-'}</td>
-                      <td style={styles.td}>{order.customer_phone || '-'}</td>
-                      <td style={styles.td}>
-                        {order.rider ? (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                            <span>{order.rider.name}</span>
-                            {order.rider.is_online ? 
-                              <span style={{ fontSize: '0.7rem', color: '#10b981' }}>● Online</span> : 
-                              <span style={{ fontSize: '0.7rem', color: '#ef4444' }}>● Offline</span>
-                            }
-                          </div>
-                        ) : <span style={{ color: '#9ca3af' }}>Não atribuído</span>}
-                      </td>
-                      <td style={styles.td}>
-                        {order.rider?.phone ? (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                            <span>{order.rider.phone}</span>
-                            <button onClick={() => callRider(order.rider!.phone, order.rider!.name)} style={styles.buttonCall}>
-                              <Phone size={12} /> Ligar
-                            </button>
-                          </div>
-                        ) : <span>-</span>}
-                      </td>
-                      <td style={styles.td}>{order.price?.toLocaleString()} Kz</td>
-                      <td style={styles.td}>
-                        <span style={{ 
-                          padding: '0.25rem 0.5rem', borderRadius: '9999px', fontSize: '0.75rem', 
-                          backgroundColor: order.status === 'completed' ? '#d1fae5' : order.status === 'pending' ? '#fef3c7' : order.status === 'accepted' ? '#dbeafe' : '#fee2e2', 
-                          color: order.status === 'completed' ? '#065f46' : order.status === 'pending' ? '#92400e' : order.status === 'accepted' ? '#1e40af' : '#991b1b' 
-                        }}>
-                          {order.status === 'completed' ? 'Concluído' : order.status === 'pending' ? 'Pendente' : order.status === 'accepted' ? 'Aceito' : 'Cancelado'}
-                        </span>
-                      </td>
-                      <td style={styles.td}>{new Date(order.created_at).toLocaleDateString('pt-AO')}</td>
-                      <td style={styles.td}>
-                        <button onClick={() => deleteItem('orders', order.id, `pedido de ${order.customer_name}`)} style={styles.buttonDanger}>
-                          <Trash2 size={16} />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                  {filteredOrders.length === 0 && (
-                    <tr><td colSpan={8} style={{ padding: '2rem', textAlign: 'center', color: '#6b7280' }}>Nenhum pedido encontrado</td></tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
+ {/* Placas - COM BOTÃO EDITAR */}
+{activeTab === 'plates' && (
+  <div style={{ padding: '1.5rem', overflowX: 'auto' }}>
+    <div style={{ backgroundColor: 'white', borderRadius: '0.75rem', overflow: 'auto' }}>
+      <table style={styles.table}>
+        <thead>
+          <tr>
+            <th style={styles.th}>Placa</th>
+            <th style={styles.th}>Chefe</th>
+            <th style={styles.th}>Taxa</th>
+            <th style={styles.th}>Motoqueiros</th>
+            <th style={styles.th}>Operador</th>
+            <th style={styles.th}>Status</th>
+            <th style={styles.th}>Ações</th>
+          </tr>
+        </thead>
+        <tbody>
+          {filteredPlates.map((plate) => {
+            const assignedOperador = operadores.find(o => o.id === plate.operador_id)
+            return (
+              <tr key={plate.id}>
+                <td style={styles.td}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <Store size={16} color="#3b82f6" />
+                    {plate.plate_number}
+                  </div>
+                </td>
+                <td style={styles.td}>{plate.boss?.name || '-'}</td>
+                <td style={styles.td}>{plate.weekly_fee?.toLocaleString()} Kz </td>
+                <td style={styles.td}>{riders.filter(r => r.plate_id === plate.id).length} / {plate.max_riders || 20}</td>
+                <td style={styles.td}>
+                  {assignedOperador ? 
+                    <span style={{ backgroundColor: '#fef3c7', color: '#d97706', padding: '2px 8px', borderRadius: '20px', fontSize: '12px' }}>{assignedOperador.name}</span> : 
+                    <span style={{ color: '#9ca3af', fontSize: '12px' }}>Não atribuído</span>
+                  }
+                </td>
+                <td style={styles.td}>
+                  <button onClick={() => togglePlateStatus(plate.id, plate.is_active)} style={plate.is_active ? styles.badgeActive : styles.badgeInactive}>
+                    {plate.is_active ? 'Ativo' : 'Inativo'}
+                  </button>
+                </td>
+                <td style={styles.td}>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button 
+                      onClick={() => {
+                        setSelectedPlate(plate)
+                        setShowEditPlateModal(true)
+                      }} 
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#3b82f6' }} 
+                      title="Editar Placa"
+                    >
+                      <Edit size={16} />
+                    </button>
+                    <button onClick={() => deleteItem('plates', plate.id, plate.plate_number)} style={styles.buttonDanger}>
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            )
+          })}
+          {filteredPlates.length === 0 && (
+            <tr>
+              <td colSpan={7} style={{ padding: '2rem', textAlign: 'center', color: '#6b7280' }}>
+                Nenhuma placa encontrada
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+    </div>
+  </div>
+)}
 
-        {/* Placas */}
-        {activeTab === 'plates' && (
-          <div style={{ padding: '1.5rem', overflowX: 'auto' }}>
-            <div style={{ backgroundColor: 'white', borderRadius: '0.75rem', overflow: 'auto' }}>
-              <table style={styles.table}>
-                <thead>
-                  <tr>
-                    <th style={styles.th}>Placa</th>
-                    <th style={styles.th}>Chefe</th>
-                    <th style={styles.th}>Taxa</th>
-                    <th style={styles.th}>Motoqueiros</th>
-                    <th style={styles.th}>Operador</th>
-                    <th style={styles.th}>Status</th>
-                    <th style={styles.th}>Ações</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredPlates.map((plate) => {
-                    const assignedOperador = operadores.find(o => o.id === plate.operador_id)
-                    return (
-                      <tr key={plate.id}>
-                        <td style={styles.td}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                            <Store size={16} color="#3b82f6" />
-                            {plate.plate_number}
-                          </div>
-                        </td>
-                        <td style={styles.td}>{plate.boss?.name || '-'}</td>
-                        <td style={styles.td}>{plate.weekly_fee?.toLocaleString()} Kz</td>
-                        <td style={styles.td}>{riders.filter(r => r.plate_id === plate.id).length} / {plate.max_riders || 20}</td>
-                        <td style={styles.td}>
-                          {assignedOperador ? 
-                            <span style={{ backgroundColor: '#fef3c7', color: '#d97706', padding: '2px 8px', borderRadius: '20px', fontSize: '12px' }}>{assignedOperador.name}</span> : 
-                            <span style={{ color: '#9ca3af', fontSize: '12px' }}>Não atribuído</span>
-                          }
-                        </td>
-                        <td style={styles.td}>
-                          <button onClick={() => togglePlateStatus(plate.id, plate.is_active)} style={plate.is_active ? styles.badgeActive : styles.badgeInactive}>
-                            {plate.is_active ? 'Ativo' : 'Inativo'}
-                          </button>
-                        </td>
-                        <td style={styles.td}>
-                          <button onClick={() => deleteItem('plates', plate.id, plate.plate_number)} style={styles.buttonDanger}>
-                            <Trash2 size={16} />
-                          </button>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                  {filteredPlates.length === 0 && (
-                    <tr><td colSpan={7} style={{ padding: '2rem', textAlign: 'center', color: '#6b7280' }}>Nenhuma placa encontrada</td></tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
+{/* Pedidos */}
+{activeTab === 'orders' && (
+  <div style={{ padding: '1.5rem', overflowX: 'auto' }}>
+    <div style={{ backgroundColor: 'white', borderRadius: '0.75rem', overflow: 'auto' }}>
+      <table style={styles.table}>
+        <thead>
+          <tr>
+            <th style={styles.th}>Cliente</th>
+            <th style={styles.th}>Telefone</th>
+            <th style={styles.th}>Motoqueiro</th>
+            <th style={styles.th}>Tel. Motoqueiro</th>
+            <th style={styles.th}>Valor</th>
+            <th style={styles.th}>Status</th>
+            <th style={styles.th}>Data</th>
+            <th style={styles.th}>Ações</th>
+          </tr>
+        </thead>
+        <tbody>
+          {filteredOrders.map((order) => (
+            <tr key={order.id}>
+              <td style={styles.td}>{order.customer_name || '-'}</td>
+              <td style={styles.td}>{order.customer_phone || '-'}</td>
+              <td style={styles.td}>
+                {order.rider ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <span>{order.rider.name}</span>
+                    {order.rider.is_online ? 
+                      <span style={{ fontSize: '0.7rem', color: '#10b981' }}>● Online</span> : 
+                      <span style={{ fontSize: '0.7rem', color: '#ef4444' }}>● Offline</span>
+                    }
+                  </div>
+                ) : <span style={{ color: '#9ca3af' }}>Não atribuído</span>}
+              </td>
+              <td style={styles.td}>
+                {order.rider?.phone ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <span>{order.rider.phone}</span>
+                    <button onClick={() => callRider(order.rider!.phone, order.rider!.name)} style={styles.buttonCall}>
+                      <Phone size={12} /> Ligar
+                    </button>
+                  </div>
+                ) : <span>-</span>}
+              </td>
+              <td style={styles.td}>{order.price?.toLocaleString()} Kz</td>
+              <td style={styles.td}>
+                <span style={{ 
+                  padding: '0.25rem 0.5rem', borderRadius: '9999px', fontSize: '0.75rem', 
+                  backgroundColor: order.status === 'completed' ? '#d1fae5' : order.status === 'pending' ? '#fef3c7' : order.status === 'accepted' ? '#dbeafe' : '#fee2e2', 
+                  color: order.status === 'completed' ? '#065f46' : order.status === 'pending' ? '#92400e' : order.status === 'accepted' ? '#1e40af' : '#991b1b' 
+                }}>
+                  {order.status === 'completed' ? 'Concluído' : order.status === 'pending' ? 'Pendente' : order.status === 'accepted' ? 'Aceito' : 'Cancelado'}
+                </span>
+              </td>
+              <td style={styles.td}>{new Date(order.created_at).toLocaleDateString('pt-AO')}</td>
+              <td style={styles.td}>
+                <button onClick={() => deleteItem('orders', order.id, `pedido de ${order.customer_name}`)} style={styles.buttonDanger}>
+                  <Trash2 size={16} />
+                </button>
+              </td>
+            </tr>
+          ))}
+          {filteredOrders.length === 0 && (
+            <tr>
+              <td colSpan={8} style={{ padding: '2rem', textAlign: 'center', color: '#6b7280' }}>
+                Nenhum pedido encontrado
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+    </div>
+  </div>
+)}
 
-        {/* Chefes */}
+        {/* Chefes - COM BOTÃO EDITAR */}
         {activeTab === 'bosses' && (
           <div style={{ padding: '1.5rem', overflowX: 'auto' }}>
             <div style={{ backgroundColor: 'white', borderRadius: '0.75rem', overflow: 'auto' }}>
@@ -1320,16 +1415,26 @@ export default function AdminDashboard() {
                       <td style={styles.td}>{boss.phone}</td>
                       <td style={styles.td}>{plates.find(p => p.boss_id === boss.id)?.plate_number || '-'}</td>
                       <td style={styles.td}>
-                        <button onClick={() => deleteItem('bosses', boss.id, boss.name)} style={styles.buttonDanger}>
-                          <Trash2 size={16} />
-                        </button>
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                          <button 
+                            onClick={() => {
+                              setSelectedBoss(boss)
+                              setShowEditBossModal(true)
+                            }} 
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#3b82f6' }} 
+                            title="Editar Chefe"
+                          >
+                            <Edit size={16} />
+                          </button>
+                          <button onClick={() => deleteItem('bosses', boss.id, boss.name)} style={styles.buttonDanger}>
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
                   {filteredBosses.length === 0 && (
-                    <tr>
-                      <td colSpan={5} style={{ padding: '2rem', textAlign: 'center', color: '#6b7280' }}>Nenhum chefe encontrado</td>
-                    </tr>
+                    <tr><td colSpan={5} style={{ padding: '2rem', textAlign: 'center', color: '#6b7280' }}>Nenhum chefe encontrado</td></tr>
                   )}
                 </tbody>
               </table>
@@ -1337,7 +1442,7 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* Motoqueiros */}
+        {/* Motoqueiros - COM BOTÃO EDITAR */}
         {activeTab === 'riders' && (
           <div style={{ padding: '1.5rem', overflowX: 'auto' }}>
             <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', flexWrap: 'wrap' }}>
@@ -1415,6 +1520,16 @@ export default function AdminDashboard() {
                           >
                             {rider.is_frozen ? <Sun size={16} /> : <Snowflake size={16} />}
                           </button>
+                          <button 
+                            onClick={() => {
+                              setSelectedRider(rider)
+                              setShowEditRiderModal(true)
+                            }} 
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#3b82f6' }} 
+                            title="Editar Motoqueiro"
+                          >
+                            <Edit size={16} />
+                          </button>
                           <button onClick={() => callRider(rider.phone, rider.name)} style={{ ...styles.buttonCall, padding: '4px 8px' }} title="Ligar">
                             <Phone size={14} />
                           </button>
@@ -1435,7 +1550,102 @@ export default function AdminDashboard() {
         )}
       </div>
 
-      {/* Modais */}
+      {/* Modal de Editar Chefe */}
+      {showEditBossModal && selectedBoss && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 }}>
+          <div style={{ backgroundColor: 'white', borderRadius: '1rem', maxWidth: '28rem', width: '90%', maxHeight: '90vh', overflow: 'auto' }}>
+            <div style={{ background: 'linear-gradient(135deg, #4f46e5, #4338ca)', padding: '1rem', borderRadius: '1rem 1rem 0 0', display: 'flex', justifyContent: 'space-between', color: 'white' }}>
+              <h3 style={{ fontWeight: 'bold' }}>Editar Chefe</h3>
+              <button onClick={() => setShowEditBossModal(false)} style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer', fontSize: '1.25rem' }}>✕</button>
+            </div>
+            <form onSubmit={async (e) => {
+              e.preventDefault()
+              const form = e.target as HTMLFormElement
+              const name = (form.elements.namedItem('name') as HTMLInputElement).value
+              const email = (form.elements.namedItem('email') as HTMLInputElement).value
+              const phone = (form.elements.namedItem('phone') as HTMLInputElement).value
+              const password = (form.elements.namedItem('password') as HTMLInputElement).value
+              
+              const success = await handleEditBoss(selectedBoss.id, { name, email, phone, password })
+              if (success) setShowEditBossModal(false)
+            }} style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <input type="text" name="name" defaultValue={selectedBoss.name} required placeholder="Nome" style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} />
+              <input type="email" name="email" defaultValue={selectedBoss.email} required placeholder="Email" style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} />
+              <input type="tel" name="phone" defaultValue={selectedBoss.phone} required placeholder="Telefone" style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} />
+              <input type="text" name="password" placeholder="Nova Senha (deixe em branco para manter)" style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem', backgroundColor: '#f9fafb' }} />
+              <button type="submit" style={{ backgroundColor: '#4f46e5', color: 'white', padding: '0.75rem', borderRadius: '0.5rem', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}>Salvar Alterações</button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Editar Placa */}
+      {showEditPlateModal && selectedPlate && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 }}>
+          <div style={{ backgroundColor: 'white', borderRadius: '1rem', maxWidth: '28rem', width: '90%', maxHeight: '90vh', overflow: 'auto' }}>
+            <div style={{ background: 'linear-gradient(135deg, #4f46e5, #4338ca)', padding: '1rem', borderRadius: '1rem 1rem 0 0', display: 'flex', justifyContent: 'space-between', color: 'white' }}>
+              <h3 style={{ fontWeight: 'bold' }}>Editar Placa</h3>
+              <button onClick={() => setShowEditPlateModal(false)} style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer', fontSize: '1.25rem' }}>✕</button>
+            </div>
+            <form onSubmit={async (e) => {
+              e.preventDefault()
+              const form = e.target as HTMLFormElement
+              const plate_number = (form.elements.namedItem('plate_number') as HTMLInputElement).value
+              const boss_id = (form.elements.namedItem('boss_id') as HTMLSelectElement).value
+              const weekly_fee = parseInt((form.elements.namedItem('weekly_fee') as HTMLInputElement).value)
+              const max_riders = parseInt((form.elements.namedItem('max_riders') as HTMLInputElement).value)
+              
+              const success = await handleEditPlate(selectedPlate.id, { plate_number, boss_id, weekly_fee, max_riders })
+              if (success) setShowEditPlateModal(false)
+            }} style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <input type="text" name="plate_number" defaultValue={selectedPlate.plate_number} required placeholder="Número da Placa" maxLength={20} style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} />
+              <select name="boss_id" defaultValue={selectedPlate.boss_id || ''} style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }}>
+                <option value="">Nenhum chefe</option>
+                {bosses.map((boss: Boss) => <option key={boss.id} value={boss.id}>{boss.name}</option>)}
+              </select>
+              <input type="number" name="weekly_fee" defaultValue={selectedPlate.weekly_fee} required placeholder="Taxa Semanal" style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} />
+              <input type="number" name="max_riders" defaultValue={selectedPlate.max_riders} required placeholder="Máximo de Motoqueiros" style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} />
+              <button type="submit" style={{ backgroundColor: '#4f46e5', color: 'white', padding: '0.75rem', borderRadius: '0.5rem', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}>Salvar Alterações</button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Editar Motoqueiro */}
+      {showEditRiderModal && selectedRider && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 }}>
+          <div style={{ backgroundColor: 'white', borderRadius: '1rem', maxWidth: '28rem', width: '90%', maxHeight: '90vh', overflow: 'auto' }}>
+            <div style={{ background: 'linear-gradient(135deg, #4f46e5, #4338ca)', padding: '1rem', borderRadius: '1rem 1rem 0 0', display: 'flex', justifyContent: 'space-between', color: 'white' }}>
+              <h3 style={{ fontWeight: 'bold' }}>Editar Motoqueiro</h3>
+              <button onClick={() => setShowEditRiderModal(false)} style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer', fontSize: '1.25rem' }}>✕</button>
+            </div>
+            <form onSubmit={async (e) => {
+              e.preventDefault()
+              const form = e.target as HTMLFormElement
+              const name = (form.elements.namedItem('name') as HTMLInputElement).value
+              const phone = (form.elements.namedItem('phone') as HTMLInputElement).value
+              const bi = (form.elements.namedItem('bi') as HTMLInputElement).value
+              const password = (form.elements.namedItem('password') as HTMLInputElement).value
+              const plate_id = (form.elements.namedItem('plate_id') as HTMLSelectElement).value
+              
+              const success = await handleEditRider(selectedRider.id, { name, phone, bi, password, plate_id })
+              if (success) setShowEditRiderModal(false)
+            }} style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <input type="text" name="name" defaultValue={selectedRider.name} required placeholder="Nome" style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} />
+              <input type="tel" name="phone" defaultValue={selectedRider.phone} required placeholder="Telefone" style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} />
+              <input type="text" name="bi" defaultValue={selectedRider.bi} required placeholder="BI" style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} />
+              <input type="text" name="password" placeholder="Nova Senha (deixe em branco para manter)" style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem', backgroundColor: '#f9fafb' }} />
+              <select name="plate_id" defaultValue={selectedRider.plate_id || ''} style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }}>
+                <option value="">Nenhuma placa</option>
+                {plates.map((plate: Plate) => <option key={plate.id} value={plate.id}>{plate.plate_number}</option>)}
+              </select>
+              <button type="submit" style={{ backgroundColor: '#4f46e5', color: 'white', padding: '0.75rem', borderRadius: '0.5rem', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}>Salvar Alterações</button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modais de Criação */}
       {showAddAssociation && <AddAssociationModal onClose={() => setShowAddAssociation(false)} onSuccess={() => { setShowAddAssociation(false); loadAllData() }} />}
       {showAddBoss && <AddBossModal onClose={() => setShowAddBoss(false)} onSuccess={() => { setShowAddBoss(false); loadAllData() }} />}
       {showAddPlate && <AddPlateModal bosses={bosses} onClose={() => setShowAddPlate(false)} onSuccess={() => { setShowAddPlate(false); loadAllData() }} />}
@@ -1445,7 +1655,10 @@ export default function AdminDashboard() {
   )
 }
 
-// Modais (mantidos iguais aos originais)
+// ============================================
+// MODAIS DE CRIAÇÃO
+// ============================================
+
 function AddAssociationModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
   const [formData, setFormData] = useState({ name: '', email: '', phone: '', password: 'associacao123', address: '' })
   const [loading, setLoading] = useState(false)
