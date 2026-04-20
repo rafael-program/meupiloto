@@ -71,6 +71,13 @@ export default function RiderDashboard() {
   const [transactionId, setTransactionId] = useState('')
   const [weeklyFee] = useState(500)
   const [showPaymentHistory, setShowPaymentHistory] = useState(false)
+  const [daysUntilNextPayment, setDaysUntilNextPayment] = useState<number | null>(null)
+  const [nextPaymentDate, setNextPaymentDate] = useState<Date | null>(null)
+  const [paymentProgress, setPaymentProgress] = useState(0)
+  
+  // Modal de conta congelada
+  const [showFrozenModal, setShowFrozenModal] = useState(false)
+  const [frozenReason, setFrozenReason] = useState('')
   
   const router = useRouter()
   const channelRef = useRef<any>(null)
@@ -122,16 +129,53 @@ export default function RiderDashboard() {
       .eq('rider_id', riderId)
       .order('payment_date', { ascending: false })
     setPaymentHistory(data || [])
+    calculateNextPayment(data || [])
   }
 
   const isPaymentUpToDate = () => {
     if (paymentHistory.length === 0) return false
-    const lastPayment = paymentHistory[0]
-    if (lastPayment.status !== 'approved') return false
-    const lastPaymentDate = new Date(lastPayment.payment_date)
+    const lastApproved = paymentHistory.find(p => p.status === 'approved')
+    if (!lastApproved) return false
+    const lastPaymentDate = new Date(lastApproved.payment_date)
     const now = new Date()
     const diffDays = Math.floor((now.getTime() - lastPaymentDate.getTime()) / (1000 * 60 * 60 * 24))
     return diffDays <= 7
+  }
+
+  const calculateNextPayment = (history: any[] = paymentHistory) => {
+    if (history.length === 0) {
+      setDaysUntilNextPayment(0)
+      setPaymentProgress(0)
+      setNextPaymentDate(null)
+      return
+    }
+    
+    const lastApprovedPayment = history.find(p => p.status === 'approved')
+    
+    if (!lastApprovedPayment) {
+      setDaysUntilNextPayment(null)
+      setPaymentProgress(0)
+      setNextPaymentDate(null)
+      return
+    }
+    
+    const lastPaymentDate = new Date(lastApprovedPayment.payment_date)
+    const nextPayment = new Date(lastPaymentDate)
+    nextPayment.setDate(nextPayment.getDate() + 7)
+    
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    nextPayment.setHours(0, 0, 0, 0)
+    
+    const diffTime = nextPayment.getTime() - today.getTime()
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+    
+    setNextPaymentDate(nextPayment)
+    setDaysUntilNextPayment(diffDays)
+    
+    const daysSinceLastPayment = Math.floor((today.getTime() - lastPaymentDate.getTime()) / (1000 * 60 * 60 * 24))
+    const progress = Math.min(100, Math.max(0, (daysSinceLastPayment / 7) * 100))
+    setPaymentProgress(progress)
   }
 
   const sendToWhatsApp = (paymentData: any) => {
@@ -247,6 +291,7 @@ export default function RiderDashboard() {
   }
 
   const playSound = () => audioRef.current?.play().catch(() => {})
+  
   const sendPushNotification = (title: string, body: string) => {
     if (!isNotificationSupported() || Notification.permission !== 'granted') return
     try {
@@ -258,7 +303,23 @@ export default function RiderDashboard() {
 
   const loadRider = async (riderId: string) => {
     const { data } = await supabase.from('riders').select('*, plate:plates(plate_number)').eq('id', riderId).single()
-    if (data) { setRider(data); setIsOnline(data.is_online || false) }
+    if (data) { 
+      setRider(data)
+      
+      // Verificar se está congelado
+      if (data.is_frozen) {
+        setIsOnline(false)
+        setFrozenReason(data.frozen_reason || 'Pagamento da taxa semanal pendente')
+        setShowFrozenModal(true)
+        
+        // Garantir que no banco também está offline
+        if (data.is_online) {
+          await supabase.from('riders').update({ is_online: false }).eq('id', riderId)
+        }
+      } else {
+        setIsOnline(data.is_online || false)
+      }
+    }
     setLoading(false)
   }
 
@@ -302,6 +363,14 @@ export default function RiderDashboard() {
 
   const toggleOnline = async () => {
     if (!rider?.id) return
+    
+    // Verificar se está congelado
+    if (rider.is_frozen) {
+      setFrozenReason(rider.frozen_reason || 'Pagamento da taxa semanal pendente')
+      setShowFrozenModal(true)
+      return
+    }
+    
     const newStatus = !isOnline
     const { error } = await supabase.from('riders').update({ is_online: newStatus }).eq('id', rider.id)
     if (!error) {
@@ -427,6 +496,10 @@ export default function RiderDashboard() {
               Math.sin(dLon/2) * Math.sin(dLon/2)
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a))
     return (R * c).toFixed(1)
+  }
+
+  const hasPendingPayment = () => {
+    return paymentHistory.some(p => p.status === 'pending')
   }
 
   if (loading) {
@@ -696,46 +769,187 @@ export default function RiderDashboard() {
             </div>
           </div>
 
-          {/* Status de Pagamento */}
-          <div style={{ marginTop: '16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <div style={{ 
-                padding: '8px 16px', 
-                borderRadius: '30px', 
-                background: isPaymentUpToDate() ? '#d1fae5' : '#fee2e2',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px'
-              }}>
-                {isPaymentUpToDate() ? (
-                  <CheckCircle size={16} color="#059669" />
-                ) : (
-                  <AlertCircle size={16} color="#dc2626" />
+          {/* Status de Pagamento com Cronômetro - Só mostra se NÃO estiver congelado */}
+          {!rider?.is_frozen && (
+            <div style={{ 
+              marginTop: '16px', 
+              background: 'white', 
+              borderRadius: '20px', 
+              padding: '16px',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+              border: '1px solid #f0f0f0'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', marginBottom: '12px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <div style={{ 
+                    padding: '8px 16px', 
+                    borderRadius: '30px', 
+                    background: isPaymentUpToDate() ? '#d1fae5' : hasPendingPayment() ? '#fef3c7' : daysUntilNextPayment === 0 ? '#fee2e2' : '#fef3c7',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px'
+                  }}>
+                    {isPaymentUpToDate() ? (
+                      <CheckCircle size={16} color="#059669" />
+                    ) : hasPendingPayment() ? (
+                      <Clock size={16} color="#d97706" />
+                    ) : daysUntilNextPayment === 0 ? (
+                      <AlertCircle size={16} color="#dc2626" />
+                    ) : (
+                      <AlertCircle size={16} color="#dc2626" />
+                    )}
+                    <span style={{ 
+                      fontSize: '13px', 
+                      fontWeight: 500, 
+                      color: isPaymentUpToDate() ? '#065f46' : hasPendingPayment() ? '#92400e' : daysUntilNextPayment === 0 ? '#991b1b' : '#991b1b'
+                    }}>
+                      {isPaymentUpToDate() ? '✅ Pagamento em dia' : 
+                       hasPendingPayment() ? '⏳ Pagamento pendente de aprovação' :
+                       daysUntilNextPayment === 0 ? '⚠️ Pagamento vencido!' : '❌ Pagamento pendente'}
+                    </span>
+                  </div>
+                  <button 
+                    onClick={() => setShowPaymentHistory(true)} 
+                    style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 16px', background: '#f3f4f6', border: 'none', borderRadius: '30px', cursor: 'pointer', fontSize: '13px' }}
+                  >
+                    <History size={14} /> Histórico
+                  </button>
+                </div>
+                {!isPaymentUpToDate() && !hasPendingPayment() && daysUntilNextPayment !== 0 && daysUntilNextPayment !== null && (
+                  <button 
+                    onClick={() => setShowPaymentModal(true)} 
+                    style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 20px', background: 'linear-gradient(135deg, #f59e0b, #ea580c)', color: 'white', border: 'none', borderRadius: '30px', fontWeight: 'bold', cursor: 'pointer' }}
+                  >
+                    <CreditCard size={16} /> Pagar Agora ({weeklyFee} Kz)
+                  </button>
                 )}
-                <span style={{ fontSize: '13px', fontWeight: 500, color: isPaymentUpToDate() ? '#065f46' : '#991b1b' }}>
-                  {isPaymentUpToDate() ? 'Pagamento em dia' : 'Pagamento pendente'}
-                </span>
+                {daysUntilNextPayment === 0 && !hasPendingPayment() && (
+                  <button 
+                    onClick={() => setShowPaymentModal(true)} 
+                    style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 20px', background: 'linear-gradient(135deg, #ef4444, #dc2626)', color: 'white', border: 'none', borderRadius: '30px', fontWeight: 'bold', cursor: 'pointer', animation: 'pulse 1.5s infinite' }}
+                  >
+                    <AlertCircle size={16} /> Pagamento VENCIDO - Pagar Agora
+                  </button>
+                )}
               </div>
-              <button 
-                onClick={() => setShowPaymentHistory(true)} 
-                style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 16px', background: '#f3f4f6', border: 'none', borderRadius: '30px', cursor: 'pointer', fontSize: '13px' }}
-              >
-                <History size={14} /> Histórico
-              </button>
+
+              {/* Barra de progresso e cronômetro - só mostra se tem pagamento aprovado */}
+              {paymentHistory.some(p => p.status === 'approved') && (
+                <div>
+                  <div style={{ marginBottom: '12px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: '#6b7280', marginBottom: '4px' }}>
+                      <span>Início da semana</span>
+                      <span>Progresso</span>
+                      <span>Próximo pagamento</span>
+                    </div>
+                    <div style={{ 
+                      height: '8px', 
+                      background: '#e5e7eb', 
+                      borderRadius: '10px', 
+                      overflow: 'hidden'
+                    }}>
+                      <div style={{ 
+                        width: `${paymentProgress}%`, 
+                        height: '100%', 
+                        background: isPaymentUpToDate() ? 'linear-gradient(90deg, #10b981, #059669)' : 'linear-gradient(90deg, #f59e0b, #ea580c)',
+                        borderRadius: '10px',
+                        transition: 'width 0.5s ease'
+                      }} />
+                    </div>
+                  </div>
+
+                  <div style={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    justifyContent: 'space-between',
+                    background: isPaymentUpToDate() ? '#f0fdf4' : daysUntilNextPayment === 0 ? '#fef2f2' : '#fffbeb',
+                    padding: '12px 16px',
+                    borderRadius: '16px',
+                    border: `1px solid ${isPaymentUpToDate() ? '#bbf7d0' : daysUntilNextPayment === 0 ? '#fecaca' : '#fde68a'}`
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                      <div style={{
+                        width: '48px',
+                        height: '48px',
+                        borderRadius: '50%',
+                        background: isPaymentUpToDate() ? '#10b981' : daysUntilNextPayment === 0 ? '#ef4444' : '#f59e0b',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: 'white'
+                      }}>
+                        {daysUntilNextPayment !== null && daysUntilNextPayment > 0 ? (
+                          <span style={{ fontSize: '20px', fontWeight: 'bold' }}>{daysUntilNextPayment}</span>
+                        ) : daysUntilNextPayment === 0 ? (
+                          <AlertCircle size={24} />
+                        ) : (
+                          <Clock size={24} />
+                        )}
+                      </div>
+                      <div>
+                        <p style={{ fontSize: '12px', color: '#6b7280' }}>
+                          {daysUntilNextPayment === null ? 'Aguardando primeiro pagamento' :
+                           daysUntilNextPayment === 0 ? 'Pagamento vencido!' :
+                           daysUntilNextPayment === 1 ? 'Último dia para pagar!' :
+                           `${daysUntilNextPayment} dias restantes`}
+                        </p>
+                        {nextPaymentDate && daysUntilNextPayment !== null && daysUntilNextPayment > 0 && (
+                          <p style={{ fontSize: '11px', color: '#9ca3af', marginTop: '2px' }}>
+                            Próximo pagamento: {nextPaymentDate.toLocaleDateString('pt-AO')}
+                          </p>
+                        )}
+                        {daysUntilNextPayment === 0 && (
+                          <p style={{ fontSize: '11px', color: '#dc2626', marginTop: '2px', fontWeight: 500 }}>
+                            ⚠️ Efetue o pagamento hoje para não ser bloqueado
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    {daysUntilNextPayment !== null && daysUntilNextPayment <= 2 && daysUntilNextPayment > 0 && (
+                      <div style={{ 
+                        padding: '6px 12px', 
+                        background: '#fef3c7', 
+                        borderRadius: '20px',
+                        fontSize: '11px',
+                        fontWeight: 500,
+                        color: '#d97706'
+                      }}>
+                        ⏰ Atenção
+                      </div>
+                    )}
+                  </div>
+
+                  {(() => {
+                    const lastApproved = paymentHistory.find(p => p.status === 'approved')
+                    if (lastApproved) {
+                      return (
+                        <div style={{ 
+                          marginTop: '12px', 
+                          fontSize: '11px', 
+                          color: '#9ca3af',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center'
+                        }}>
+                          <span>📅 Último pagamento: {new Date(lastApproved.payment_date).toLocaleDateString('pt-AO')}</span>
+                          <span>💰 {lastApproved.amount.toLocaleString()} Kz</span>
+                        </div>
+                      )
+                    }
+                    return (
+                      <div style={{ marginTop: '12px', fontSize: '11px', color: '#9ca3af' }}>
+                        📅 Nenhum pagamento registrado ainda
+                      </div>
+                    )
+                  })()}
+                </div>
+              )}
             </div>
-            {!isPaymentUpToDate() && (
-              <button 
-                onClick={() => setShowPaymentModal(true)} 
-                style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 20px', background: 'linear-gradient(135deg, #f59e0b, #ea580c)', color: 'white', border: 'none', borderRadius: '30px', fontWeight: 'bold', cursor: 'pointer' }}
-              >
-                <CreditCard size={16} /> Pagar Taxa ({weeklyFee} Kz)
-              </button>
-            )}
-          </div>
+          )}
         </div>
       </div>
 
-      {!isOnline && activeTab === 'pending' && (
+      {!isOnline && activeTab === 'pending' && !rider?.is_frozen && (
         <div style={{ background: '#fef3c7', borderLeft: '4px solid #f59e0b', padding: '12px 16px', margin: '16px', borderRadius: '12px' }}>
           <p style={{ color: '#92400e', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '8px' }}>
             <BellOff size={16} /> Você está offline. Ative o modo online para receber pedidos.
@@ -790,7 +1004,7 @@ export default function RiderDashboard() {
                   </div>
                   
                   <div style={{ display: 'flex', gap: '12px' }}>
-                    <button onClick={() => acceptOrder(order)} disabled={!isOnline} style={{ flex: 1, background: isOnline ? 'linear-gradient(135deg, #f59e0b, #ea580c)' : '#d1d5db', color: 'white', padding: '14px', border: 'none', borderRadius: '12px', fontWeight: 'bold', cursor: isOnline ? 'pointer' : 'not-allowed', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                    <button onClick={() => acceptOrder(order)} disabled={!isOnline || rider?.is_frozen} style={{ flex: 1, background: (isOnline && !rider?.is_frozen) ? 'linear-gradient(135deg, #f59e0b, #ea580c)' : '#d1d5db', color: 'white', padding: '14px', border: 'none', borderRadius: '12px', fontWeight: 'bold', cursor: (isOnline && !rider?.is_frozen) ? 'pointer' : 'not-allowed', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
                       <CheckCircle size={18} /> Aceitar
                     </button>
                     <button onClick={() => cancelOrder(order)} style={{ flex: 1, background: '#ef4444', color: 'white', padding: '14px', border: 'none', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
@@ -850,8 +1064,174 @@ export default function RiderDashboard() {
         )}
       </div>
 
+      {/* Modal de Conta Congelada */}
+      {showFrozenModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.8)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 10000,
+          padding: '20px',
+          backdropFilter: 'blur(8px)'
+        }}>
+          <div style={{
+            backgroundColor: 'white',
+            borderRadius: '32px',
+            maxWidth: '450px',
+            width: '100%',
+            animation: 'slideIn 0.3s ease-out'
+          }}>
+            <div style={{
+              background: 'linear-gradient(135deg, #dc2626, #991b1b)',
+              padding: '30px 20px',
+              borderRadius: '32px 32px 0 0',
+              textAlign: 'center',
+              color: 'white'
+            }}>
+              <div style={{
+                backgroundColor: 'rgba(255,255,255,0.2)',
+                width: '80px',
+                height: '80px',
+                borderRadius: '50%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                margin: '0 auto 16px'
+              }}>
+                <AlertCircle size={48} color="white" />
+              </div>
+              <h2 style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '8px' }}>Conta Congelada ❄️</h2>
+              <p style={{ fontSize: '14px', opacity: 0.9 }}>Acesso temporariamente bloqueado</p>
+            </div>
+
+            <div style={{ padding: '24px' }}>
+              <div style={{
+                backgroundColor: '#fef2f2',
+                padding: '16px',
+                borderRadius: '16px',
+                marginBottom: '20px',
+                borderLeft: '4px solid #dc2626'
+              }}>
+                <p style={{ fontSize: '13px', color: '#991b1b', fontWeight: 500, marginBottom: '8px' }}>
+                  ⚠️ Motivo do congelamento:
+                </p>
+                <p style={{ fontSize: '14px', color: '#7f1d1d' }}>
+                  {frozenReason || 'Pagamento da taxa semanal pendente'}
+                </p>
+              </div>
+
+              <div style={{ marginBottom: '24px' }}>
+                <p style={{ fontSize: '13px', fontWeight: 600, marginBottom: '12px', color: '#374151' }}>
+                  📋 Como resolver:
+                </p>
+                <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+                  <li style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px', fontSize: '13px', color: '#6b7280' }}>
+                    <span style={{ backgroundColor: '#f59e0b', color: 'white', width: '22px', height: '22px', borderRadius: '50%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px' }}>1</span>
+                    Efetue o pagamento da taxa semanal ({weeklyFee} Kz)
+                  </li>
+                  <li style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px', fontSize: '13px', color: '#6b7280' }}>
+                    <span style={{ backgroundColor: '#f59e0b', color: 'white', width: '22px', height: '22px', borderRadius: '50%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px' }}>2</span>
+                    Envie o comprovante pelo WhatsApp
+                  </li>
+                  <li style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px', fontSize: '13px', color: '#6b7280' }}>
+                    <span style={{ backgroundColor: '#f59e0b', color: 'white', width: '22px', height: '22px', borderRadius: '50%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px' }}>3</span>
+                    Aguarde a aprovação do administrador
+                  </li>
+                </ul>
+              </div>
+
+              <div style={{ display: 'flex', gap: '12px', flexDirection: 'column' }}>
+                <button
+                  onClick={() => {
+                    setShowFrozenModal(false)
+                    setShowPaymentModal(true)
+                  }}
+                  style={{
+                    width: '100%',
+                    padding: '14px',
+                    background: 'linear-gradient(135deg, #f59e0b, #ea580c)',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '16px',
+                    fontWeight: 'bold',
+                    fontSize: '15px',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px'
+                  }}
+                >
+                  <CreditCard size={18} />
+                  Pagar Taxa Agora
+                </button>
+
+                <button
+                  onClick={() => {
+                    window.open('https://wa.me/244926572603?text=Olá,%20minha%20conta%20foi%20congelada.%20Preciso%20regularizar%20meu%20pagamento.', '_blank')
+                  }}
+                  style={{
+                    width: '100%',
+                    padding: '14px',
+                    background: '#25D366',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '16px',
+                    fontWeight: 'bold',
+                    fontSize: '15px',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px'
+                  }}
+                >
+                  <Send size={18} />
+                  Falar com Suporte
+                </button>
+
+                <button
+                  onClick={() => {
+                    setShowFrozenModal(false)
+                    handleLogout()
+                  }}
+                  style={{
+                    width: '100%',
+                    padding: '14px',
+                    background: '#f3f4f6',
+                    color: '#374151',
+                    border: 'none',
+                    borderRadius: '16px',
+                    fontWeight: '500',
+                    fontSize: '15px',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px'
+                  }}
+                >
+                  <LogOut size={18} />
+                  Sair da Conta
+                </button>
+              </div>
+
+              <p style={{ fontSize: '11px', color: '#9ca3af', textAlign: 'center', marginTop: '20px' }}>
+                Após o pagamento ser aprovado, sua conta será descongelada automaticamente
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Modal de Editar Perfil */}
-      {showEditProfile && (
+      {showEditProfile && !rider?.is_frozen && (
         <div style={{
           position: 'fixed',
           top: 0,
@@ -966,7 +1346,7 @@ export default function RiderDashboard() {
         </div>
       )}
 
-            {/* Modal de Pagamento */}
+      {/* Modal de Pagamento */}
       {showPaymentModal && (
         <div style={{
           position: 'fixed',
@@ -1012,6 +1392,11 @@ export default function RiderDashboard() {
                   {weeklyFee.toLocaleString()} Kz
                 </p>
                 <p style={{ fontSize: '13px', color: '#6b7280' }}>Taxa semanal</p>
+                {nextPaymentDate && daysUntilNextPayment !== null && daysUntilNextPayment > 0 && (
+                  <p style={{ fontSize: '11px', color: '#f59e0b', marginTop: '8px' }}>
+                    ⏰ Próximo vencimento: {nextPaymentDate.toLocaleDateString('pt-AO')}
+                  </p>
+                )}
               </div>
               
               <div style={{ display: 'flex', gap: '12px', marginBottom: '24px' }}>
@@ -1054,6 +1439,16 @@ export default function RiderDashboard() {
                   <p style={{ fontWeight: 'bold', marginBottom: '8px', color: '#166534' }}>📱 Dados para pagamento:</p>
                   <p style={{ fontSize: '14px' }}>Número: <strong>926 572 603</strong></p>
                   <p style={{ fontSize: '14px', marginTop: '4px' }}>Nome: <strong>Rafael Domingos Nzambi</strong></p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard.writeText('926572603')
+                      alert('✅ Número copiado!')
+                    }}
+                    style={{ marginTop: '12px', fontSize: '11px', background: '#166534', color: 'white', border: 'none', padding: '6px 12px', borderRadius: '8px', cursor: 'pointer' }}
+                  >
+                    Copiar número
+                  </button>
                 </div>
               )}
               
@@ -1062,6 +1457,16 @@ export default function RiderDashboard() {
                   <p style={{ fontWeight: 'bold', marginBottom: '8px', color: '#1e40af' }}>🏦 Dados para transferência:</p>
                   <p style={{ fontSize: '13px' }}>IBAN: <strong>0055.0000.2883.6759.1015.5</strong></p>
                   <p style={{ fontSize: '13px', marginTop: '4px' }}>Beneficiário: <strong>Rafael Domingos Nzambi</strong></p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard.writeText('0055.0000.2883.6759.1015.5')
+                      alert('✅ IBAN copiado!')
+                    }}
+                    style={{ marginTop: '12px', fontSize: '11px', background: '#1e40af', color: 'white', border: 'none', padding: '6px 12px', borderRadius: '8px', cursor: 'pointer' }}
+                  >
+                    Copiar IBAN
+                  </button>
                 </div>
               )}
               
@@ -1219,19 +1624,51 @@ export default function RiderDashboard() {
             </div>
             
             <div style={{ padding: '20px' }}>
+              <div style={{
+                background: isPaymentUpToDate() ? '#d1fae5' : hasPendingPayment() ? '#fef3c7' : daysUntilNextPayment === 0 ? '#fee2e2' : '#fef3c7',
+                padding: '12px 16px',
+                borderRadius: '12px',
+                marginBottom: '20px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: '8px'
+              }}>
+                <div>
+                  <p style={{ fontSize: '12px', color: '#6b7280' }}>Status atual</p>
+                  <p style={{ fontWeight: 'bold', fontSize: '14px', color: isPaymentUpToDate() ? '#065f46' : hasPendingPayment() ? '#92400e' : daysUntilNextPayment === 0 ? '#991b1b' : '#991b1b' }}>
+                    {isPaymentUpToDate() ? '✅ Em dia' : 
+                     hasPendingPayment() ? '⏳ Aguardando aprovação' : 
+                     daysUntilNextPayment === 0 ? '⚠️ Vencido' : '❌ Pendente'}
+                  </p>
+                </div>
+                {daysUntilNextPayment !== null && daysUntilNextPayment > 0 && !hasPendingPayment() && (
+                  <div style={{ textAlign: 'right' }}>
+                    <p style={{ fontSize: '12px', color: '#6b7280' }}>Próximo vencimento</p>
+                    <p style={{ fontWeight: 'bold', fontSize: '14px', color: '#d97706' }}>
+                      {daysUntilNextPayment} dias
+                    </p>
+                  </div>
+                )}
+              </div>
+
               {paymentHistory.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '40px' }}>
                   <History size={48} style={{ margin: '0 auto 16px', color: '#d1d5db' }} />
                   <p style={{ color: '#6b7280' }}>Nenhum pagamento registrado</p>
+                  <p style={{ fontSize: '12px', color: '#9ca3af', marginTop: '8px' }}>
+                    Faça o primeiro pagamento para começar a usar o sistema
+                  </p>
                 </div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  {paymentHistory.map((payment) => (
+                  {paymentHistory.map((payment, index) => (
                     <div key={payment.id} style={{
-                      background: '#f9fafb',
+                      background: index === 0 && payment.status === 'pending' ? '#fffbeb' : '#f9fafb',
                       borderRadius: '12px',
                       padding: '16px',
-                      border: '1px solid #f0f0f0'
+                      border: index === 0 && payment.status === 'pending' ? '1px solid #fde68a' : '1px solid #f0f0f0'
                     }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
                         <div>
@@ -1249,26 +1686,31 @@ export default function RiderDashboard() {
                             borderRadius: '20px',
                             fontSize: '11px',
                             fontWeight: 500,
-                            background: payment.status === 'approved' ? '#d1fae5' : '#fef3c7',
-                            color: payment.status === 'approved' ? '#065f46' : '#d97706'
+                            background: payment.status === 'approved' ? '#d1fae5' : payment.status === 'rejected' ? '#fee2e2' : '#fef3c7',
+                            color: payment.status === 'approved' ? '#065f46' : payment.status === 'rejected' ? '#991b1b' : '#d97706'
                           }}>
-                            {payment.status === 'approved' ? '✓ Aprovado' : '⏳ Pendente'}
+                            {payment.status === 'approved' ? '✓ Aprovado' : payment.status === 'rejected' ? '✗ Rejeitado' : '⏳ Pendente'}
                           </span>
                         </div>
                       </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
                         <p style={{ fontSize: '18px', fontWeight: 'bold', color: '#f59e0b' }}>
                           {payment.amount.toLocaleString()} Kz
                         </p>
                         {payment.proof_url && (
-                          <a href={payment.proof_url} target="_blank" style={{ fontSize: '12px', color: '#3b82f6', textDecoration: 'none' }}>
-                            Ver comprovante
+                          <a href={payment.proof_url} target="_blank" rel="noopener noreferrer" style={{ fontSize: '12px', color: '#3b82f6', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <Camera size={12} /> Ver comprovante
                           </a>
                         )}
                       </div>
                       {payment.transaction_id && (
                         <p style={{ fontSize: '10px', color: '#9ca3af', marginTop: '8px' }}>
                           Transação: {payment.transaction_id}
+                        </p>
+                      )}
+                      {payment.approved_at && payment.status === 'approved' && (
+                        <p style={{ fontSize: '10px', color: '#10b981', marginTop: '4px' }}>
+                          ✓ Aprovado em {new Date(payment.approved_at).toLocaleDateString('pt-AO')}
                         </p>
                       )}
                     </div>
@@ -1284,6 +1726,20 @@ export default function RiderDashboard() {
         @keyframes spin {
           from { transform: rotate(0deg); }
           to { transform: rotate(360deg); }
+        }
+        @keyframes pulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.7; transform: scale(1.02); }
+        }
+        @keyframes slideIn {
+          from {
+            opacity: 0;
+            transform: translateY(-50px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
         }
         @media (max-width: 768px) {
           input, button, select {

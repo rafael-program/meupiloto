@@ -259,6 +259,14 @@ export default function AdminDashboard() {
     if (!confirm('Aprovar este pagamento?')) return
     
     const adminId = localStorage.getItem('admin_id')
+    
+    // Buscar o pagamento para saber o rider_id
+    const { data: payment } = await supabase
+      .from('rider_payments')
+      .select('rider_id')
+      .eq('id', paymentId)
+      .single()
+    
     const { error } = await supabase
       .from('rider_payments')
       .update({
@@ -269,7 +277,19 @@ export default function AdminDashboard() {
       .eq('id', paymentId)
     
     if (!error) {
-      alert('✅ Pagamento aprovado com sucesso!')
+      // Descongelar o motoqueiro automaticamente
+      if (payment) {
+        await supabase
+          .from('riders')
+          .update({ 
+            is_frozen: false, 
+            frozen_reason: null, 
+            frozen_at: null 
+          })
+          .eq('id', payment.rider_id)
+      }
+      
+      alert('✅ Pagamento aprovado e conta descongelada com sucesso!')
       loadAllData()
       setSelectedPayment(null)
       setShowPaymentModal(false)
@@ -297,30 +317,67 @@ export default function AdminDashboard() {
   }
 
   // Funções de Congelamento de Motoqueiro
-  const toggleFreezeRider = async (riderId: string, currentStatus: boolean, reason?: string) => {
-    const action = !currentStatus ? 'congelar' : 'descongelar'
-    const message = !currentStatus 
-      ? `Deseja congelar este motoqueiro?${reason ? `\nMotivo: ${reason}` : ''}`
-      : `Deseja descongelar este motoqueiro?`
-    
-    if (!confirm(message)) return
-    
-    const updateData: any = {
-      is_frozen: !currentStatus,
-      frozen_at: !currentStatus ? new Date().toISOString() : null,
-      frozen_reason: !currentStatus ? (reason || 'Administrador') : null
+  const toggleFreezeRider = async (riderId: string, currentStatus: boolean) => {
+    if (!currentStatus) {
+      // Congelar - pedir motivo
+      const reason = prompt('Motivo do congelamento:', 'Pagamento pendente')
+      if (reason === null) return
+      
+      if (!confirm(`Deseja congelar este motoqueiro?\nMotivo: ${reason}\n\n⚠️ Ao congelar, ele será forçado a ficar OFFLINE.`)) return
+      
+      const { error } = await supabase
+        .from('riders')
+        .update({ 
+          is_frozen: true, 
+          frozen_at: new Date().toISOString(), 
+          frozen_reason: reason,
+          is_online: false 
+        })
+        .eq('id', riderId)
+      
+      if (!error) {
+        alert('✅ Motoqueiro congelado e forçado a ficar OFFLINE!')
+        loadAllData()
+      } else {
+        alert('Erro ao congelar: ' + error.message)
+      }
+    } else {
+      // Descongelar
+      if (!confirm(`Deseja descongelar este motoqueiro?\n\nO motoqueiro precisará ativar o online manualmente.`)) return
+      
+      const { error } = await supabase
+        .from('riders')
+        .update({ 
+          is_frozen: false, 
+          frozen_reason: null, 
+          frozen_at: null,
+          is_online: false 
+        })
+        .eq('id', riderId)
+      
+      if (!error) {
+        alert('✅ Motoqueiro descongelado com sucesso!')
+        loadAllData()
+      } else {
+        alert('Erro ao descongelar: ' + error.message)
+      }
     }
+  }
+
+  // Função para forçar offline
+  const forceOffline = async (riderId: string, riderName: string) => {
+    if (!confirm(`⚠️ Tem certeza que deseja FORÇAR OFFLINE o motoqueiro ${riderName}?\n\nEle será desconectado imediatamente.`)) return
     
     const { error } = await supabase
       .from('riders')
-      .update(updateData)
+      .update({ is_online: false })
       .eq('id', riderId)
     
     if (!error) {
-      alert(`✅ Motoqueiro ${!currentStatus ? 'congelado' : 'descongelado'} com sucesso!`)
+      alert(`✅ ${riderName} foi forçado a ficar OFFLINE!`)
       loadAllData()
     } else {
-      alert('Erro ao alterar status: ' + error.message)
+      alert('Erro: ' + error.message)
     }
   }
 
@@ -458,7 +515,6 @@ export default function AdminDashboard() {
     switch (riderFilter) {
       case 'active': return r.status === 'active' && !r.is_frozen
       case 'frozen': return r.is_frozen === true
-      case 'pending_payment': return r.status === 'active' && !r.is_frozen
       default: return true
     }
   })
@@ -476,17 +532,9 @@ export default function AdminDashboard() {
     op.phone.includes(searchTerm)
   )
 
-  const filteredPayments = riderPayments.filter(p => 
-    p.status === 'pending'
-  )
-
   const selectedOperadorInfo = operadores.find(o => o.id === selectedOperador)
   const operadorPlates = plates.filter(p => p.operador_id === selectedOperador)
   const availablePlates = plates.filter(p => !p.operador_id && p.is_active)
-  
-  const filteredAssignPlates = (selectedOperador ? operadorPlates : availablePlates).filter(p =>
-    p.plate_number.toLowerCase().includes(assignSearchTerm.toLowerCase())
-  )
 
   if (loading) {
     return (
@@ -638,7 +686,7 @@ export default function AdminDashboard() {
                   {activeTab === 'dashboard' && 'Dashboard'}
                   {activeTab === 'associations' && 'Associações'}
                   {activeTab === 'operadores' && 'Operadores'}
-                  {activeTab === 'payments' && 'Pagamentos Pendentes'}
+                  {activeTab === 'payments' && 'Pagamentos'}
                   {activeTab === 'assign' && 'Atribuir Placas a Operadores'}
                   {activeTab === 'orders' && 'Pedidos'}
                   {activeTab === 'plates' && 'Placas'}
@@ -687,7 +735,7 @@ export default function AdminDashboard() {
               <div style={styles.card}><p style={{ fontSize: '0.75rem', color: '#6b7280' }}>Operadores</p><p style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>{stats.totalOperadores}</p><p style={{ fontSize: '0.75rem', color: '#059669' }}>{stats.activeOperadores} ativos</p></div>
               <div style={styles.card}><p style={{ fontSize: '0.75rem', color: '#6b7280' }}>Placas</p><p style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>{stats.totalPlates}</p><p style={{ fontSize: '0.75rem', color: '#059669' }}>{stats.activePlates} ativas</p><p style={{ fontSize: '0.75rem', color: '#4f46e5' }}>{stats.assignedPlates} atribuídas</p></div>
               <div style={styles.card}><p style={{ fontSize: '0.75rem', color: '#6b7280' }}>Chefes</p><p style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>{stats.totalBosses}</p></div>
-              <div style={styles.card}><p style={{ fontSize: '0.75rem', color: '#6b7280' }}>Motoqueiros</p><p style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>{stats.totalRiders}</p><p style={{ fontSize: '0.75rem', color: '#059669' }}>{stats.onlineRiders} online</p></div>
+              <div style={styles.card}><p style={{ fontSize: '0.75rem', color: '#6b7280' }}>Motoqueiros</p><p style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>{stats.totalRiders}</p><p style={{ fontSize: '0.75rem', color: '#059669' }}>{stats.onlineRiders} online</p><p style={{ fontSize: '0.75rem', color: '#d97706' }}>{riders.filter(r => r.is_frozen).length} congelados</p></div>
               <div style={styles.card}><p style={{ fontSize: '0.75rem', color: '#6b7280' }}>Pedidos</p><p style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>{stats.totalOrders}</p></div>
               <div style={{ ...styles.card, background: 'linear-gradient(135deg, #4f46e5, #4338ca)', color: 'white' }}>
                 <p style={{ fontSize: '0.75rem', opacity: 0.8 }}>Receita Total</p>
@@ -784,181 +832,179 @@ export default function AdminDashboard() {
           </div>
         )}
 
-         {/* Pagamentos */}
-      {activeTab === 'payments' && (
-        <div style={{ padding: '1.5rem' }}>
-          {/* Tabs para navegação */}
-          <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', borderBottom: '1px solid #e5e7eb' }}>
-            <button 
-              onClick={() => setPaymentFilter('pending')}
-              style={{ 
-                padding: '10px 20px', 
-                border: 'none', 
-                background: paymentFilter === 'pending' ? '#4f46e5' : 'transparent',
-                color: paymentFilter === 'pending' ? 'white' : '#6b7280',
-                borderRadius: '8px 8px 0 0',
-                cursor: 'pointer',
-                fontWeight: 500,
-                transition: 'all 0.2s'
-              }}
-            >
-              Pendentes ({riderPayments.filter(p => p.status === 'pending').length})
-            </button>
-            <button 
-              onClick={() => setPaymentFilter('approved')}
-              style={{ 
-                padding: '10px 20px', 
-                border: 'none', 
-                background: paymentFilter === 'approved' ? '#10b981' : 'transparent',
-                color: paymentFilter === 'approved' ? 'white' : '#6b7280',
-                borderRadius: '8px 8px 0 0',
-                cursor: 'pointer',
-                fontWeight: 500,
-                transition: 'all 0.2s'
-              }}
-            >
-              Aprovados ({riderPayments.filter(p => p.status === 'approved').length})
-            </button>
-            <button 
-              onClick={() => setPaymentFilter('rejected')}
-              style={{ 
-                padding: '10px 20px', 
-                border: 'none', 
-                background: paymentFilter === 'rejected' ? '#ef4444' : 'transparent',
-                color: paymentFilter === 'rejected' ? 'white' : '#6b7280',
-                borderRadius: '8px 8px 0 0',
-                cursor: 'pointer',
-                fontWeight: 500,
-                transition: 'all 0.2s'
-              }}
-            >
-              Rejeitados ({riderPayments.filter(p => p.status === 'rejected').length})
-            </button>
-          </div>
+        {/* Pagamentos */}
+        {activeTab === 'payments' && (
+          <div style={{ padding: '1.5rem' }}>
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', borderBottom: '1px solid #e5e7eb' }}>
+              <button 
+                onClick={() => setPaymentFilter('pending')}
+                style={{ 
+                  padding: '10px 20px', 
+                  border: 'none', 
+                  background: paymentFilter === 'pending' ? '#4f46e5' : 'transparent',
+                  color: paymentFilter === 'pending' ? 'white' : '#6b7280',
+                  borderRadius: '8px 8px 0 0',
+                  cursor: 'pointer',
+                  fontWeight: 500,
+                  transition: 'all 0.2s'
+                }}
+              >
+                Pendentes ({riderPayments.filter(p => p.status === 'pending').length})
+              </button>
+              <button 
+                onClick={() => setPaymentFilter('approved')}
+                style={{ 
+                  padding: '10px 20px', 
+                  border: 'none', 
+                  background: paymentFilter === 'approved' ? '#10b981' : 'transparent',
+                  color: paymentFilter === 'approved' ? 'white' : '#6b7280',
+                  borderRadius: '8px 8px 0 0',
+                  cursor: 'pointer',
+                  fontWeight: 500,
+                  transition: 'all 0.2s'
+                }}
+              >
+                Aprovados ({riderPayments.filter(p => p.status === 'approved').length})
+              </button>
+              <button 
+                onClick={() => setPaymentFilter('rejected')}
+                style={{ 
+                  padding: '10px 20px', 
+                  border: 'none', 
+                  background: paymentFilter === 'rejected' ? '#ef4444' : 'transparent',
+                  color: paymentFilter === 'rejected' ? 'white' : '#6b7280',
+                  borderRadius: '8px 8px 0 0',
+                  cursor: 'pointer',
+                  fontWeight: 500,
+                  transition: 'all 0.2s'
+                }}
+              >
+                Rejeitados ({riderPayments.filter(p => p.status === 'rejected').length})
+              </button>
+            </div>
 
-          {/* Tabela de Pagamentos */}
-          <div style={{ backgroundColor: 'white', borderRadius: '0.75rem', overflow: 'auto' }}>
-            <table style={styles.table}>
-              <thead>
-                <tr>
-                  <th style={styles.th}>Motoqueiro</th>
-                  <th style={styles.th}>Telefone</th>
-                  <th style={styles.th}>Valor</th>
-                  <th style={styles.th}>Método</th>
-                  <th style={styles.th}>Data</th>
-                  <th style={styles.th}>Transação</th>
-                  <th style={styles.th}>Comprovante</th>
-                  <th style={styles.th}>Status</th>
-                  <th style={styles.th}>Ações</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(() => {
-                  let filteredPaymentsList = []
-                  if (paymentFilter === 'pending') filteredPaymentsList = riderPayments.filter(p => p.status === 'pending')
-                  else if (paymentFilter === 'approved') filteredPaymentsList = riderPayments.filter(p => p.status === 'approved')
-                  else filteredPaymentsList = riderPayments.filter(p => p.status === 'rejected')
-                  
-                  return filteredPaymentsList.map((payment) => {
-                    const rider = riders.find(r => r.id === payment.rider_id)
-                    return (
-                      <tr key={payment.id} style={{ 
-                        backgroundColor: payment.status === 'approved' ? '#f0fdf4' : payment.status === 'rejected' ? '#fef2f2' : 'white'
-                      }}>
-                        <td style={styles.td}>
-                          {rider?.name || 'Desconhecido'}
-                          {payment.approved_by && payment.status === 'approved' && (
-                            <div style={{ fontSize: '10px', color: '#6b7280', marginTop: '2px' }}>
-                              Aprovado por: Admin
-                            </div>
-                          )}
-                        </td>
-                        <td style={styles.td}>{rider?.phone || '-'}</td>
-                        <td style={styles.td}><strong>{payment.amount.toLocaleString()} Kz</strong></td>
-                        <td style={styles.td}>
-                          <span style={payment.payment_method === 'unitel' ? styles.badgeWarning : styles.badgeActive}>
-                            {payment.payment_method === 'unitel' ? 'Unitel Money' : 'Transferência'}
-                          </span>
-                        </td>
-                        <td style={styles.td}>{new Date(payment.payment_date).toLocaleDateString('pt-AO')}</td>
-                        <td style={styles.td}>
-                          <span style={{ fontSize: '12px', fontFamily: 'monospace' }}>{payment.transaction_id}</span>
-                        </td>
-                        <td style={styles.td}>
-                          {payment.proof_url && (
-                            <a href={payment.proof_url} target="_blank" rel="noopener noreferrer" style={{ color: '#3b82f6', textDecoration: 'none' }}>
-                              Ver Comprovante
-                            </a>
-                          )}
-                        </td>
-                        <td style={styles.td}>
-                          <span style={{
-                            padding: '4px 8px',
-                            borderRadius: '20px',
-                            fontSize: '12px',
-                            fontWeight: 500,
-                            backgroundColor: payment.status === 'approved' ? '#d1fae5' : payment.status === 'rejected' ? '#fee2e2' : '#fef3c7',
-                            color: payment.status === 'approved' ? '#065f46' : payment.status === 'rejected' ? '#991b1b' : '#92400e'
-                          }}>
-                            {payment.status === 'approved' ? '✓ Aprovado' : payment.status === 'rejected' ? '✗ Rejeitado' : '⏳ Pendente'}
-                          </span>
-                          {payment.approved_at && (
-                            <div style={{ fontSize: '10px', color: '#6b7280', marginTop: '4px' }}>
-                              {new Date(payment.approved_at).toLocaleDateString('pt-AO')}
-                            </div>
-                          )}
-                        </td>
-                        <td style={styles.td}>
-                          {payment.status === 'pending' ? (
-                            <div style={{ display: 'flex', gap: '8px' }}>
-                              <button 
-                                onClick={() => approvePayment(payment.id)} 
-                                style={{ backgroundColor: '#10b981', color: 'white', padding: '6px 12px', borderRadius: '6px', border: 'none', cursor: 'pointer', fontSize: '12px', fontWeight: 500 }}
-                              >
-                                Aprovar
-                              </button>
-                              <button 
-                                onClick={() => rejectPayment(payment.id)} 
-                                style={{ backgroundColor: '#ef4444', color: 'white', padding: '6px 12px', borderRadius: '6px', border: 'none', cursor: 'pointer', fontSize: '12px', fontWeight: 500 }}
-                              >
-                                Rejeitar
-                              </button>
-                            </div>
-                          ) : payment.status === 'approved' ? (
-                            <span style={{ fontSize: '12px', color: '#10b981', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                              <CheckCircle size={14} /> Concluído
+            <div style={{ backgroundColor: 'white', borderRadius: '0.75rem', overflow: 'auto' }}>
+              <table style={styles.table}>
+                <thead>
+                  <tr>
+                    <th style={styles.th}>Motoqueiro</th>
+                    <th style={styles.th}>Telefone</th>
+                    <th style={styles.th}>Valor</th>
+                    <th style={styles.th}>Método</th>
+                    <th style={styles.th}>Data</th>
+                    <th style={styles.th}>Transação</th>
+                    <th style={styles.th}>Comprovante</th>
+                    <th style={styles.th}>Status</th>
+                    <th style={styles.th}>Ações</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(() => {
+                    let filteredPaymentsList = []
+                    if (paymentFilter === 'pending') filteredPaymentsList = riderPayments.filter(p => p.status === 'pending')
+                    else if (paymentFilter === 'approved') filteredPaymentsList = riderPayments.filter(p => p.status === 'approved')
+                    else filteredPaymentsList = riderPayments.filter(p => p.status === 'rejected')
+                    
+                    return filteredPaymentsList.map((payment) => {
+                      const rider = riders.find(r => r.id === payment.rider_id)
+                      return (
+                        <tr key={payment.id} style={{ 
+                          backgroundColor: payment.status === 'approved' ? '#f0fdf4' : payment.status === 'rejected' ? '#fef2f2' : 'white'
+                        }}>
+                          <td style={styles.td}>
+                            {rider?.name || 'Desconhecido'}
+                            {payment.approved_by && payment.status === 'approved' && (
+                              <div style={{ fontSize: '10px', color: '#6b7280', marginTop: '2px' }}>
+                                Aprovado por: Admin
+                              </div>
+                            )}
+                          </td>
+                          <td style={styles.td}>{rider?.phone || '-'}</td>
+                          <td style={styles.td}><strong>{payment.amount.toLocaleString()} Kz</strong></td>
+                          <td style={styles.td}>
+                            <span style={payment.payment_method === 'unitel' ? styles.badgeWarning : styles.badgeActive}>
+                              {payment.payment_method === 'unitel' ? 'Unitel Money' : 'Transferência'}
                             </span>
-                          ) : (
-                            <span style={{ fontSize: '12px', color: '#ef4444', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                              <XCircle size={14} /> Recusado
+                          </td>
+                          <td style={styles.td}>{new Date(payment.payment_date).toLocaleDateString('pt-AO')}</td>
+                          <td style={styles.td}>
+                            <span style={{ fontSize: '12px', fontFamily: 'monospace' }}>{payment.transaction_id}</span>
+                          </td>
+                          <td style={styles.td}>
+                            {payment.proof_url && (
+                              <a href={payment.proof_url} target="_blank" rel="noopener noreferrer" style={{ color: '#3b82f6', textDecoration: 'none' }}>
+                                Ver Comprovante
+                              </a>
+                            )}
+                          </td>
+                          <td style={styles.td}>
+                            <span style={{
+                              padding: '4px 8px',
+                              borderRadius: '20px',
+                              fontSize: '12px',
+                              fontWeight: 500,
+                              backgroundColor: payment.status === 'approved' ? '#d1fae5' : payment.status === 'rejected' ? '#fee2e2' : '#fef3c7',
+                              color: payment.status === 'approved' ? '#065f46' : payment.status === 'rejected' ? '#991b1b' : '#92400e'
+                            }}>
+                              {payment.status === 'approved' ? '✓ Aprovado' : payment.status === 'rejected' ? '✗ Rejeitado' : '⏳ Pendente'}
                             </span>
-                          )}
+                            {payment.approved_at && (
+                              <div style={{ fontSize: '10px', color: '#6b7280', marginTop: '4px' }}>
+                                {new Date(payment.approved_at).toLocaleDateString('pt-AO')}
+                              </div>
+                            )}
+                          </td>
+                          <td style={styles.td}>
+                            {payment.status === 'pending' ? (
+                              <div style={{ display: 'flex', gap: '8px' }}>
+                                <button 
+                                  onClick={() => approvePayment(payment.id)} 
+                                  style={{ backgroundColor: '#10b981', color: 'white', padding: '6px 12px', borderRadius: '6px', border: 'none', cursor: 'pointer', fontSize: '12px', fontWeight: 500 }}
+                                >
+                                  Aprovar
+                                </button>
+                                <button 
+                                  onClick={() => rejectPayment(payment.id)} 
+                                  style={{ backgroundColor: '#ef4444', color: 'white', padding: '6px 12px', borderRadius: '6px', border: 'none', cursor: 'pointer', fontSize: '12px', fontWeight: 500 }}
+                                >
+                                  Rejeitar
+                                </button>
+                              </div>
+                            ) : payment.status === 'approved' ? (
+                              <span style={{ fontSize: '12px', color: '#10b981', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                <CheckCircle size={14} /> Concluído
+                              </span>
+                            ) : (
+                              <span style={{ fontSize: '12px', color: '#ef4444', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                <XCircle size={14} /> Recusado
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      )
+                    })
+                  })()}
+                  {(() => {
+                    let count = 0
+                    if (paymentFilter === 'pending') count = riderPayments.filter(p => p.status === 'pending').length
+                    else if (paymentFilter === 'approved') count = riderPayments.filter(p => p.status === 'approved').length
+                    else count = riderPayments.filter(p => p.status === 'rejected').length
+                    
+                    return count === 0 && (
+                      <tr>
+                        <td colSpan={9} style={{ padding: '3rem', textAlign: 'center', color: '#6b7280' }}>
+                          {paymentFilter === 'pending' ? '💰 Nenhum pagamento pendente' : 
+                           paymentFilter === 'approved' ? '✅ Nenhum pagamento aprovado' : 
+                           '❌ Nenhum pagamento rejeitado'}
                         </td>
                       </tr>
                     )
-                  })
-                })()}
-                {(() => {
-                  let count = 0
-                  if (paymentFilter === 'pending') count = riderPayments.filter(p => p.status === 'pending').length
-                  else if (paymentFilter === 'approved') count = riderPayments.filter(p => p.status === 'approved').length
-                  else count = riderPayments.filter(p => p.status === 'rejected').length
-                  
-                  return count === 0 && (
-                    <tr>
-                      <td colSpan={9} style={{ padding: '3rem', textAlign: 'center', color: '#6b7280' }}>
-                        {paymentFilter === 'pending' ? '💰 Nenhum pagamento pendente' : 
-                         paymentFilter === 'approved' ? '✅ Nenhum pagamento aprovado' : 
-                         '❌ Nenhum pagamento rejeitado'}
-                      </td>
-                    </tr>
-                  )
-                })()}
-              </tbody>
-            </table>
+                  })()}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
-      )}
+        )}
 
         {/* Atribuir Placas */}
         {activeTab === 'assign' && (
@@ -1252,7 +1298,7 @@ export default function AdminDashboard() {
           </div>
         )}
 
-              {/* Chefes */}
+        {/* Chefes */}
         {activeTab === 'bosses' && (
           <div style={{ padding: '1.5rem', overflowX: 'auto' }}>
             <div style={{ backgroundColor: 'white', borderRadius: '0.75rem', overflow: 'auto' }}>
@@ -1294,25 +1340,24 @@ export default function AdminDashboard() {
         {/* Motoqueiros */}
         {activeTab === 'riders' && (
           <div style={{ padding: '1.5rem', overflowX: 'auto' }}>
-            {/* Filtros */}
             <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', flexWrap: 'wrap' }}>
               <button 
                 onClick={() => setRiderFilter('all')} 
                 style={{ padding: '6px 12px', borderRadius: '20px', border: 'none', backgroundColor: riderFilter === 'all' ? '#4f46e5' : '#e5e7eb', color: riderFilter === 'all' ? 'white' : '#374151', cursor: 'pointer' }}
               >
-                Todos
+                Todos ({riders.length})
               </button>
               <button 
                 onClick={() => setRiderFilter('active')} 
                 style={{ padding: '6px 12px', borderRadius: '20px', border: 'none', backgroundColor: riderFilter === 'active' ? '#10b981' : '#e5e7eb', color: riderFilter === 'active' ? 'white' : '#374151', cursor: 'pointer' }}
               >
-                Ativos
+                Ativos ({riders.filter(r => !r.is_frozen && r.status === 'active').length})
               </button>
               <button 
                 onClick={() => setRiderFilter('frozen')} 
                 style={{ padding: '6px 12px', borderRadius: '20px', border: 'none', backgroundColor: riderFilter === 'frozen' ? '#f59e0b' : '#e5e7eb', color: riderFilter === 'frozen' ? 'white' : '#374151', cursor: 'pointer' }}
               >
-                Congelados
+                Congelados ({riders.filter(r => r.is_frozen).length})
               </button>
             </div>
             
@@ -1325,6 +1370,7 @@ export default function AdminDashboard() {
                     <th style={styles.th}>BI</th>
                     <th style={styles.th}>Placa</th>
                     <th style={styles.th}>Status</th>
+                    <th style={styles.th}>Online</th>
                     <th style={styles.th}>Ações</th>
                   </tr>
                 </thead>
@@ -1333,23 +1379,44 @@ export default function AdminDashboard() {
                     <tr key={rider.id} style={{ backgroundColor: rider.is_frozen ? '#fef3c7' : 'white' }}>
                       <td style={styles.td}>
                         {rider.name} {rider.is_frozen && <span style={{ color: '#d97706', fontSize: '11px', marginLeft: '4px' }}>(Congelado)</span>}
+                        {rider.frozen_reason && rider.is_frozen && (
+                          <div style={{ fontSize: '10px', color: '#d97706', marginTop: '2px' }}>
+                            Motivo: {rider.frozen_reason}
+                          </div>
+                        )}
                       </td>
                       <td style={styles.td}>{rider.phone}</td>
                       <td style={styles.td}>{rider.bi}</td>
                       <td style={styles.td}>{rider.plate?.plate_number || '-'}</td>
                       <td style={styles.td}>
                         <span style={rider.is_frozen ? styles.badgeWarning : (rider.status === 'active' ? styles.badgeActive : styles.badgeInactive)}>
-                          {rider.is_frozen ? 'Congelado' : (rider.status === 'active' ? 'Ativo' : 'Inativo')}
+                          {rider.is_frozen ? '❄️ Congelado' : (rider.status === 'active' ? '✅ Ativo' : '⭕ Inativo')}
                         </span>
                       </td>
                       <td style={styles.td}>
-                        <div style={{ display: 'flex', gap: '8px' }}>
+                        <span style={rider.is_online ? { ...styles.badgeActive, backgroundColor: '#dbeafe', color: '#1e40af' } : styles.badgeInactive}>
+                          {rider.is_online ? '🟢 Online' : '⚫ Offline'}
+                        </span>
+                        {rider.is_frozen && rider.is_online && (
+                          <button 
+                            onClick={() => forceOffline(rider.id, rider.name)} 
+                            style={{ marginLeft: '8px', backgroundColor: '#ef4444', color: 'white', padding: '2px 8px', borderRadius: '12px', border: 'none', cursor: 'pointer', fontSize: '10px' }}
+                          >
+                            Forçar Offline
+                          </button>
+                        )}
+                      </td>
+                      <td style={styles.td}>
+                        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                           <button 
                             onClick={() => toggleFreezeRider(rider.id, rider.is_frozen)} 
                             style={{ background: 'none', border: 'none', cursor: 'pointer', color: rider.is_frozen ? '#10b981' : '#f59e0b' }} 
                             title={rider.is_frozen ? 'Descongelar' : 'Congelar'}
                           >
                             {rider.is_frozen ? <Sun size={16} /> : <Snowflake size={16} />}
+                          </button>
+                          <button onClick={() => callRider(rider.phone, rider.name)} style={{ ...styles.buttonCall, padding: '4px 8px' }} title="Ligar">
+                            <Phone size={14} />
                           </button>
                           <button onClick={() => deleteItem('riders', rider.id, rider.name)} style={styles.buttonDanger}>
                             <Trash2 size={16} />
@@ -1359,7 +1426,7 @@ export default function AdminDashboard() {
                     </tr>
                   ))}
                   {filteredRiders.length === 0 && (
-                    <tr><td colSpan={6} style={{ padding: '2rem', textAlign: 'center', color: '#6b7280' }}>Nenhum motoqueiro encontrado</td></tr>
+                    <tr><td colSpan={7} style={{ padding: '2rem', textAlign: 'center', color: '#6b7280' }}>Nenhum motoqueiro encontrado</td></tr>
                   )}
                 </tbody>
               </table>
@@ -1378,7 +1445,7 @@ export default function AdminDashboard() {
   )
 }
 
-// Modal de Adicionar Associação
+// Modais (mantidos iguais aos originais)
 function AddAssociationModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
   const [formData, setFormData] = useState({ name: '', email: '', phone: '', password: 'associacao123', address: '' })
   const [loading, setLoading] = useState(false)
@@ -1412,7 +1479,6 @@ function AddAssociationModal({ onClose, onSuccess }: { onClose: () => void; onSu
   )
 }
 
-// Modal de Adicionar Chefe
 function AddBossModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
   const [formData, setFormData] = useState({ name: '', email: '', phone: '', password: 'senha123' })
   const [loading, setLoading] = useState(false)
@@ -1445,7 +1511,6 @@ function AddBossModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: 
   )
 }
 
-// Modal de Adicionar Placa
 function AddPlateModal({ bosses, onClose, onSuccess }: { bosses: Boss[]; onClose: () => void; onSuccess: () => void }) {
   const [formData, setFormData] = useState({ plate_number: '', boss_id: '', weekly_fee: 75000, max_riders: 20, fee_per_rider: 300 })
   const [loading, setLoading] = useState(false)
@@ -1487,7 +1552,6 @@ function AddPlateModal({ bosses, onClose, onSuccess }: { bosses: Boss[]; onClose
   )
 }
 
-// Modal de Adicionar Operador
 function AddOperadorModal({ onClose, onSuccess, adminId }: { onClose: () => void; onSuccess: () => void; adminId?: string }) {
   const [formData, setFormData] = useState({ name: '', email: '', phone: '', password: 'operador123' })
   const [loading, setLoading] = useState(false)
@@ -1520,7 +1584,6 @@ function AddOperadorModal({ onClose, onSuccess, adminId }: { onClose: () => void
   )
 }
 
-// Modal de Adicionar Motoqueiro
 function AddRiderModal({ plates, onClose, onSuccess }: { plates: Plate[]; onClose: () => void; onSuccess: () => void }) {
   const [formData, setFormData] = useState({ name: '', phone: '', bi: '', password: 'senha123', plate_id: '' })
   const [loading, setLoading] = useState(false)
