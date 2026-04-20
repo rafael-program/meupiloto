@@ -7,12 +7,11 @@ import {
   ArrowLeft, Phone, User, XCircle, Navigation, Bike, Shield, 
   Wifi, Clock, CheckCircle, Star, Heart, Menu, MapPin, 
   DollarSign, Calendar, Send, CreditCard, AlertCircle, Sun, Moon, 
-  ClipboardList  // <-- ADICIONE ESTE
+  ClipboardList
 } from 'lucide-react'
-// Importar CSS do Leaflet apenas uma vez
 import 'leaflet/dist/leaflet.css'
 
-// Importar componentes do mapa dinamicamente com a sintaxe correta
+// Importar componentes do mapa dinamicamente
 const MapContainer = dynamic(
   () => import('react-leaflet').then((mod) => mod.MapContainer),
   { 
@@ -48,19 +47,21 @@ export default function PlateRiders() {
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [selectedRider, setSelectedRider] = useState<any>(null)
+  const [animationStep, setAnimationStep] = useState(0)
+  const [showCallButtons, setShowCallButtons] = useState(false)
   const [isMobile, setIsMobile] = useState(false)
- const [formData, setFormData] = useState(() => {
-  const hour = new Date().getHours()
-  const isNight = hour >= 22 || hour < 6
-  const defaultPrice = isNight ? 500 : 300
-  return {
-    customerName: '',
-    customerPhone: '',
-    pickupAddress: '',
-    dropoffAddress: '',
-    price: defaultPrice
-  }
-})
+  const [formData, setFormData] = useState(() => {
+    const hour = new Date().getHours()
+    const isNight = hour >= 22 || hour < 6
+    const defaultPrice = isNight ? 500 : 300
+    return {
+      customerName: '',
+      customerPhone: '',
+      pickupAddress: '',
+      dropoffAddress: '',
+      price: defaultPrice
+    }
+  })
   const [showWaitingModal, setShowWaitingModal] = useState(false)
   const [orderId, setOrderId] = useState<string | null>(null)
   const [timeLeft, setTimeLeft] = useState(900)
@@ -117,7 +118,6 @@ export default function PlateRiders() {
       setShowWaitingModal(true)
       if (savedRiderName) setSelectedRider({ name: savedRiderName })
       
-      // Restaurar timer
       if (savedExpiresAt) {
         const expires = new Date(savedExpiresAt)
         const now = new Date()
@@ -320,6 +320,32 @@ export default function PlateRiders() {
       subscription.unsubscribe()
     }
   }, [orderId, showMap])
+
+  // ✅ ANIMAÇÃO DO MAPA - MOVIDA PARA FORA DO CONDICIONAL
+ // ✅ ANIMAÇÃO DO MAPA - 5 MINUTOS (300 SEGUNDOS)
+useEffect(() => {
+  if (showMap && selectedRider) {
+    // Total: 300 segundos (5 minutos)
+    // 100 passos de 1% cada, com intervalo de 3 segundos
+    const interval = setInterval(() => {
+      setAnimationStep(prev => {
+        if (prev >= 100) {
+          clearInterval(interval)
+          return 100
+        }
+        return prev + 1
+      })
+    }, 3000) // 3 segundos entre cada incremento
+    
+    // Mostrar botão de ligar após 10 segundos
+    const timer = setTimeout(() => setShowCallButtons(true), 10000)
+    
+    return () => {
+      clearInterval(interval)
+      clearTimeout(timer)
+    }
+  }
+}, [showMap, selectedRider])
 
   const handleSubmitRating = async () => {
     if (rating > 0 && orderId) {
@@ -567,101 +593,370 @@ export default function PlateRiders() {
     )
   }
 
-  if (showMap && selectedRider) {
-    const center = riderLocation || customerLocation || { lat: -8.8383, lng: 13.2344 }
-    
-    return (
-      <div style={styles.container}>
-        <div style={styles.header}>
-          <div style={{ maxWidth: '1280px', margin: '0 auto', padding: isMobile ? '12px 16px' : '16px 24px' }}>
-            <button onClick={() => {
-              setShowMap(false)
-              setOrderId(null)
-              localStorage.removeItem('active_order_id')
-              localStorage.removeItem('active_order_status')
-              router.push('/')
-            }} style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#6b7280', background: 'none', border: 'none', cursor: 'pointer', marginBottom: isMobile ? '12px' : '16px', fontSize: isMobile ? '13px' : '14px' }}>
-              <ArrowLeft size={18} />
-              Voltar ao Início
-            </button>
-            <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? '10px' : '12px', flexWrap: 'wrap' }}>
-              <div style={{ width: isMobile ? '40px' : '48px', height: isMobile ? '40px' : '48px', background: 'linear-gradient(135deg, #f59e0b, #ea580c)', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Bike size={isMobile ? 20 : 24} color="white" />
-              </div>
-              <div style={{ flex: 1 }}>
-                <h1 style={{ fontSize: isMobile ? '20px' : '24px', fontWeight: 'bold', color: '#111827' }}>Motoqueiro a Caminho</h1>
-                <p style={{ fontSize: isMobile ? '12px' : '14px', color: '#6b7280', marginTop: '4px' }}>{selectedRider?.name} está vindo até você</p>
-              </div>
+// Mapa / Acompanhamento Animado
+if (showMap && selectedRider) {
+  const isAlmostThere = animationStep >= 80
+  
+  // Tempo estimado baseado na animação (5 minutos = 300 segundos)
+  // 100% = 300 segundos, então 1% = 3 segundos
+  const estimatedSeconds = (100 - animationStep) * 3
+  const estimatedMinutes = Math.floor(estimatedSeconds / 60)
+  const estimatedRemainingSeconds = estimatedSeconds % 60
+  
+  return (
+    <div style={styles.container}>
+      <div style={styles.header}>
+        <div style={{ maxWidth: '1280px', margin: '0 auto', padding: isMobile ? '12px 16px' : '16px 24px' }}>
+          <button onClick={() => {
+            setShowMap(false)
+            setOrderId(null)
+            setAnimationStep(0)
+            setShowCallButtons(false)
+            localStorage.removeItem('active_order_id')
+            localStorage.removeItem('active_order_status')
+            router.push('/')
+          }} style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#6b7280', background: 'none', border: 'none', cursor: 'pointer', marginBottom: isMobile ? '12px' : '16px', fontSize: isMobile ? '13px' : '14px' }}>
+            <ArrowLeft size={18} />
+            Voltar ao Início
+          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? '10px' : '12px', flexWrap: 'wrap' }}>
+            <div style={{ width: isMobile ? '40px' : '48px', height: isMobile ? '40px' : '48px', background: 'linear-gradient(135deg, #f59e0b, #ea580c)', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Bike size={isMobile ? 20 : 24} color="white" />
             </div>
-          </div>
-        </div>
-        <div style={{ padding: isMobile ? '12px' : '24px' }}>
-          <div style={{ backgroundColor: 'white', borderRadius: '20px', overflow: 'hidden', boxShadow: '0 4px 20px rgba(0,0,0,0.1)' }}>
-            <div style={{ height: isMobile ? '400px' : '500px', width: '100%' }}>
-              <MapContainer center={[center.lat, center.lng]} zoom={13} style={{ height: '100%', width: '100%' }}>
-                <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution='&copy; OpenStreetMap contributors' />
-                {customerLocation && (
-                  <Marker position={[customerLocation.lat, customerLocation.lng]}>
-                    <Popup>📍 Sua Localização</Popup>
-                  </Marker>
-                )}
-                {riderLocation && (
-                  <Marker position={[riderLocation.lat, riderLocation.lng]}>
-                    <Popup>🏍️ {selectedRider?.name}</Popup>
-                  </Marker>
-                )}
-              </MapContainer>
+            <div style={{ flex: 1 }}>
+              <h1 style={{ fontSize: isMobile ? '20px' : '24px', fontWeight: 'bold', color: '#111827' }}>Acompanhamento da Corrida</h1>
+              <p style={{ fontSize: isMobile ? '12px' : '14px', color: '#6b7280', marginTop: '4px' }}>{selectedRider?.name} está vindo até você</p>
             </div>
-          </div>
-          
-          <div style={{ marginTop: '16px', backgroundColor: 'white', borderRadius: '20px', padding: '20px', border: '1px solid #f0f0f0' }}>
-            <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', alignItems: isMobile ? 'stretch' : 'center', gap: '16px' }}>
-              <div style={{ flex: 1 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-                  <div style={{ width: '10px', height: '10px', backgroundColor: '#10b981', borderRadius: '50%', animation: 'pulse 1.5s infinite' }}></div>
-                  <span style={{ fontWeight: 600, color: '#10b981', fontSize: isMobile ? '14px' : '15px' }}>Motoqueiro a caminho</span>
-                </div>
-                <div style={{ marginBottom: '12px' }}>
-                  <p style={{ fontSize: '12px', color: '#6b7280', marginBottom: '4px' }}>Destino:</p>
-                  <p style={{ fontSize: isMobile ? '14px' : '15px', fontWeight: 500, color: '#374151' }}>{formData.dropoffAddress || 'Não informado'}</p>
-                </div>
-                <div>
-                  <p style={{ fontSize: '12px', color: '#6b7280', marginBottom: '4px' }}>Valor da corrida:</p>
-                  <p style={{ fontSize: isMobile ? '20px' : '24px', fontWeight: 'bold', color: '#f59e0b' }}>{formData.price?.toLocaleString()} Kz</p>
-                </div>
-              </div>
-              <div style={{ display: 'flex', gap: '12px', flexDirection: isMobile ? 'row' : 'column' }}>
-                <button 
-                  onClick={() => window.open(`https://wa.me/${selectedRider?.phone}`, '_blank')}
-                  style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 16px', background: '#25D366', color: 'white', border: 'none', borderRadius: '12px', fontWeight: 500, cursor: 'pointer' }}
-                >
-                  <Send size={16} /> WhatsApp
-                </button>
-                <button 
-                  onClick={() => window.location.href = `tel:${selectedRider?.phone}`}
-                  style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 16px', background: '#3b82f6', color: 'white', border: 'none', borderRadius: '12px', fontWeight: 500, cursor: 'pointer' }}
-                >
-                  <Phone size={16} /> Ligar
-                </button>
-              </div>
-            </div>
-          </div>
-          
-          <div style={{ marginTop: '16px', textAlign: 'center' }}>
-            <button onClick={() => {
-              setShowMap(false)
-              setOrderId(null)
-              localStorage.removeItem('active_order_id')
-              localStorage.removeItem('active_order_status')
-              router.push('/')
-            }} style={{ background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer', fontSize: isMobile ? '13px' : '14px', padding: '12px' }}>
-              ← Ir para página inicial
-            </button>
           </div>
         </div>
       </div>
-    )
-  }
+      
+      <div style={{ padding: isMobile ? '12px' : '24px', maxWidth: '600px', margin: '0 auto' }}>
+        {/* Card de Acompanhamento Animado */}
+        <div style={{ 
+          backgroundColor: 'white', 
+          borderRadius: '32px', 
+          overflow: 'hidden', 
+          boxShadow: '0 20px 40px rgba(0,0,0,0.1)',
+          background: 'linear-gradient(135deg, #fff, #fef3c7)'
+        }}>
+          
+          {/* Cabeçalho com informações do motoqueiro */}
+          <div style={{ 
+            background: 'linear-gradient(135deg, #f59e0b, #ea580c)', 
+            padding: isMobile ? '20px' : '24px', 
+            textAlign: 'center', 
+            color: 'white' 
+          }}>
+            <div style={{ 
+              width: isMobile ? '80px' : '100px', 
+              height: isMobile ? '80px' : '100px', 
+              margin: '0 auto 12px',
+              position: 'relative'
+            }}>
+              {selectedRider?.photo_url ? (
+                <img src={selectedRider.photo_url} alt={selectedRider.name} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover', border: '3px solid white' }} />
+              ) : (
+                <div style={{ width: '100%', height: '100%', background: 'rgba(255,255,255,0.2)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <User size={isMobile ? 40 : 50} color="white" />
+                </div>
+              )}
+              <div style={{ 
+                position: 'absolute', 
+                bottom: 0, 
+                right: 0, 
+                background: '#10b981', 
+                width: '20px', 
+                height: '20px', 
+                borderRadius: '50%', 
+                border: '2px solid white' 
+              }} />
+            </div>
+            <h2 style={{ fontSize: isMobile ? '18px' : '20px', fontWeight: 'bold' }}>{selectedRider.name}</h2>
+            <p style={{ fontSize: '12px', opacity: 0.9, marginTop: '4px' }}>Placa: {plate?.plate_number}</p>
+          </div>
+          
+          {/* Área de Animação */}
+          <div style={{ padding: isMobile ? '24px' : '32px', textAlign: 'center' }}>
+            
+            {/* Avatar Animado do Motoqueiro */}
+            <div style={{ 
+              position: 'relative', 
+              height: isMobile ? '200px' : '250px',
+              marginBottom: '20px'
+            }}>
+              {/* Fundo da estrada */}
+              <div style={{ 
+                position: 'absolute', 
+                bottom: 0, 
+                left: 0, 
+                right: 0, 
+                height: '4px', 
+                background: '#e5e7eb',
+                borderRadius: '2px'
+              }}>
+                <div style={{ 
+                  width: `${animationStep}%`, 
+                  height: '100%', 
+                  background: 'linear-gradient(90deg, #f59e0b, #10b981)',
+                  borderRadius: '2px',
+                  transition: 'width 3s linear'
+                }} />
+              </div>
+              
+              {/* Motoqueiro Animado */}
+              <div style={{ 
+                position: 'absolute',
+                bottom: -20,
+                left: `${animationStep}%`,
+                transform: 'translateX(-50%)',
+                transition: 'left 3s linear'
+              }}>
+                <div style={{ 
+                  animation: animationStep < 100 ? 'bounce 0.5s ease infinite' : 'none',
+                  transform: animationStep >= 80 ? 'scaleX(-1)' : 'scaleX(1)'
+                }}>
+                  <div style={{ 
+                    background: 'linear-gradient(135deg, #f59e0b, #ea580c)', 
+                    width: isMobile ? '60px' : '70px', 
+                    height: isMobile ? '60px' : '70px', 
+                    borderRadius: '50%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.2)'
+                  }}>
+                    <Bike size={isMobile ? 32 : 38} color="white" />
+                  </div>
+                  <div style={{ 
+                    textAlign: 'center', 
+                    marginTop: '8px',
+                    fontSize: '11px',
+                    fontWeight: 500,
+                    color: '#f59e0b',
+                    background: 'white',
+                    padding: '2px 8px',
+                    borderRadius: '20px',
+                    display: 'inline-block',
+                    whiteSpace: 'nowrap'
+                  }}>
+                    {isAlmostThere ? 'Quase lá! 🏍️' : `${Math.floor(animationStep)}% do caminho`}
+                  </div>
+                </div>
+              </div>
+              
+              {/* Marcador do Cliente */}
+              <div style={{ 
+                position: 'absolute',
+                bottom: -20,
+                right: 0,
+                transform: 'translateX(50%)'
+              }}>
+                <div style={{ 
+                  background: '#3b82f6', 
+                  width: isMobile ? '40px' : '48px', 
+                  height: isMobile ? '40px' : '48px', 
+                  borderRadius: '50%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.2)'
+                }}>
+                  <MapPin size={isMobile ? 20 : 24} color="white" />
+                </div>
+                <div style={{ 
+                  textAlign: 'center', 
+                  marginTop: '8px',
+                  fontSize: '10px',
+                  fontWeight: 500,
+                  color: '#3b82f6'
+                }}>
+                  Você está aqui
+                </div>
+              </div>
+            </div>
+            
+            {/* Timer de chegada estimada */}
+            <div style={{ 
+              marginBottom: '16px',
+              padding: '8px 12px',
+              background: '#f0fdf4',
+              borderRadius: '20px',
+              display: 'inline-block'
+            }}>
+              <p style={{ fontSize: '12px', color: '#065f46', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Clock size={14} />
+                {animationStep >= 100 ? (
+                  'Chegada iminente!'
+                ) : isAlmostThere ? (
+                  'Chegando em menos de 1 minuto...'
+                ) : (
+                  `Tempo estimado: ${estimatedMinutes} minuto${estimatedMinutes !== 1 ? 's' : ''}${estimatedRemainingSeconds > 0 ? ` e ${estimatedRemainingSeconds} segundo${estimatedRemainingSeconds !== 1 ? 's' : ''}` : ''}`
+                )}
+              </p>
+            </div>
+            
+            {/* Mensagem de Status */}
+            <div style={{ 
+              marginTop: '10px',
+              padding: '16px',
+              background: isAlmostThere ? '#d1fae5' : '#fef3c7',
+              borderRadius: '16px',
+              border: `1px solid ${isAlmostThere ? '#10b981' : '#fde68a'}`
+            }}>
+              <p style={{ 
+                fontSize: isMobile ? '14px' : '16px', 
+                fontWeight: 500, 
+                color: isAlmostThere ? '#065f46' : '#92400e',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px'
+              }}>
+                {isAlmostThere ? (
+                  <>
+                    <CheckCircle size={20} />
+                    O motoqueiro está chegando! Prepare-se para o encontro 🎉
+                  </>
+                ) : (
+                  <>
+                    <Clock size={20} />
+                    Motoqueiro a caminho...
+                  </>
+                )}
+              </p>
+              {!isAlmostThere && animationStep < 100 && (
+                <p style={{ fontSize: '12px', color: '#92400e', marginTop: '8px' }}>
+                  O motoqueiro chegará em aproximadamente {estimatedMinutes} minuto{estimatedMinutes !== 1 ? 's' : ''}{estimatedRemainingSeconds > 0 ? ` e ${estimatedRemainingSeconds} segundo${estimatedRemainingSeconds !== 1 ? 's' : ''}` : ''}
+                </p>
+              )}
+            </div>
+            
+            {/* Informações da Corrida */}
+            <div style={{ 
+              marginTop: '20px', 
+              padding: '16px', 
+              background: '#f9fafb', 
+              borderRadius: '16px',
+              textAlign: 'left'
+            }}>
+              <div style={{ marginBottom: '12px' }}>
+                <p style={{ fontSize: '11px', color: '#6b7280', marginBottom: '4px' }}>📍 Destino</p>
+                <p style={{ fontSize: isMobile ? '13px' : '14px', fontWeight: 500 }}>{formData.dropoffAddress || 'Não informado'}</p>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <p style={{ fontSize: '11px', color: '#6b7280', marginBottom: '4px' }}>💰 Valor</p>
+                  <p style={{ fontSize: isMobile ? '18px' : '20px', fontWeight: 'bold', color: '#f59e0b' }}>{formData.price?.toLocaleString()} Kz</p>
+                </div>
+                {showCallButtons && (
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button 
+                      onClick={() => window.location.href = `tel:${selectedRider?.phone}`}
+                      style={{ padding: '10px 16px', background: '#3b82f6', color: 'white', border: 'none', borderRadius: '12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px' }}
+                    >
+                      <Phone size={14} /> Ligar
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+            
+            {/* Barra de progresso extra */}
+            <div style={{ marginTop: '16px' }}>
+              <div style={{ 
+                height: '6px', 
+                background: '#e5e7eb', 
+                borderRadius: '3px',
+                overflow: 'hidden'
+              }}>
+                <div style={{ 
+                  width: `${animationStep}%`, 
+                  height: '100%', 
+                  background: 'linear-gradient(90deg, #f59e0b, #10b981)',
+                  borderRadius: '3px',
+                  transition: 'width 3s linear'
+                }} />
+              </div>
+              <div style={{ 
+                display: 'flex', 
+                justifyContent: 'space-between', 
+                marginTop: '6px',
+                fontSize: '10px',
+                color: '#9ca3af'
+              }}>
+                <span>Início</span>
+                <span>{animationStep}%</span>
+                <span>Destino</span>
+              </div>
+            </div>
+            
+            {/* Botão de Concluir (aparece quando chega) */}
+            {isAlmostThere && (
+              <button
+                onClick={async () => {
+                  if (orderId) {
+                    await supabase
+                      .from('orders')
+                      .update({ status: 'completed' })
+                      .eq('id', orderId)
+                  }
+                  setShowMap(false)
+                  setShowThankYouModal(true)
+                }}
+                style={{
+                  width: '100%',
+                  marginTop: '20px',
+                  padding: '14px',
+                  background: 'linear-gradient(135deg, #10b981, #059669)',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '16px',
+                  fontWeight: 'bold',
+                  fontSize: '16px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px',
+                  animation: 'pulse 1s infinite'
+                }}
+              >
+                <CheckCircle size={20} />
+                CHEGUEI AO MEU DESTINO
+              </button>
+            )}
+          </div>
+        </div>
+        
+        <div style={{ marginTop: '16px', textAlign: 'center' }}>
+          <button onClick={() => {
+            setShowMap(false)
+            setOrderId(null)
+            setAnimationStep(0)
+            setShowCallButtons(false)
+            localStorage.removeItem('active_order_id')
+            localStorage.removeItem('active_order_status')
+            router.push('/')
+          }} style={{ background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer', fontSize: isMobile ? '13px' : '14px', padding: '12px' }}>
+            ← Ir para página inicial
+          </button>
+        </div>
+      </div>
+      
+      <style jsx>{`
+        @keyframes bounce {
+          0%, 100% { transform: translateY(0); }
+          50% { transform: translateY(-5px); }
+        }
+        @keyframes pulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.8; transform: scale(1.02); }
+        }
+      `}</style>
+    </div>
+  )
+}
 
   if (showWaitingModal) {
     const progressPercent = (timeLeft / 900) * 100
@@ -679,17 +974,9 @@ export default function PlateRiders() {
             </p>
           </div>
 
-          {/* Timer Circular */}
           <div style={{ position: 'relative', width: isMobile ? '120px' : '140px', height: isMobile ? '120px' : '140px', margin: '0 auto 20px' }}>
             <svg style={{ transform: 'rotate(-90deg)', width: '100%', height: '100%' }}>
-              <circle
-                cx="50%"
-                cy="50%"
-                r="45%"
-                fill="none"
-                stroke="#e5e7eb"
-                strokeWidth="8"
-              />
+              <circle cx="50%" cy="50%" r="45%" fill="none" stroke="#e5e7eb" strokeWidth="8" />
               <circle
                 cx="50%"
                 cy="50%"
@@ -714,14 +1001,7 @@ export default function PlateRiders() {
               <AlertCircle size={14} /> Aguardando resposta do motoqueiro
             </p>
             <div style={{ height: '4px', backgroundColor: '#fde68a', borderRadius: '2px', overflow: 'hidden' }}>
-              <div 
-                style={{ 
-                  width: `${progressPercent}%`, 
-                  height: '100%', 
-                  backgroundColor: '#f59e0b',
-                  transition: 'width 1s linear'
-                }} 
-              />
+              <div style={{ width: `${progressPercent}%`, height: '100%', backgroundColor: '#f59e0b', transition: 'width 1s linear' }} />
             </div>
           </div>
 
@@ -830,289 +1110,284 @@ export default function PlateRiders() {
         )}
       </div>
 
-     {/* Formulário de Pedido Melhorado */}
-{showForm && selectedRider && (
-  <div style={styles.modalOverlay} onClick={() => setShowForm(false)}>
-    <div style={styles.modalContent} onClick={(e) => e.stopPropagation()}>
-      <div style={{ background: 'linear-gradient(135deg, #f59e0b, #ea580c)', padding: isMobile ? '20px' : '24px', borderRadius: '24px 24px 0 0', color: 'white' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div>
-            <h3 style={{ fontSize: isMobile ? '20px' : '22px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Bike size={24} />
-              Solicitar Corrida
-            </h3>
-            <p style={{ fontSize: '13px', opacity: 0.9, marginTop: '6px' }}>Preencha os dados abaixo para solicitar o serviço</p>
-          </div>
-          <button 
-            onClick={() => setShowForm(false)} 
-            style={{ 
-              background: 'rgba(255,255,255,0.2)', 
-              border: 'none', 
-              color: 'white', 
-              width: '36px', 
-              height: '36px', 
-              borderRadius: '50%', 
-              cursor: 'pointer', 
-              fontSize: '20px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
-            }}
-          >
-            ✕
-          </button>
-        </div>
-      </div>
-      
-      <form onSubmit={handleSubmit} style={{ padding: isMobile ? '20px' : '24px', display: 'flex', flexDirection: 'column', gap: '18px' }}>
-        {/* Informações do Cliente */}
-        <div>
-          <label style={{ ...styles.label, display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
-            <User size={16} color="#f59e0b" />
-            Seu nome <span style={{ color: '#ef4444' }}>*</span>
-          </label>
-          <input 
-            type="text" 
-            required 
-            placeholder="Digite seu nome completo" 
-            value={formData.customerName} 
-            onChange={(e) => setFormData({...formData, customerName: e.target.value})} 
-            style={{ ...styles.input, padding: '14px', fontSize: isMobile ? '16px' : '14px' }} 
-          />
-        </div>
-
-        <div>
-          <label style={{ ...styles.label, display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
-            <Phone size={16} color="#f59e0b" />
-            Seu telefone <span style={{ color: '#ef4444' }}>*</span>
-          </label>
-          <input 
-            type="tel" 
-            required 
-            placeholder="Digite seu telefone (ex: 923456789)" 
-            value={formData.customerPhone} 
-            onChange={(e) => setFormData({...formData, customerPhone: e.target.value})} 
-            style={{ ...styles.input, padding: '14px', fontSize: isMobile ? '16px' : '14px' }} 
-          />
-        </div>
-
-        {/* Endereços com ícones bonitos */}
-        <div>
-          <label style={{ ...styles.label, display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
-            <MapPin size={16} color="#10b981" />
-            Endereço de origem <span style={{ color: '#ef4444' }}>*</span>
-          </label>
-          <div style={{ position: 'relative' }}>
-            <span style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', fontSize: '18px' }}>📍</span>
-            <input 
-              type="text" 
-              required 
-              placeholder="Onde você está?" 
-              value={formData.pickupAddress} 
-              onChange={(e) => setFormData({...formData, pickupAddress: e.target.value})} 
-              style={{ ...styles.input, padding: '14px 14px 14px 48px', fontSize: isMobile ? '16px' : '14px' }} 
-            />
-          </div>
-        </div>
-
-        <div>
-          <label style={{ ...styles.label, display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
-            <MapPin size={16} color="#ef4444" />
-            Endereço de destino <span style={{ color: '#ef4444' }}>*</span>
-          </label>
-          <div style={{ position: 'relative' }}>
-            <span style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', fontSize: '18px' }}>🎯</span>
-            <input 
-              type="text" 
-              required 
-              placeholder="Para onde você vai?" 
-              value={formData.dropoffAddress} 
-              onChange={(e) => setFormData({...formData, dropoffAddress: e.target.value})} 
-              style={{ ...styles.input, padding: '14px 14px 14px 48px', fontSize: isMobile ? '16px' : '14px' }} 
-            />
-          </div>
-        </div>
-
-        {/* Valor da Corrida com Preço Dinâmico */}
-        <div>
-          <label style={{ ...styles.label, display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
-            <DollarSign size={16} color="#f59e0b" />
-            Valor da corrida (Kz) <span style={{ color: '#ef4444' }}>*</span>
-          </label>
-          
-          <div style={{ position: 'relative' }}>
-            <span style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: '#6b7280', fontWeight: 600, fontSize: '14px' }}>Kz</span>
-            <input 
-              type="number" 
-              required 
-              placeholder="Valor" 
-              value={formData.price} 
-              onChange={(e) => setFormData({...formData, price: parseInt(e.target.value) || 0})} 
-              style={{ ...styles.input, padding: '14px 14px 14px 48px', fontSize: isMobile ? '16px' : '14px' }} 
-              min="100" 
-              step="100" 
-            />
-          </div>
-          
-          {/* Tarifa Dinâmica por Horário */}
-          <div style={{ 
-            marginTop: '12px', 
-            padding: '14px', 
-            borderRadius: '14px', 
-            background: (() => {
-              const hour = new Date().getHours()
-              return hour >= 22 || hour < 6 ? 'linear-gradient(135deg, #1e1b4b, #312e81)' : 'linear-gradient(135deg, #fffbeb, #fef3c7)'
-            })(),
-            border: `1px solid ${(() => {
-              const hour = new Date().getHours()
-              return hour >= 22 || hour < 6 ? '#4338ca' : '#fde68a'
-            })()}`
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-              <div style={{ 
-                width: '40px', 
-                height: '40px', 
-                borderRadius: '12px', 
-                background: (() => {
-                  const hour = new Date().getHours()
-                  return hour >= 22 || hour < 6 ? '#4338ca' : '#f59e0b'
-                })(),
-                display: 'flex', 
-                alignItems: 'center', 
-                justifyContent: 'center' 
-              }}>
-                {(() => {
-                  const hour = new Date().getHours()
-                  return hour >= 22 || hour < 6 ? <Moon size={20} color="white" /> : <Sun size={20} color="white" />
-                })()}
+      {/* Formulário de Pedido Melhorado */}
+      {showForm && selectedRider && (
+        <div style={styles.modalOverlay} onClick={() => setShowForm(false)}>
+          <div style={styles.modalContent} onClick={(e) => e.stopPropagation()}>
+            <div style={{ background: 'linear-gradient(135deg, #f59e0b, #ea580c)', padding: isMobile ? '20px' : '24px', borderRadius: '24px 24px 0 0', color: 'white' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <h3 style={{ fontSize: isMobile ? '20px' : '22px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Bike size={24} />
+                    Solicitar Corrida
+                  </h3>
+                  <p style={{ fontSize: '13px', opacity: 0.9, marginTop: '6px' }}>Preencha os dados abaixo para solicitar o serviço</p>
+                </div>
+                <button 
+                  onClick={() => setShowForm(false)} 
+                  style={{ 
+                    background: 'rgba(255,255,255,0.2)', 
+                    border: 'none', 
+                    color: 'white', 
+                    width: '36px', 
+                    height: '36px', 
+                    borderRadius: '50%', 
+                    cursor: 'pointer', 
+                    fontSize: '20px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}
+                >
+                  ✕
+                </button>
               </div>
-              <div style={{ flex: 1 }}>
-                <p style={{ 
-                  fontSize: '13px', 
-                  fontWeight: 600, 
-                  color: (() => {
-                    const hour = new Date().getHours()
-                    return hour >= 22 || hour < 6 ? '#a5b4fc' : '#92400e'
-                  })(),
-                  marginBottom: '4px'
-                }}>
-                  {(() => {
-                    const hour = new Date().getHours()
-                    return hour >= 22 || hour < 6 ? '🌙 Tarifa Noturna' : '☀️ Tarifa Diurna'
-                  })()}
-                </p>
-                <p style={{ 
-                  fontSize: '18px', 
-                  fontWeight: 'bold', 
-                  color: (() => {
-                    const hour = new Date().getHours()
-                    return hour >= 22 || hour < 6 ? 'white' : '#d97706'
-                  })(),
-                  marginBottom: '2px'
-                }}>
-                  {(() => {
-                    const hour = new Date().getHours()
-                    const isNight = hour >= 22 || hour < 6
-                    const basePrice = isNight ? 500 : 300
-                    return `${basePrice.toLocaleString()} Kz`
-                  })()}
-                </p>
-                <p style={{ 
-                  fontSize: '10px', 
-                  color: (() => {
-                    const hour = new Date().getHours()
-                    return hour >= 22 || hour < 6 ? '#c7d2fe' : '#b45309'
-                  })()
-                }}>
-                  {(() => {
-                    const hour = new Date().getHours()
-                    if (hour >= 22 || hour < 6) {
-                      return '⏰ Válido das 22h às 6h (adicional noturno)'
-                    }
-                    return '⏰ Válido das 6h às 22h'
-                  })()}
-                </p>
+            </div>
+            
+            <form onSubmit={handleSubmit} style={{ padding: isMobile ? '20px' : '24px', display: 'flex', flexDirection: 'column', gap: '18px' }}>
+              <div>
+                <label style={{ ...styles.label, display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
+                  <User size={16} color="#f59e0b" />
+                  Seu nome <span style={{ color: '#ef4444' }}>*</span>
+                </label>
+                <input 
+                  type="text" 
+                  required 
+                  placeholder="Digite seu nome completo" 
+                  value={formData.customerName} 
+                  onChange={(e) => setFormData({...formData, customerName: e.target.value})} 
+                  style={{ ...styles.input, padding: '14px', fontSize: isMobile ? '16px' : '14px' }} 
+                />
               </div>
-              <button
-                type="button"
-                onClick={() => {
-                  const hour = new Date().getHours()
-                  const isNight = hour >= 22 || hour < 6
-                  const suggestedPrice = isNight ? 500 : 300
-                  setFormData({...formData, price: suggestedPrice})
-                }}
-                style={{
-                  padding: '8px 16px',
+
+              <div>
+                <label style={{ ...styles.label, display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
+                  <Phone size={16} color="#f59e0b" />
+                  Seu telefone <span style={{ color: '#ef4444' }}>*</span>
+                </label>
+                <input 
+                  type="tel" 
+                  required 
+                  placeholder="Digite seu telefone (ex: 923456789)" 
+                  value={formData.customerPhone} 
+                  onChange={(e) => setFormData({...formData, customerPhone: e.target.value})} 
+                  style={{ ...styles.input, padding: '14px', fontSize: isMobile ? '16px' : '14px' }} 
+                />
+              </div>
+
+              <div>
+                <label style={{ ...styles.label, display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
+                  <MapPin size={16} color="#10b981" />
+                  Endereço de origem <span style={{ color: '#ef4444' }}>*</span>
+                </label>
+                <div style={{ position: 'relative' }}>
+                  <span style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', fontSize: '18px' }}>📍</span>
+                  <input 
+                    type="text" 
+                    required 
+                    placeholder="Onde você está?" 
+                    value={formData.pickupAddress} 
+                    onChange={(e) => setFormData({...formData, pickupAddress: e.target.value})} 
+                    style={{ ...styles.input, padding: '14px 14px 14px 48px', fontSize: isMobile ? '16px' : '14px' }} 
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label style={{ ...styles.label, display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
+                  <MapPin size={16} color="#ef4444" />
+                  Endereço de destino <span style={{ color: '#ef4444' }}>*</span>
+                </label>
+                <div style={{ position: 'relative' }}>
+                  <span style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', fontSize: '18px' }}>🎯</span>
+                  <input 
+                    type="text" 
+                    required 
+                    placeholder="Para onde você vai?" 
+                    value={formData.dropoffAddress} 
+                    onChange={(e) => setFormData({...formData, dropoffAddress: e.target.value})} 
+                    style={{ ...styles.input, padding: '14px 14px 14px 48px', fontSize: isMobile ? '16px' : '14px' }} 
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label style={{ ...styles.label, display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
+                  <DollarSign size={16} color="#f59e0b" />
+                  Valor da corrida (Kz) <span style={{ color: '#ef4444' }}>*</span>
+                </label>
+                
+                <div style={{ position: 'relative' }}>
+                  <span style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: '#6b7280', fontWeight: 600, fontSize: '14px' }}>Kz</span>
+                  <input 
+                    type="number" 
+                    required 
+                    placeholder="Valor" 
+                    value={formData.price} 
+                    onChange={(e) => setFormData({...formData, price: parseInt(e.target.value) || 0})} 
+                    style={{ ...styles.input, padding: '14px 14px 14px 48px', fontSize: isMobile ? '16px' : '14px' }} 
+                    min="100" 
+                    step="100" 
+                  />
+                </div>
+                
+                <div style={{ 
+                  marginTop: '12px', 
+                  padding: '14px', 
+                  borderRadius: '14px', 
                   background: (() => {
                     const hour = new Date().getHours()
-                    return hour >= 22 || hour < 6 ? '#4338ca' : '#f59e0b'
+                    return hour >= 22 || hour < 6 ? 'linear-gradient(135deg, #1e1b4b, #312e81)' : 'linear-gradient(135deg, #fffbeb, #fef3c7)'
                   })(),
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '10px',
-                  fontSize: '12px',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px'
+                  border: `1px solid ${(() => {
+                    const hour = new Date().getHours()
+                    return hour >= 22 || hour < 6 ? '#4338ca' : '#fde68a'
+                  })()}`
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                    <div style={{ 
+                      width: '40px', 
+                      height: '40px', 
+                      borderRadius: '12px', 
+                      background: (() => {
+                        const hour = new Date().getHours()
+                        return hour >= 22 || hour < 6 ? '#4338ca' : '#f59e0b'
+                      })(),
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      justifyContent: 'center' 
+                    }}>
+                      {(() => {
+                        const hour = new Date().getHours()
+                        return hour >= 22 || hour < 6 ? <Moon size={20} color="white" /> : <Sun size={20} color="white" />
+                      })()}
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <p style={{ 
+                        fontSize: '13px', 
+                        fontWeight: 600, 
+                        color: (() => {
+                          const hour = new Date().getHours()
+                          return hour >= 22 || hour < 6 ? '#a5b4fc' : '#92400e'
+                        })(),
+                        marginBottom: '4px'
+                      }}>
+                        {(() => {
+                          const hour = new Date().getHours()
+                          return hour >= 22 || hour < 6 ? '🌙 Tarifa Noturna' : '☀️ Tarifa Diurna'
+                        })()}
+                      </p>
+                      <p style={{ 
+                        fontSize: '18px', 
+                        fontWeight: 'bold', 
+                        color: (() => {
+                          const hour = new Date().getHours()
+                          return hour >= 22 || hour < 6 ? 'white' : '#d97706'
+                        })(),
+                        marginBottom: '2px'
+                      }}>
+                        {(() => {
+                          const hour = new Date().getHours()
+                          const isNight = hour >= 22 || hour < 6
+                          const basePrice = isNight ? 500 : 300
+                          return `${basePrice.toLocaleString()} Kz`
+                        })()}
+                      </p>
+                      <p style={{ 
+                        fontSize: '10px', 
+                        color: (() => {
+                          const hour = new Date().getHours()
+                          return hour >= 22 || hour < 6 ? '#c7d2fe' : '#b45309'
+                        })()
+                      }}>
+                        {(() => {
+                          const hour = new Date().getHours()
+                          if (hour >= 22 || hour < 6) {
+                            return '⏰ Válido das 22h às 6h (adicional noturno)'
+                          }
+                          return '⏰ Válido das 6h às 22h'
+                        })()}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const hour = new Date().getHours()
+                        const isNight = hour >= 22 || hour < 6
+                        const suggestedPrice = isNight ? 500 : 300
+                        setFormData({...formData, price: suggestedPrice})
+                      }}
+                      style={{
+                        padding: '8px 16px',
+                        background: (() => {
+                          const hour = new Date().getHours()
+                          return hour >= 22 || hour < 6 ? '#4338ca' : '#f59e0b'
+                        })(),
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '10px',
+                        fontSize: '12px',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px'
+                      }}
+                    >
+                      <CheckCircle size={14} />
+                      Usar este valor
+                    </button>
+                  </div>
+                </div>
+                
+                <p style={{ fontSize: '11px', color: '#9ca3af', marginTop: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <CreditCard size={12} />
+                  💡 Você também pode digitar um valor personalizado acima
+                </p>
+              </div>
+
+              <div style={{ 
+                backgroundColor: '#fef3c7', 
+                padding: '14px', 
+                borderRadius: '14px', 
+                marginTop: '4px',
+                border: '1px solid #fde68a'
+              }}>
+                <p style={{ fontSize: '13px', fontWeight: 600, color: '#92400e', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <ClipboardList size={14} />
+                  📋 Resumo do pedido
+                </p>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: '#78350f', marginBottom: '6px' }}>
+                  <span>🏍️ Motoqueiro:</span>
+                  <span style={{ fontWeight: 600 }}>{selectedRider.name}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: '#78350f' }}>
+                  <span>🚲 Placa:</span>
+                  <span style={{ fontWeight: 600 }}>{plate?.plate_number}</span>
+                </div>
+              </div>
+
+              <button 
+                type="submit" 
+                style={{ 
+                  ...styles.buttonPrimary, 
+                  width: '100%', 
+                  justifyContent: 'center', 
+                  padding: '16px', 
+                  fontSize: isMobile ? '16px' : '16px', 
+                  marginTop: '8px',
+                  background: 'linear-gradient(135deg, #f59e0b, #ea580c)',
+                  borderRadius: '14px',
+                  gap: '10px'
                 }}
               >
-                <CheckCircle size={14} />
-                Usar este valor
+                <Send size={isMobile ? 18 : 18} />
+                Confirmar Pedido
               </button>
-            </div>
-          </div>
-          
-          <p style={{ fontSize: '11px', color: '#9ca3af', marginTop: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <CreditCard size={12} />
-            💡 Você também pode digitar um valor personalizado acima
-          </p>
-        </div>
-
-        {/* Resumo do Pedido */}
-        <div style={{ 
-          backgroundColor: '#fef3c7', 
-          padding: '14px', 
-          borderRadius: '14px', 
-          marginTop: '4px',
-          border: '1px solid #fde68a'
-        }}>
-          <p style={{ fontSize: '13px', fontWeight: 600, color: '#92400e', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <ClipboardList size={14} />
-            📋 Resumo do pedido
-          </p>
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: '#78350f', marginBottom: '6px' }}>
-            <span>🏍️ Motoqueiro:</span>
-            <span style={{ fontWeight: 600 }}>{selectedRider.name}</span>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: '#78350f' }}>
-            <span>🚲 Placa:</span>
-            <span style={{ fontWeight: 600 }}>{plate?.plate_number}</span>
+            </form>
           </div>
         </div>
-
-        <button 
-          type="submit" 
-          style={{ 
-            ...styles.buttonPrimary, 
-            width: '100%', 
-            justifyContent: 'center', 
-            padding: '16px', 
-            fontSize: isMobile ? '16px' : '16px', 
-            marginTop: '8px',
-            background: 'linear-gradient(135deg, #f59e0b, #ea580c)',
-            borderRadius: '14px',
-            gap: '10px'
-          }}
-        >
-          <Send size={isMobile ? 18 : 18} />
-          Confirmar Pedido
-        </button>
-      </form>
-    </div>
-  </div>
-)}
+      )}
 
       <style jsx>{`
         @keyframes spin {
