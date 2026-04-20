@@ -49,13 +49,18 @@ export default function PlateRiders() {
   const [showForm, setShowForm] = useState(false)
   const [selectedRider, setSelectedRider] = useState<any>(null)
   const [isMobile, setIsMobile] = useState(false)
-  const [formData, setFormData] = useState({
+ const [formData, setFormData] = useState(() => {
+  const hour = new Date().getHours()
+  const isNight = hour >= 22 || hour < 6
+  const defaultPrice = isNight ? 500 : 300
+  return {
     customerName: '',
     customerPhone: '',
     pickupAddress: '',
     dropoffAddress: '',
-    price: 300
-  })
+    price: defaultPrice
+  }
+})
   const [showWaitingModal, setShowWaitingModal] = useState(false)
   const [orderId, setOrderId] = useState<string | null>(null)
   const [timeLeft, setTimeLeft] = useState(900)
