@@ -54,7 +54,7 @@ export default function PlateRiders() {
     customerPhone: '',
     pickupAddress: '',
     dropoffAddress: '',
-    price: 1000
+    price: 300
   })
   const [showWaitingModal, setShowWaitingModal] = useState(false)
   const [orderId, setOrderId] = useState<string | null>(null)
