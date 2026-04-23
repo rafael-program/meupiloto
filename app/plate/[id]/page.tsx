@@ -50,6 +50,7 @@ export default function PlateRiders() {
   const [animationStep, setAnimationStep] = useState(0)
   const [showCallButtons, setShowCallButtons] = useState(false)
   const [isMobile, setIsMobile] = useState(false)
+  const [orderType, setOrderType] = useState<'app' | 'call'>('app')
   const [formData, setFormData] = useState(() => {
     const hour = new Date().getHours()
     const isNight = hour >= 22 || hour < 6
@@ -322,30 +323,115 @@ export default function PlateRiders() {
   }, [orderId, showMap])
 
   // ✅ ANIMAÇÃO DO MAPA - MOVIDA PARA FORA DO CONDICIONAL
- // ✅ ANIMAÇÃO DO MAPA - 5 MINUTOS (300 SEGUNDOS)
-useEffect(() => {
-  if (showMap && selectedRider) {
-    // Total: 300 segundos (5 minutos)
-    // 100 passos de 1% cada, com intervalo de 3 segundos
-    const interval = setInterval(() => {
-      setAnimationStep(prev => {
-        if (prev >= 100) {
-          clearInterval(interval)
-          return 100
-        }
-        return prev + 1
+  useEffect(() => {
+    if (showMap && selectedRider) {
+      const interval = setInterval(() => {
+        setAnimationStep(prev => {
+          if (prev >= 100) {
+            clearInterval(interval)
+            return 100
+          }
+          return prev + 1
+        })
+      }, 3000)
+      
+      const timer = setTimeout(() => setShowCallButtons(true), 10000)
+      
+      return () => {
+        clearInterval(interval)
+        clearTimeout(timer)
+      }
+    }
+  }, [showMap, selectedRider])
+
+  const handleOpenForm = (rider: any, type: 'app' | 'call') => {
+    setSelectedRider(rider)
+    setOrderType(type)
+    setShowForm(true)
+  }
+
+  const getCurrentLocation = (): Promise<GeolocationPosition> => {
+    return new Promise((resolve, reject) => {
+      if (!navigator.geolocation) {
+        reject(new Error('Geolocalização não suportada'))
+      } else {
+        navigator.geolocation.getCurrentPosition(resolve, reject)
+      }
+    })
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    
+    if (!selectedRider) return
+
+    let customerLat = null
+    let customerLng = null
+    try {
+      const position = await getCurrentLocation()
+      customerLat = position.coords.latitude
+      customerLng = position.coords.longitude
+      setCustomerLocation({ lat: customerLat, lng: customerLng })
+    } catch (error) {
+      console.log('Não foi possível obter localização:', error)
+    }
+
+    const expiresAtDate = new Date()
+    // Para pedidos via telefone: 2 horas, via app: 15 minutos
+    if (orderType === 'call') {
+      expiresAtDate.setHours(expiresAtDate.getHours() + 2)
+    } else {
+      expiresAtDate.setMinutes(expiresAtDate.getMinutes() + 15)
+    }
+    setExpiresAt(expiresAtDate)
+
+    const { data: newOrder, error } = await supabase
+      .from('orders')
+      .insert({
+        rider_id: selectedRider.id,
+        plate_id: id as string,
+        customer_name: formData.customerName,
+        customer_phone: formData.customerPhone,
+        pickup_address: formData.pickupAddress,
+        dropoff_address: formData.dropoffAddress,
+        price: formData.price,
+        status: orderType === 'call' ? 'pending_call' : 'pending',
+        is_call_order: orderType === 'call',
+        expires_at: expiresAtDate.toISOString(),
+        notification_sent: false,
+        created_at: new Date().toISOString(),
+        customer_lat: customerLat,
+        customer_lng: customerLng
       })
-    }, 3000) // 3 segundos entre cada incremento
-    
-    // Mostrar botão de ligar após 10 segundos
-    const timer = setTimeout(() => setShowCallButtons(true), 10000)
-    
-    return () => {
-      clearInterval(interval)
-      clearTimeout(timer)
+      .select()
+      .single()
+
+    if (error) {
+      console.error('Erro detalhado:', error)
+      alert('Erro ao criar pedido: ' + error.message)
+    } else {
+      console.log('✅ Pedido criado com ID:', newOrder.id)
+      setOrderId(newOrder.id)
+      setOrderStatus('pending')
+      setShowForm(false)
+      
+      if (orderType === 'call') {
+        // Abrir ligação automaticamente
+        window.location.href = `tel:${selectedRider.phone}`
+        alert(`📞 Pedido registrado! Você está ligando para ${selectedRider.name}.\n\nCombine o valor e endereço por telefone.\n\nO pedido já está no sistema.`)
+        setOrderId(null)
+      } else {
+        setTimeLeft(900)
+        setShowWaitingModal(true)
+      }
     }
   }
-}, [showMap, selectedRider])
+
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60)
+    const secs = seconds % 60
+    return `${mins}:${secs.toString().padStart(2, '0')}`
+  }
 
   const handleSubmitRating = async () => {
     if (rating > 0 && orderId) {
@@ -384,85 +470,12 @@ useEffect(() => {
     setLoading(false)
   }
 
-  const handleOpenForm = (rider: any) => {
-    setSelectedRider(rider)
-    setShowForm(true)
-  }
-
-  const getCurrentLocation = (): Promise<GeolocationPosition> => {
-    return new Promise((resolve, reject) => {
-      if (!navigator.geolocation) {
-        reject(new Error('Geolocalização não suportada'))
-      } else {
-        navigator.geolocation.getCurrentPosition(resolve, reject)
-      }
-    })
-  }
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    
-    if (!selectedRider) return
-
-    let customerLat = null
-    let customerLng = null
-    try {
-      const position = await getCurrentLocation()
-      customerLat = position.coords.latitude
-      customerLng = position.coords.longitude
-      setCustomerLocation({ lat: customerLat, lng: customerLng })
-    } catch (error) {
-      console.log('Não foi possível obter localização:', error)
-    }
-
-    const expiresAtDate = new Date()
-    expiresAtDate.setMinutes(expiresAtDate.getMinutes() + 15)
-    setExpiresAt(expiresAtDate)
-
-    const { data: newOrder, error } = await supabase
-      .from('orders')
-      .insert({
-        rider_id: selectedRider.id,
-        plate_id: id as string,
-        customer_name: formData.customerName,
-        customer_phone: formData.customerPhone,
-        pickup_address: formData.pickupAddress,
-        dropoff_address: formData.dropoffAddress,
-        price: formData.price,
-        status: 'pending',
-        expires_at: expiresAtDate.toISOString(),
-        notification_sent: false,
-        created_at: new Date().toISOString(),
-        customer_lat: customerLat,
-        customer_lng: customerLng
-      })
-      .select()
-      .single()
-
-    if (error) {
-      console.error('Erro detalhado:', error)
-      alert('Erro ao criar pedido: ' + error.message)
-    } else {
-      console.log('✅ Pedido criado com ID:', newOrder.id)
-      setOrderId(newOrder.id)
-      setOrderStatus('pending')
-      setTimeLeft(900)
-      setShowForm(false)
-      setShowWaitingModal(true)
-    }
-  }
-
-  const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60)
-    const secs = seconds % 60
-    return `${mins}:${secs.toString().padStart(2, '0')}`
-  }
-
   const styles: Record<string, React.CSSProperties> = {
     container: { minHeight: '100vh', background: 'linear-gradient(135deg, #f9fafb 0%, #fff5ed 100%)' },
     header: { backgroundColor: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(8px)', borderBottom: '1px solid #f0f0f0', position: 'sticky' as const, top: 0, zIndex: 10 },
     card: { backgroundColor: 'white', borderRadius: isMobile ? '16px' : '20px', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', border: '1px solid #f0f0f0', overflow: 'hidden', transition: 'all 0.3s ease', marginBottom: '16px' },
     buttonPrimary: { background: 'linear-gradient(135deg, #f59e0b, #ea580c)', color: 'white', padding: isMobile ? '10px 16px' : '12px 24px', borderRadius: '12px', border: 'none', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', transition: 'all 0.3s ease', fontSize: isMobile ? '13px' : '14px' },
+    buttonSecondary: { background: 'linear-gradient(135deg, #3b82f6, #2563eb)', color: 'white', padding: isMobile ? '10px 16px' : '12px 24px', borderRadius: '12px', border: 'none', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', transition: 'all 0.3s ease', fontSize: isMobile ? '13px' : '14px' },
     buttonDisabled: { background: '#d1d5db', color: '#6b7280', padding: isMobile ? '10px 16px' : '12px 24px', borderRadius: '12px', border: 'none', fontWeight: 600, cursor: 'not-allowed', display: 'flex', alignItems: 'center', gap: '8px', fontSize: isMobile ? '13px' : '14px' },
     modalOverlay: { position: 'fixed' as const, top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, backdropFilter: 'blur(4px)' },
     modalContent: { backgroundColor: 'white', borderRadius: '24px', maxWidth: '480px', width: '90%', maxHeight: '90vh', overflow: 'auto', boxShadow: '0 20px 40px rgba(0,0,0,0.2)' },
@@ -593,370 +606,351 @@ useEffect(() => {
     )
   }
 
-// Mapa / Acompanhamento Animado
-if (showMap && selectedRider) {
-  const isAlmostThere = animationStep >= 80
-  
-  // Tempo estimado baseado na animação (5 minutos = 300 segundos)
-  // 100% = 300 segundos, então 1% = 3 segundos
-  const estimatedSeconds = (100 - animationStep) * 3
-  const estimatedMinutes = Math.floor(estimatedSeconds / 60)
-  const estimatedRemainingSeconds = estimatedSeconds % 60
-  
-  return (
-    <div style={styles.container}>
-      <div style={styles.header}>
-        <div style={{ maxWidth: '1280px', margin: '0 auto', padding: isMobile ? '12px 16px' : '16px 24px' }}>
-          <button onClick={() => {
-            setShowMap(false)
-            setOrderId(null)
-            setAnimationStep(0)
-            setShowCallButtons(false)
-            localStorage.removeItem('active_order_id')
-            localStorage.removeItem('active_order_status')
-            router.push('/')
-          }} style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#6b7280', background: 'none', border: 'none', cursor: 'pointer', marginBottom: isMobile ? '12px' : '16px', fontSize: isMobile ? '13px' : '14px' }}>
-            <ArrowLeft size={18} />
-            Voltar ao Início
-          </button>
-          <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? '10px' : '12px', flexWrap: 'wrap' }}>
-            <div style={{ width: isMobile ? '40px' : '48px', height: isMobile ? '40px' : '48px', background: 'linear-gradient(135deg, #f59e0b, #ea580c)', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Bike size={isMobile ? 20 : 24} color="white" />
-            </div>
-            <div style={{ flex: 1 }}>
-              <h1 style={{ fontSize: isMobile ? '20px' : '24px', fontWeight: 'bold', color: '#111827' }}>Acompanhamento da Corrida</h1>
-              <p style={{ fontSize: isMobile ? '12px' : '14px', color: '#6b7280', marginTop: '4px' }}>{selectedRider?.name} está vindo até você</p>
+  // Mapa / Acompanhamento Animado
+  if (showMap && selectedRider) {
+    const isAlmostThere = animationStep >= 80
+    
+    const estimatedSeconds = (100 - animationStep) * 3
+    const estimatedMinutes = Math.floor(estimatedSeconds / 60)
+    const estimatedRemainingSeconds = estimatedSeconds % 60
+    
+    return (
+      <div style={styles.container}>
+        <div style={styles.header}>
+          <div style={{ maxWidth: '1280px', margin: '0 auto', padding: isMobile ? '12px 16px' : '16px 24px' }}>
+            <button onClick={() => {
+              setShowMap(false)
+              setOrderId(null)
+              setAnimationStep(0)
+              setShowCallButtons(false)
+              localStorage.removeItem('active_order_id')
+              localStorage.removeItem('active_order_status')
+              router.push('/')
+            }} style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#6b7280', background: 'none', border: 'none', cursor: 'pointer', marginBottom: isMobile ? '12px' : '16px', fontSize: isMobile ? '13px' : '14px' }}>
+              <ArrowLeft size={18} />
+              Voltar ao Início
+            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? '10px' : '12px', flexWrap: 'wrap' }}>
+              <div style={{ width: isMobile ? '40px' : '48px', height: isMobile ? '40px' : '48px', background: 'linear-gradient(135deg, #f59e0b, #ea580c)', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Bike size={isMobile ? 20 : 24} color="white" />
+              </div>
+              <div style={{ flex: 1 }}>
+                <h1 style={{ fontSize: isMobile ? '20px' : '24px', fontWeight: 'bold', color: '#111827' }}>Acompanhamento da Corrida</h1>
+                <p style={{ fontSize: isMobile ? '12px' : '14px', color: '#6b7280', marginTop: '4px' }}>{selectedRider?.name} está vindo até você</p>
+              </div>
             </div>
           </div>
         </div>
-      </div>
-      
-      <div style={{ padding: isMobile ? '12px' : '24px', maxWidth: '600px', margin: '0 auto' }}>
-        {/* Card de Acompanhamento Animado */}
-        <div style={{ 
-          backgroundColor: 'white', 
-          borderRadius: '32px', 
-          overflow: 'hidden', 
-          boxShadow: '0 20px 40px rgba(0,0,0,0.1)',
-          background: 'linear-gradient(135deg, #fff, #fef3c7)'
-        }}>
-          
-          {/* Cabeçalho com informações do motoqueiro */}
+        
+        <div style={{ padding: isMobile ? '12px' : '24px', maxWidth: '600px', margin: '0 auto' }}>
           <div style={{ 
-            background: 'linear-gradient(135deg, #f59e0b, #ea580c)', 
-            padding: isMobile ? '20px' : '24px', 
-            textAlign: 'center', 
-            color: 'white' 
+            backgroundColor: 'white', 
+            borderRadius: '32px', 
+            overflow: 'hidden', 
+            boxShadow: '0 20px 40px rgba(0,0,0,0.1)',
+            background: 'linear-gradient(135deg, #fff, #fef3c7)'
           }}>
+            {/* Cabeçalho com informações do motoqueiro */}
             <div style={{ 
-              width: isMobile ? '80px' : '100px', 
-              height: isMobile ? '80px' : '100px', 
-              margin: '0 auto 12px',
-              position: 'relative'
+              background: 'linear-gradient(135deg, #f59e0b, #ea580c)', 
+              padding: isMobile ? '20px' : '24px', 
+              textAlign: 'center', 
+              color: 'white' 
             }}>
-              {selectedRider?.photo_url ? (
-                <img src={selectedRider.photo_url} alt={selectedRider.name} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover', border: '3px solid white' }} />
-              ) : (
-                <div style={{ width: '100%', height: '100%', background: 'rgba(255,255,255,0.2)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <User size={isMobile ? 40 : 50} color="white" />
-                </div>
-              )}
               <div style={{ 
-                position: 'absolute', 
-                bottom: 0, 
-                right: 0, 
-                background: '#10b981', 
-                width: '20px', 
-                height: '20px', 
-                borderRadius: '50%', 
-                border: '2px solid white' 
-              }} />
-            </div>
-            <h2 style={{ fontSize: isMobile ? '18px' : '20px', fontWeight: 'bold' }}>{selectedRider.name}</h2>
-            <p style={{ fontSize: '12px', opacity: 0.9, marginTop: '4px' }}>Placa: {plate?.plate_number}</p>
-          </div>
-          
-          {/* Área de Animação */}
-          <div style={{ padding: isMobile ? '24px' : '32px', textAlign: 'center' }}>
-            
-            {/* Avatar Animado do Motoqueiro */}
-            <div style={{ 
-              position: 'relative', 
-              height: isMobile ? '200px' : '250px',
-              marginBottom: '20px'
-            }}>
-              {/* Fundo da estrada */}
-              <div style={{ 
-                position: 'absolute', 
-                bottom: 0, 
-                left: 0, 
-                right: 0, 
-                height: '4px', 
-                background: '#e5e7eb',
-                borderRadius: '2px'
+                width: isMobile ? '80px' : '100px', 
+                height: isMobile ? '80px' : '100px', 
+                margin: '0 auto 12px',
+                position: 'relative'
               }}>
+                {selectedRider?.photo_url ? (
+                  <img src={selectedRider.photo_url} alt={selectedRider.name} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover', border: '3px solid white' }} />
+                ) : (
+                  <div style={{ width: '100%', height: '100%', background: 'rgba(255,255,255,0.2)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <User size={isMobile ? 40 : 50} color="white" />
+                  </div>
+                )}
                 <div style={{ 
-                  width: `${animationStep}%`, 
-                  height: '100%', 
-                  background: 'linear-gradient(90deg, #f59e0b, #10b981)',
-                  borderRadius: '2px',
-                  transition: 'width 3s linear'
+                  position: 'absolute', 
+                  bottom: 0, 
+                  right: 0, 
+                  background: '#10b981', 
+                  width: '20px', 
+                  height: '20px', 
+                  borderRadius: '50%', 
+                  border: '2px solid white' 
                 }} />
               </div>
-              
-              {/* Motoqueiro Animado */}
+              <h2 style={{ fontSize: isMobile ? '18px' : '20px', fontWeight: 'bold' }}>{selectedRider.name}</h2>
+              <p style={{ fontSize: '12px', opacity: 0.9, marginTop: '4px' }}>Placa: {plate?.plate_number}</p>
+            </div>
+            
+            {/* Área de Animação */}
+            <div style={{ padding: isMobile ? '24px' : '32px', textAlign: 'center' }}>
               <div style={{ 
-                position: 'absolute',
-                bottom: -20,
-                left: `${animationStep}%`,
-                transform: 'translateX(-50%)',
-                transition: 'left 3s linear'
+                position: 'relative', 
+                height: isMobile ? '200px' : '250px',
+                marginBottom: '20px'
               }}>
                 <div style={{ 
-                  animation: animationStep < 100 ? 'bounce 0.5s ease infinite' : 'none',
-                  transform: animationStep >= 80 ? 'scaleX(-1)' : 'scaleX(1)'
+                  position: 'absolute', 
+                  bottom: 0, 
+                  left: 0, 
+                  right: 0, 
+                  height: '4px', 
+                  background: '#e5e7eb',
+                  borderRadius: '2px'
                 }}>
                   <div style={{ 
-                    background: 'linear-gradient(135deg, #f59e0b, #ea580c)', 
-                    width: isMobile ? '60px' : '70px', 
-                    height: isMobile ? '60px' : '70px', 
+                    width: `${animationStep}%`, 
+                    height: '100%', 
+                    background: 'linear-gradient(90deg, #f59e0b, #10b981)',
+                    borderRadius: '2px',
+                    transition: 'width 3s linear'
+                  }} />
+                </div>
+                
+                <div style={{ 
+                  position: 'absolute',
+                  bottom: -20,
+                  left: `${animationStep}%`,
+                  transform: 'translateX(-50%)',
+                  transition: 'left 3s linear'
+                }}>
+                  <div style={{ 
+                    animation: animationStep < 100 ? 'bounce 0.5s ease infinite' : 'none',
+                    transform: animationStep >= 80 ? 'scaleX(-1)' : 'scaleX(1)'
+                  }}>
+                    <div style={{ 
+                      background: 'linear-gradient(135deg, #f59e0b, #ea580c)', 
+                      width: isMobile ? '60px' : '70px', 
+                      height: isMobile ? '60px' : '70px', 
+                      borderRadius: '50%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      boxShadow: '0 4px 12px rgba(0,0,0,0.2)'
+                    }}>
+                      <Bike size={isMobile ? 32 : 38} color="white" />
+                    </div>
+                    <div style={{ 
+                      textAlign: 'center', 
+                      marginTop: '8px',
+                      fontSize: '11px',
+                      fontWeight: 500,
+                      color: '#f59e0b',
+                      background: 'white',
+                      padding: '2px 8px',
+                      borderRadius: '20px',
+                      display: 'inline-block',
+                      whiteSpace: 'nowrap'
+                    }}>
+                      {isAlmostThere ? 'Quase lá! 🏍️' : `${Math.floor(animationStep)}% do caminho`}
+                    </div>
+                  </div>
+                </div>
+                
+                <div style={{ 
+                  position: 'absolute',
+                  bottom: -20,
+                  right: 0,
+                  transform: 'translateX(50%)'
+                }}>
+                  <div style={{ 
+                    background: '#3b82f6', 
+                    width: isMobile ? '40px' : '48px', 
+                    height: isMobile ? '40px' : '48px', 
                     borderRadius: '50%',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                     boxShadow: '0 4px 12px rgba(0,0,0,0.2)'
                   }}>
-                    <Bike size={isMobile ? 32 : 38} color="white" />
+                    <MapPin size={isMobile ? 20 : 24} color="white" />
                   </div>
                   <div style={{ 
                     textAlign: 'center', 
                     marginTop: '8px',
-                    fontSize: '11px',
+                    fontSize: '10px',
                     fontWeight: 500,
-                    color: '#f59e0b',
-                    background: 'white',
-                    padding: '2px 8px',
-                    borderRadius: '20px',
-                    display: 'inline-block',
-                    whiteSpace: 'nowrap'
+                    color: '#3b82f6'
                   }}>
-                    {isAlmostThere ? 'Quase lá! 🏍️' : `${Math.floor(animationStep)}% do caminho`}
+                    Você está aqui
                   </div>
                 </div>
               </div>
               
-              {/* Marcador do Cliente */}
               <div style={{ 
-                position: 'absolute',
-                bottom: -20,
-                right: 0,
-                transform: 'translateX(50%)'
+                marginBottom: '16px',
+                padding: '8px 12px',
+                background: '#f0fdf4',
+                borderRadius: '20px',
+                display: 'inline-block'
               }}>
-                <div style={{ 
-                  background: '#3b82f6', 
-                  width: isMobile ? '40px' : '48px', 
-                  height: isMobile ? '40px' : '48px', 
-                  borderRadius: '50%',
+                <p style={{ fontSize: '12px', color: '#065f46', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Clock size={14} />
+                  {animationStep >= 100 ? (
+                    'Chegada iminente!'
+                  ) : isAlmostThere ? (
+                    'Chegando em menos de 1 minuto...'
+                  ) : (
+                    `Tempo estimado: ${estimatedMinutes} minuto${estimatedMinutes !== 1 ? 's' : ''}${estimatedRemainingSeconds > 0 ? ` e ${estimatedRemainingSeconds} segundo${estimatedRemainingSeconds !== 1 ? 's' : ''}` : ''}`
+                  )}
+                </p>
+              </div>
+              
+              <div style={{ 
+                marginTop: '10px',
+                padding: '16px',
+                background: isAlmostThere ? '#d1fae5' : '#fef3c7',
+                borderRadius: '16px',
+                border: `1px solid ${isAlmostThere ? '#10b981' : '#fde68a'}`
+              }}>
+                <p style={{ 
+                  fontSize: isMobile ? '14px' : '16px', 
+                  fontWeight: 500, 
+                  color: isAlmostThere ? '#065f46' : '#92400e',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  boxShadow: '0 4px 12px rgba(0,0,0,0.2)'
+                  gap: '8px'
                 }}>
-                  <MapPin size={isMobile ? 20 : 24} color="white" />
+                  {isAlmostThere ? (
+                    <>
+                      <CheckCircle size={20} />
+                      O motoqueiro está chegando! Prepare-se para o encontro 🎉
+                    </>
+                  ) : (
+                    <>
+                      <Clock size={20} />
+                      Motoqueiro a caminho...
+                    </>
+                  )}
+                </p>
+              </div>
+              
+              <div style={{ 
+                marginTop: '20px', 
+                padding: '16px', 
+                background: '#f9fafb', 
+                borderRadius: '16px',
+                textAlign: 'left'
+              }}>
+                <div style={{ marginBottom: '12px' }}>
+                  <p style={{ fontSize: '11px', color: '#6b7280', marginBottom: '4px' }}>📍 Destino</p>
+                  <p style={{ fontSize: isMobile ? '13px' : '14px', fontWeight: 500 }}>{formData.dropoffAddress || 'Não informado'}</p>
                 </div>
-                <div style={{ 
-                  textAlign: 'center', 
-                  marginTop: '8px',
-                  fontSize: '10px',
-                  fontWeight: 500,
-                  color: '#3b82f6'
-                }}>
-                  Você está aqui
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <p style={{ fontSize: '11px', color: '#6b7280', marginBottom: '4px' }}>💰 Valor</p>
+                    <p style={{ fontSize: isMobile ? '18px' : '20px', fontWeight: 'bold', color: '#f59e0b' }}>{formData.price?.toLocaleString()} Kz</p>
+                  </div>
+                  {showCallButtons && (
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <button 
+                        onClick={() => window.location.href = `tel:${selectedRider?.phone}`}
+                        style={{ padding: '10px 16px', background: '#3b82f6', color: 'white', border: 'none', borderRadius: '12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px' }}
+                      >
+                        <Phone size={14} /> Ligar
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
-            </div>
-            
-            {/* Timer de chegada estimada */}
-            <div style={{ 
-              marginBottom: '16px',
-              padding: '8px 12px',
-              background: '#f0fdf4',
-              borderRadius: '20px',
-              display: 'inline-block'
-            }}>
-              <p style={{ fontSize: '12px', color: '#065f46', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <Clock size={14} />
-                {animationStep >= 100 ? (
-                  'Chegada iminente!'
-                ) : isAlmostThere ? (
-                  'Chegando em menos de 1 minuto...'
-                ) : (
-                  `Tempo estimado: ${estimatedMinutes} minuto${estimatedMinutes !== 1 ? 's' : ''}${estimatedRemainingSeconds > 0 ? ` e ${estimatedRemainingSeconds} segundo${estimatedRemainingSeconds !== 1 ? 's' : ''}` : ''}`
-                )}
-              </p>
-            </div>
-            
-            {/* Mensagem de Status */}
-            <div style={{ 
-              marginTop: '10px',
-              padding: '16px',
-              background: isAlmostThere ? '#d1fae5' : '#fef3c7',
-              borderRadius: '16px',
-              border: `1px solid ${isAlmostThere ? '#10b981' : '#fde68a'}`
-            }}>
-              <p style={{ 
-                fontSize: isMobile ? '14px' : '16px', 
-                fontWeight: 500, 
-                color: isAlmostThere ? '#065f46' : '#92400e',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '8px'
-              }}>
-                {isAlmostThere ? (
-                  <>
-                    <CheckCircle size={20} />
-                    O motoqueiro está chegando! Prepare-se para o encontro 🎉
-                  </>
-                ) : (
-                  <>
-                    <Clock size={20} />
-                    Motoqueiro a caminho...
-                  </>
-                )}
-              </p>
-              {!isAlmostThere && animationStep < 100 && (
-                <p style={{ fontSize: '12px', color: '#92400e', marginTop: '8px' }}>
-                  O motoqueiro chegará em aproximadamente {estimatedMinutes} minuto{estimatedMinutes !== 1 ? 's' : ''}{estimatedRemainingSeconds > 0 ? ` e ${estimatedRemainingSeconds} segundo${estimatedRemainingSeconds !== 1 ? 's' : ''}` : ''}
-                </p>
+              
+              <div style={{ marginTop: '16px' }}>
+                <div style={{ 
+                  height: '6px', 
+                  background: '#e5e7eb', 
+                  borderRadius: '3px',
+                  overflow: 'hidden'
+                }}>
+                  <div style={{ 
+                    width: `${animationStep}%`, 
+                    height: '100%', 
+                    background: 'linear-gradient(90deg, #f59e0b, #10b981)',
+                    borderRadius: '3px',
+                    transition: 'width 3s linear'
+                  }} />
+                </div>
+                <div style={{ 
+                  display: 'flex', 
+                  justifyContent: 'space-between', 
+                  marginTop: '6px',
+                  fontSize: '10px',
+                  color: '#9ca3af'
+                }}>
+                  <span>Início</span>
+                  <span>{animationStep}%</span>
+                  <span>Destino</span>
+                </div>
+              </div>
+              
+              {isAlmostThere && (
+                <button
+                  onClick={async () => {
+                    if (orderId) {
+                      await supabase
+                        .from('orders')
+                        .update({ status: 'completed' })
+                        .eq('id', orderId)
+                    }
+                    setShowMap(false)
+                    setShowThankYouModal(true)
+                  }}
+                  style={{
+                    width: '100%',
+                    marginTop: '20px',
+                    padding: '14px',
+                    background: 'linear-gradient(135deg, #10b981, #059669)',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '16px',
+                    fontWeight: 'bold',
+                    fontSize: '16px',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px',
+                    animation: 'pulse 1s infinite'
+                  }}
+                >
+                  <CheckCircle size={20} />
+                  CHEGUEI AO MEU DESTINO
+                </button>
               )}
             </div>
-            
-            {/* Informações da Corrida */}
-            <div style={{ 
-              marginTop: '20px', 
-              padding: '16px', 
-              background: '#f9fafb', 
-              borderRadius: '16px',
-              textAlign: 'left'
-            }}>
-              <div style={{ marginBottom: '12px' }}>
-                <p style={{ fontSize: '11px', color: '#6b7280', marginBottom: '4px' }}>📍 Destino</p>
-                <p style={{ fontSize: isMobile ? '13px' : '14px', fontWeight: 500 }}>{formData.dropoffAddress || 'Não informado'}</p>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div>
-                  <p style={{ fontSize: '11px', color: '#6b7280', marginBottom: '4px' }}>💰 Valor</p>
-                  <p style={{ fontSize: isMobile ? '18px' : '20px', fontWeight: 'bold', color: '#f59e0b' }}>{formData.price?.toLocaleString()} Kz</p>
-                </div>
-                {showCallButtons && (
-                  <div style={{ display: 'flex', gap: '8px' }}>
-                    <button 
-                      onClick={() => window.location.href = `tel:${selectedRider?.phone}`}
-                      style={{ padding: '10px 16px', background: '#3b82f6', color: 'white', border: 'none', borderRadius: '12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px' }}
-                    >
-                      <Phone size={14} /> Ligar
-                    </button>
-                  </div>
-                )}
-              </div>
-            </div>
-            
-            {/* Barra de progresso extra */}
-            <div style={{ marginTop: '16px' }}>
-              <div style={{ 
-                height: '6px', 
-                background: '#e5e7eb', 
-                borderRadius: '3px',
-                overflow: 'hidden'
-              }}>
-                <div style={{ 
-                  width: `${animationStep}%`, 
-                  height: '100%', 
-                  background: 'linear-gradient(90deg, #f59e0b, #10b981)',
-                  borderRadius: '3px',
-                  transition: 'width 3s linear'
-                }} />
-              </div>
-              <div style={{ 
-                display: 'flex', 
-                justifyContent: 'space-between', 
-                marginTop: '6px',
-                fontSize: '10px',
-                color: '#9ca3af'
-              }}>
-                <span>Início</span>
-                <span>{animationStep}%</span>
-                <span>Destino</span>
-              </div>
-            </div>
-            
-            {/* Botão de Concluir (aparece quando chega) */}
-            {isAlmostThere && (
-              <button
-                onClick={async () => {
-                  if (orderId) {
-                    await supabase
-                      .from('orders')
-                      .update({ status: 'completed' })
-                      .eq('id', orderId)
-                  }
-                  setShowMap(false)
-                  setShowThankYouModal(true)
-                }}
-                style={{
-                  width: '100%',
-                  marginTop: '20px',
-                  padding: '14px',
-                  background: 'linear-gradient(135deg, #10b981, #059669)',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '16px',
-                  fontWeight: 'bold',
-                  fontSize: '16px',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '8px',
-                  animation: 'pulse 1s infinite'
-                }}
-              >
-                <CheckCircle size={20} />
-                CHEGUEI AO MEU DESTINO
-              </button>
-            )}
+          </div>
+          
+          <div style={{ marginTop: '16px', textAlign: 'center' }}>
+            <button onClick={() => {
+              setShowMap(false)
+              setOrderId(null)
+              setAnimationStep(0)
+              setShowCallButtons(false)
+              localStorage.removeItem('active_order_id')
+              localStorage.removeItem('active_order_status')
+              router.push('/')
+            }} style={{ background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer', fontSize: isMobile ? '13px' : '14px', padding: '12px' }}>
+              ← Ir para página inicial
+            </button>
           </div>
         </div>
         
-        <div style={{ marginTop: '16px', textAlign: 'center' }}>
-          <button onClick={() => {
-            setShowMap(false)
-            setOrderId(null)
-            setAnimationStep(0)
-            setShowCallButtons(false)
-            localStorage.removeItem('active_order_id')
-            localStorage.removeItem('active_order_status')
-            router.push('/')
-          }} style={{ background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer', fontSize: isMobile ? '13px' : '14px', padding: '12px' }}>
-            ← Ir para página inicial
-          </button>
-        </div>
+        <style jsx>{`
+          @keyframes bounce {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-5px); }
+          }
+          @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.8; transform: scale(1.02); }
+          }
+        `}</style>
       </div>
-      
-      <style jsx>{`
-        @keyframes bounce {
-          0%, 100% { transform: translateY(0); }
-          50% { transform: translateY(-5px); }
-        }
-        @keyframes pulse {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.8; transform: scale(1.02); }
-        }
-      `}</style>
-    </div>
-  )
-}
+    )
+  }
 
   if (showWaitingModal) {
     const progressPercent = (timeLeft / 900) * 100
@@ -1083,9 +1077,24 @@ if (showMap && selectedRider) {
                     </p>
                   </div>
                 </div>
-                <div style={{ width: isMobile ? '100%' : 'auto' }}>
+                <div style={{ display: 'flex', gap: '10px', width: isMobile ? '100%' : 'auto', flexDirection: isMobile ? 'column' : 'row' }}>
+                  {/* Botão Ligar e Pedir */}
                   <button 
-                    onClick={() => handleOpenForm(rider)} 
+                    onClick={() => handleOpenForm(rider, 'call')} 
+                    disabled={!rider.is_online} 
+                    style={{ 
+                      ...(rider.is_online ? styles.buttonSecondary : styles.buttonDisabled), 
+                      width: isMobile ? '100%' : 'auto',
+                      justifyContent: 'center',
+                      background: rider.is_online ? 'linear-gradient(135deg, #3b82f6, #2563eb)' : '#d1d5db'
+                    }}
+                  >
+                    <Phone size={isMobile ? 14 : 18} />
+                    Ligar e Pedir
+                  </button>
+                  {/* Botão Pedir App */}
+                  <button 
+                    onClick={() => handleOpenForm(rider, 'app')} 
                     disabled={!rider.is_online} 
                     style={{ 
                       ...(rider.is_online ? styles.buttonPrimary : styles.buttonDisabled), 
@@ -1094,7 +1103,7 @@ if (showMap && selectedRider) {
                     }}
                   >
                     <Navigation size={isMobile ? 14 : 18} />
-                    Pedir Moto
+                    Pedir App
                   </button>
                 </div>
               </div>
@@ -1118,10 +1127,14 @@ if (showMap && selectedRider) {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div>
                   <h3 style={{ fontSize: isMobile ? '20px' : '22px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <Bike size={24} />
-                    Solicitar Corrida
+                    {orderType === 'call' ? <Phone size={24} /> : <Bike size={24} />}
+                    {orderType === 'call' ? 'Ligar e Pedir' : 'Solicitar Corrida'}
                   </h3>
-                  <p style={{ fontSize: '13px', opacity: 0.9, marginTop: '6px' }}>Preencha os dados abaixo para solicitar o serviço</p>
+                  <p style={{ fontSize: '13px', opacity: 0.9, marginTop: '6px' }}>
+                    {orderType === 'call' 
+                      ? 'Preencha os dados e ligaremos para o motoqueiro' 
+                      : 'Preencha os dados abaixo para solicitar o serviço'}
+                  </p>
                 </div>
                 <button 
                   onClick={() => setShowForm(false)} 
@@ -1365,24 +1378,31 @@ if (showMap && selectedRider) {
                   <span>🚲 Placa:</span>
                   <span style={{ fontWeight: 600 }}>{plate?.plate_number}</span>
                 </div>
+                {orderType === 'call' && (
+                  <div style={{ marginTop: '10px', paddingTop: '8px', borderTop: '1px dashed #fde68a' }}>
+                    <p style={{ fontSize: '11px', color: '#d97706', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <Phone size={12} />
+                      ⏰ Após confirmar, você será redirecionado para ligar ao motoqueiro
+                    </p>
+                  </div>
+                )}
               </div>
 
               <button 
                 type="submit" 
                 style={{ 
-                  ...styles.buttonPrimary, 
+                  ...(orderType === 'call' ? styles.buttonSecondary : styles.buttonPrimary), 
                   width: '100%', 
                   justifyContent: 'center', 
                   padding: '16px', 
                   fontSize: isMobile ? '16px' : '16px', 
                   marginTop: '8px',
-                  background: 'linear-gradient(135deg, #f59e0b, #ea580c)',
                   borderRadius: '14px',
                   gap: '10px'
                 }}
               >
-                <Send size={isMobile ? 18 : 18} />
-                Confirmar Pedido
+                {orderType === 'call' ? <Phone size={isMobile ? 18 : 18} /> : <Send size={isMobile ? 18 : 18} />}
+                {orderType === 'call' ? 'Ligar e Confirmar Pedido' : 'Confirmar Pedido'}
               </button>
             </form>
           </div>
