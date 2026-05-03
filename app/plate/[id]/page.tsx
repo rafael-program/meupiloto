@@ -7,7 +7,7 @@ import {
   ArrowLeft, Phone, User, XCircle, Navigation, Bike, Shield, 
   Wifi, Clock, CheckCircle, Star, Heart, Menu, MapPin, 
   DollarSign, Calendar, Send, CreditCard, AlertCircle, Sun, Moon, 
-  ClipboardList
+  ClipboardList, Calculator, TrendingUp
 } from 'lucide-react'
 import 'leaflet/dist/leaflet.css'
 
@@ -39,6 +39,14 @@ const Popup = dynamic(
   { ssr: false }
 )
 
+type PriceConfig = {
+  base_price: number;
+  base_distance: number;
+  price_per_km: number;
+  min_price: number;
+  max_price: number;
+};
+
 export default function PlateRiders() {
   const { id } = useParams()
   const router = useRouter()
@@ -51,6 +59,9 @@ export default function PlateRiders() {
   const [showCallButtons, setShowCallButtons] = useState(false)
   const [isMobile, setIsMobile] = useState(false)
   const [orderType, setOrderType] = useState<'app' | 'call'>('app')
+  const [priceConfig, setPriceConfig] = useState<PriceConfig | null>(null)
+  const [calculatedDistance, setCalculatedDistance] = useState<number | null>(null)
+  const [calculatingPrice, setCalculatingPrice] = useState(false)
   const [formData, setFormData] = useState(() => {
     const hour = new Date().getHours()
     const isNight = hour >= 22 || hour < 6
@@ -86,7 +97,65 @@ export default function PlateRiders() {
 
   useEffect(() => {
     loadPlateAndRiders()
+    loadPriceConfig()
   }, [id])
+
+  // Carregar configuração de preços
+  const loadPriceConfig = async () => {
+    const { data } = await supabase.from('price_config').select('*').single()
+    if (data) setPriceConfig(data)
+  }
+
+  // Calcular distância baseada nos endereços (simulação)
+  const calculateDistanceFromAddresses = () => {
+    if (!formData.pickupAddress || !formData.dropoffAddress) return
+    
+    setCalculatingPrice(true)
+    
+    // Simular cálculo de distância baseada no comprimento do texto
+    const textLength = formData.pickupAddress.length + formData.dropoffAddress.length
+    let estimatedKm = 1.8
+    
+    if (textLength > 100) {
+      estimatedKm = 15
+    } else if (textLength > 70) {
+      estimatedKm = 10
+    } else if (textLength > 50) {
+      estimatedKm = 5
+    } else if (textLength > 30) {
+      estimatedKm = 2.5
+    } else {
+      estimatedKm = 1.8
+    }
+    
+    const roundedKm = Math.round(estimatedKm * 10) / 10
+    setCalculatedDistance(roundedKm)
+    
+    if (priceConfig) {
+      let finalPrice = priceConfig.base_price
+      if (roundedKm > priceConfig.base_distance) {
+        const extraKm = roundedKm - priceConfig.base_distance
+        finalPrice = priceConfig.base_price + (extraKm * priceConfig.price_per_km)
+      }
+      finalPrice = Math.max(priceConfig.min_price, Math.min(priceConfig.max_price, finalPrice))
+      finalPrice = Math.ceil(finalPrice / 50) * 50
+      setFormData(prev => ({ ...prev, price: finalPrice }))
+    }
+    
+    setCalculatingPrice(false)
+  }
+
+  // Debounce para calcular distância quando endereços mudam
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (formData.pickupAddress && formData.dropoffAddress && priceConfig) {
+        calculateDistanceFromAddresses()
+      } else {
+        setCalculatedDistance(null)
+      }
+    }, 800)
+    return () => clearTimeout(timer)
+  }, [formData.pickupAddress, formData.dropoffAddress, priceConfig])
 
   // Carregar pedido ativo do localStorage ao iniciar
   useEffect(() => {
@@ -322,7 +391,7 @@ export default function PlateRiders() {
     }
   }, [orderId, showMap])
 
-  // ✅ ANIMAÇÃO DO MAPA - MOVIDA PARA FORA DO CONDICIONAL
+  // ANIMAÇÃO DO MAPA
   useEffect(() => {
     if (showMap && selectedRider) {
       const interval = setInterval(() => {
@@ -377,7 +446,6 @@ export default function PlateRiders() {
     }
 
     const expiresAtDate = new Date()
-    // Para pedidos via telefone: 2 horas, via app: 15 minutos
     if (orderType === 'call') {
       expiresAtDate.setHours(expiresAtDate.getHours() + 2)
     } else {
@@ -395,6 +463,7 @@ export default function PlateRiders() {
         pickup_address: formData.pickupAddress,
         dropoff_address: formData.dropoffAddress,
         price: formData.price,
+        distance_km: calculatedDistance,
         status: orderType === 'call' ? 'pending_call' : 'pending',
         is_call_order: orderType === 'call',
         expires_at: expiresAtDate.toISOString(),
@@ -416,7 +485,6 @@ export default function PlateRiders() {
       setShowForm(false)
       
       if (orderType === 'call') {
-        // Abrir ligação automaticamente
         window.location.href = `tel:${selectedRider.phone}`
         alert(`📞 Pedido registrado! Você está ligando para ${selectedRider.name}.\n\nCombine o valor e endereço por telefone.\n\nO pedido já está no sistema.`)
         setOrderId(null)
@@ -470,6 +538,22 @@ export default function PlateRiders() {
     setLoading(false)
   }
 
+  const getPriceSuggestion = () => {
+    if (calculatedDistance && priceConfig) {
+      let finalPrice = priceConfig.base_price
+      if (calculatedDistance > priceConfig.base_distance) {
+        const extraKm = calculatedDistance - priceConfig.base_distance
+        finalPrice = priceConfig.base_price + (extraKm * priceConfig.price_per_km)
+      }
+      finalPrice = Math.max(priceConfig.min_price, Math.min(priceConfig.max_price, finalPrice))
+      finalPrice = Math.ceil(finalPrice / 50) * 50
+      return finalPrice
+    }
+    const hour = new Date().getHours()
+    const isNight = hour >= 22 || hour < 6
+    return isNight ? 500 : 300
+  }
+
   const styles: Record<string, React.CSSProperties> = {
     container: { minHeight: '100vh', background: 'linear-gradient(135deg, #f9fafb 0%, #fff5ed 100%)' },
     header: { backgroundColor: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(8px)', borderBottom: '1px solid #f0f0f0', position: 'sticky' as const, top: 0, zIndex: 10 },
@@ -478,7 +562,7 @@ export default function PlateRiders() {
     buttonSecondary: { background: 'linear-gradient(135deg, #3b82f6, #2563eb)', color: 'white', padding: isMobile ? '10px 16px' : '12px 24px', borderRadius: '12px', border: 'none', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', transition: 'all 0.3s ease', fontSize: isMobile ? '13px' : '14px' },
     buttonDisabled: { background: '#d1d5db', color: '#6b7280', padding: isMobile ? '10px 16px' : '12px 24px', borderRadius: '12px', border: 'none', fontWeight: 600, cursor: 'not-allowed', display: 'flex', alignItems: 'center', gap: '8px', fontSize: isMobile ? '13px' : '14px' },
     modalOverlay: { position: 'fixed' as const, top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, backdropFilter: 'blur(4px)' },
-    modalContent: { backgroundColor: 'white', borderRadius: '24px', maxWidth: '480px', width: '90%', maxHeight: '90vh', overflow: 'auto', boxShadow: '0 20px 40px rgba(0,0,0,0.2)' },
+    modalContent: { backgroundColor: 'white', borderRadius: '24px', maxWidth: '500px', width: '90%', maxHeight: '90vh', overflow: 'auto', boxShadow: '0 20px 40px rgba(0,0,0,0.2)' },
     waitingModalContent: { 
       backgroundColor: 'white', 
       borderRadius: '24px', 
@@ -650,7 +734,6 @@ export default function PlateRiders() {
             boxShadow: '0 20px 40px rgba(0,0,0,0.1)',
             background: 'linear-gradient(135deg, #fff, #fef3c7)'
           }}>
-            {/* Cabeçalho com informações do motoqueiro */}
             <div style={{ 
               background: 'linear-gradient(135deg, #f59e0b, #ea580c)', 
               padding: isMobile ? '20px' : '24px', 
@@ -685,7 +768,6 @@ export default function PlateRiders() {
               <p style={{ fontSize: '12px', opacity: 0.9, marginTop: '4px' }}>Placa: {plate?.plate_number}</p>
             </div>
             
-            {/* Área de Animação */}
             <div style={{ padding: isMobile ? '24px' : '32px', textAlign: 'center' }}>
               <div style={{ 
                 position: 'relative', 
@@ -1078,7 +1160,6 @@ export default function PlateRiders() {
                   </div>
                 </div>
                 <div style={{ display: 'flex', gap: '10px', width: isMobile ? '100%' : 'auto', flexDirection: isMobile ? 'column' : 'row' }}>
-                  {/* Botão Ligar e Pedir */}
                   <button 
                     onClick={() => handleOpenForm(rider, 'call')} 
                     disabled={!rider.is_online} 
@@ -1092,7 +1173,6 @@ export default function PlateRiders() {
                     <Phone size={isMobile ? 14 : 18} />
                     Ligar e Pedir
                   </button>
-                  {/* Botão Pedir App */}
                   <button 
                     onClick={() => handleOpenForm(rider, 'app')} 
                     disabled={!rider.is_online} 
@@ -1119,7 +1199,7 @@ export default function PlateRiders() {
         )}
       </div>
 
-      {/* Formulário de Pedido Melhorado */}
+      {/* Formulário de Pedido com Calculadora de Preço */}
       {showForm && selectedRider && (
         <div style={styles.modalOverlay} onClick={() => setShowForm(false)}>
           <div style={styles.modalContent} onClick={(e) => e.stopPropagation()}>
@@ -1224,12 +1304,123 @@ export default function PlateRiders() {
                 </div>
               </div>
 
+              {/* Calculadora de Preço */}
+              {priceConfig && (
+                <div style={{ 
+                  backgroundColor: '#fef3c7', 
+                  borderRadius: '16px', 
+                  padding: '16px',
+                  border: '1px solid #fde68a'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                    <Calculator size={18} color="#f59e0b" />
+                    <span style={{ fontWeight: 600, color: '#92400e' }}>Calculadora de Preço</span>
+                  </div>
+
+                  {calculatingPrice ? (
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '12px' }}>
+                      <div style={{ animation: 'spin 1s linear infinite' }}>
+                        <Clock size={20} color="#f59e0b" />
+                      </div>
+                      <span style={{ fontSize: '13px', color: '#92400e' }}>Calculando distância...</span>
+                    </div>
+                  ) : calculatedDistance ? (
+                    <div style={{ 
+                      backgroundColor: '#d1fae5', 
+                      borderRadius: '12px', 
+                      padding: '10px',
+                      marginBottom: '12px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between'
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <MapPin size={14} color="#059669" />
+                        <span style={{ fontSize: '12px', color: '#065f46' }}>Distância estimada:</span>
+                      </div>
+                      <span style={{ fontSize: '16px', fontWeight: 'bold', color: '#059669' }}>{calculatedDistance} km</span>
+                    </div>
+                  ) : (
+                    <p style={{ fontSize: '12px', color: '#92400e', textAlign: 'center', marginBottom: '12px' }}>
+                      Preencha os endereços para calcular a distância
+                    </p>
+                  )}
+
+                  <div style={{ 
+                    backgroundColor: 'white', 
+                    borderRadius: '12px', 
+                    padding: '12px',
+                    marginBottom: '12px'
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                      <span style={{ fontSize: '12px', color: '#64748b' }}>Distância base:</span>
+                      <span style={{ fontSize: '12px', fontWeight: 500, color: '#f59e0b' }}>{priceConfig.base_distance} km = {priceConfig.base_price} Kz</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                      <span style={{ fontSize: '12px', color: '#64748b' }}>Km adicional:</span>
+                      <span style={{ fontSize: '12px', fontWeight: 500, color: '#f59e0b' }}>{priceConfig.price_per_km} Kz/km</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                      <span style={{ fontSize: '12px', color: '#64748b' }}>Preço mínimo:</span>
+                      <span style={{ fontSize: '12px', fontWeight: 500, color: '#f59e0b' }}>{priceConfig.min_price} Kz</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span style={{ fontSize: '12px', color: '#64748b' }}>Preço máximo:</span>
+                      <span style={{ fontSize: '12px', fontWeight: 500, color: '#f59e0b' }}>{priceConfig.max_price} Kz</span>
+                    </div>
+                  </div>
+
+                  <div style={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    justifyContent: 'space-between',
+                    padding: '10px 12px',
+                    backgroundColor: '#f59e0b',
+                    borderRadius: '12px',
+                    marginBottom: '12px'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <TrendingUp size={16} color="white" />
+                      <span style={{ fontSize: '12px', color: 'white' }}>Preço sugerido:</span>
+                    </div>
+                    <span style={{ fontSize: '18px', fontWeight: 'bold', color: 'white' }}>{getPriceSuggestion().toLocaleString()} Kz</span>
+                    <button
+                      type="button"
+                      onClick={() => setFormData({...formData, price: getPriceSuggestion()})}
+                      style={{
+                        padding: '4px 12px',
+                        backgroundColor: 'white',
+                        color: '#f59e0b',
+                        border: 'none',
+                        borderRadius: '20px',
+                        fontSize: '11px',
+                        fontWeight: 600,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      Usar
+                    </button>
+                  </div>
+
+                  <div style={{ fontSize: '11px', color: '#92400e' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                      <span>📋 Exemplos:</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px' }}>
+                      <span>1.8 km → {priceConfig.base_price} Kz</span>
+                      <span>2.5 km → ~450 Kz</span>
+                      <span>5.0 km → ~950 Kz</span>
+                      <span>10 km → ~1.950 Kz</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <div>
                 <label style={{ ...styles.label, display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
                   <DollarSign size={16} color="#f59e0b" />
                   Valor da corrida (Kz) <span style={{ color: '#ef4444' }}>*</span>
                 </label>
-                
                 <div style={{ position: 'relative' }}>
                   <span style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: '#6b7280', fontWeight: 600, fontSize: '14px' }}>Kz</span>
                   <input 
@@ -1377,6 +1568,16 @@ export default function PlateRiders() {
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: '#78350f' }}>
                   <span>🚲 Placa:</span>
                   <span style={{ fontWeight: 600 }}>{plate?.plate_number}</span>
+                </div>
+                {calculatedDistance && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: '#78350f', marginTop: '6px' }}>
+                    <span>📏 Distância:</span>
+                    <span style={{ fontWeight: 600 }}>{calculatedDistance} km</span>
+                  </div>
+                )}
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: '#78350f', marginTop: '6px' }}>
+                  <span>💰 Valor:</span>
+                  <span style={{ fontWeight: 600, color: '#d97706' }}>{formData.price.toLocaleString()} Kz</span>
                 </div>
                 {orderType === 'call' && (
                   <div style={{ marginTop: '10px', paddingTop: '8px', borderTop: '1px dashed #fde68a' }}>
