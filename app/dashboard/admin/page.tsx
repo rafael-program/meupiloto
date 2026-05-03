@@ -1,3 +1,4 @@
+// app/dashboard/admin/page.tsx - SEM CHEFES
 'use client'
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase/client'
@@ -5,11 +6,12 @@ import { useRouter } from 'next/navigation'
 import { 
   Shield, LogOut, Users, Bike, CreditCard, TrendingUp, 
   Plus, Edit, Trash2, Search, AlertCircle, Menu, X, 
-  UserCog, Store, ClipboardList, RefreshCw, Phone,
+  Store, ClipboardList, RefreshCw, Phone,
   DollarSign, Calendar, CheckCircle, XCircle, Building2,
   UserPlus, UserCheck, UserX, Link2, Link2Off, 
-  Eye, EyeOff, Download, Filter, Snowflake, Sun
+  Eye, EyeOff, Download, Filter, Snowflake, Sun, MapPin
 } from 'lucide-react'
+import Link from 'next/link'
 
 // ============================================
 // TYPES
@@ -27,28 +29,20 @@ type Association = {
   created_at: string
 }
 
-type Boss = {
-  id: string
-  name: string
-  email: string
-  phone: string
-  password: string
-  created_at: string
-}
-
 type Plate = {
   id: string
   plate_number: string
-  boss_id: string | null
   weekly_fee: number
   is_active: boolean
   max_riders: number
   fee_per_rider: number
   total_weekly_fee: number
   created_at: string
-  boss?: Boss
   operador_id?: string
   assigned_at?: string
+  provincia_nome?: string
+  municipio_nome?: string
+  bairro_nome?: string
 }
 
 type Rider = {
@@ -115,6 +109,17 @@ type Admin = {
   created_at: string
 }
 
+type Provincia = {
+  id: string
+  nome: string
+}
+
+type Municipio = {
+  id: string
+  nome: string
+  provincia_id: string
+}
+
 // ============================================
 // COMPONENTE PRINCIPAL
 // ============================================
@@ -125,7 +130,6 @@ export default function AdminDashboard() {
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [isMobile, setIsMobile] = useState(false)
   const [associations, setAssociations] = useState<Association[]>([])
-  const [bosses, setBosses] = useState<Boss[]>([])
   const [plates, setPlates] = useState<Plate[]>([])
   const [riders, setRiders] = useState<Rider[]>([])
   const [orders, setOrders] = useState<Order[]>([])
@@ -136,31 +140,31 @@ export default function AdminDashboard() {
   const [searchTerm, setSearchTerm] = useState('')
   const [riderFilter, setRiderFilter] = useState<string>('all')
   const [showAddAssociation, setShowAddAssociation] = useState(false)
-  const [showAddBoss, setShowAddBoss] = useState(false)
   const [showAddPlate, setShowAddPlate] = useState(false)
   const [showAddOperador, setShowAddOperador] = useState(false)
   const [showAddRider, setShowAddRider] = useState(false)
-  const [showEditBoss, setShowEditBoss] = useState<Boss | null>(null)
   const [showEditPlate, setShowEditPlate] = useState<Plate | null>(null)
   const [showEditRider, setShowEditRider] = useState<Rider | null>(null)
   const [showPaymentModal, setShowPaymentModal] = useState(false)
   const [selectedPayment, setSelectedPayment] = useState<RiderPayment | null>(null)
-  const [newRiderPlateId, setNewRiderPlateId] = useState<string>('')
   const [selectedOperador, setSelectedOperador] = useState<string>('')
   const [selectedPlates, setSelectedPlates] = useState<Set<string>>(new Set())
   const [assignSearchTerm, setAssignSearchTerm] = useState('')
   const [paymentFilter, setPaymentFilter] = useState<string>('pending')
-  const [selectedBoss, setSelectedBoss] = useState<Boss | null>(null)
-  const [showEditBossModal, setShowEditBossModal] = useState(false)
   const [selectedPlate, setSelectedPlate] = useState<Plate | null>(null)
   const [showEditPlateModal, setShowEditPlateModal] = useState(false)
   const [selectedRider, setSelectedRider] = useState<Rider | null>(null)
   const [showEditRiderModal, setShowEditRiderModal] = useState(false)
   const [assignLoading, setAssignLoading] = useState(false)
   const [assignMessage, setAssignMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+  
+  // Estados para localização no formulário de placa
+  const [provincias, setProvincias] = useState<Provincia[]>([])
+  const [municipios, setMunicipios] = useState<Municipio[]>([])
+  const [selectedProvinciaId, setSelectedProvinciaId] = useState<string>('')
+  
   const [stats, setStats] = useState({
     totalAssociations: 0,
-    totalBosses: 0,
     totalPlates: 0,
     totalRiders: 0,
     totalOrders: 0,
@@ -190,11 +194,26 @@ export default function AdminDashboard() {
     }
     loadAdmin(adminId)
     loadAllData()
+    loadProvincias()
   }, [router])
 
   const loadAdmin = async (adminId: string) => {
     const { data } = await supabase.from('admins').select('*').eq('id', adminId).single()
     setAdmin(data)
+  }
+
+  const loadProvincias = async () => {
+    const { data } = await supabase.from('provincias').select('*').order('nome')
+    setProvincias(data || [])
+  }
+
+  const loadMunicipios = async (provinciaId: string) => {
+    const { data } = await supabase
+      .from('municipios')
+      .select('*')
+      .eq('provincia_id', provinciaId)
+      .order('nome')
+    setMunicipios(data || [])
   }
 
   const loadAllData = async () => {
@@ -203,10 +222,7 @@ export default function AdminDashboard() {
     const { data: associationsData } = await supabase.from('associations').select('*').order('created_at', { ascending: false })
     setAssociations(associationsData || [])
 
-    const { data: bossesData } = await supabase.from('bosses').select('*').order('created_at', { ascending: false })
-    setBosses(bossesData || [])
-
-    const { data: platesData } = await supabase.from('plates').select('*, boss:bosses(*)').order('created_at', { ascending: false })
+    const { data: platesData } = await supabase.from('plates').select('*').order('created_at', { ascending: false })
     setPlates(platesData || [])
 
     const { data: ridersData } = await supabase.from('riders').select('*, plate:plates(plate_number)').order('created_at', { ascending: false })
@@ -246,7 +262,6 @@ export default function AdminDashboard() {
 
     setStats({
       totalAssociations: associationsData?.length || 0,
-      totalBosses: bossesData?.length || 0,
       totalPlates: platesData?.length || 0,
       totalRiders: ridersData?.length || 0,
       totalOrders: ordersData?.length || 0,
@@ -263,39 +278,11 @@ export default function AdminDashboard() {
   }
 
   // Funções de Edição
-  const handleEditBoss = async (bossId: string, formData: { name: string; email: string; phone: string; password: string }) => {
-    const updateData: any = {
-      name: formData.name,
-      email: formData.email,
-      phone: formData.phone
-    }
-    if (formData.password) {
-      updateData.password = formData.password
-    }
-    
-    const { error } = await supabase
-      .from('bosses')
-      .update(updateData)
-      .eq('id', bossId)
-    
-    if (!error) {
-      alert('✅ Chefe atualizado com sucesso!')
-      loadAllData()
-      setShowEditBossModal(false)
-      setSelectedBoss(null)
-      return true
-    } else {
-      alert('Erro ao atualizar chefe: ' + error.message)
-      return false
-    }
-  }
-
-  const handleEditPlate = async (plateId: string, formData: { plate_number: string; boss_id: string; weekly_fee: number; max_riders: number }) => {
+  const handleEditPlate = async (plateId: string, formData: { plate_number: string; weekly_fee: number; max_riders: number }) => {
     const { error } = await supabase
       .from('plates')
       .update({
         plate_number: formData.plate_number,
-        boss_id: formData.boss_id || null,
         weekly_fee: formData.weekly_fee,
         max_riders: formData.max_riders,
         total_weekly_fee: formData.max_riders * 300
@@ -556,13 +543,8 @@ export default function AdminDashboard() {
     a.phone.includes(searchTerm)
   )
 
-  const filteredBosses = bosses.filter(b => 
-    b.name.toLowerCase().includes(searchTerm.toLowerCase()) || b.phone.includes(searchTerm)
-  )
-
   const filteredPlates = plates.filter(p => 
-    p.plate_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (p.boss?.name?.toLowerCase() || '').includes(searchTerm.toLowerCase())
+    p.plate_number.toLowerCase().includes(searchTerm.toLowerCase())
   )
 
   const filteredRiders = riders.filter(r => {
@@ -661,7 +643,7 @@ export default function AdminDashboard() {
       {/* Overlay para mobile */}
       <div style={styles.sidebarOverlay} onClick={() => setSidebarOpen(false)} />
       
-      {/* Sidebar */}
+      {/* Sidebar - SEM CHEFES */}
       <div style={styles.sidebar}>
         <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1rem', borderBottom: '1px solid #374151' }}>
@@ -683,7 +665,6 @@ export default function AdminDashboard() {
               { id: 'assign', label: 'Atribuir Placas', icon: Link2 },
               { id: 'orders', label: 'Pedidos', icon: ClipboardList },
               { id: 'plates', label: 'Placas', icon: Store },
-              { id: 'bosses', label: 'Chefes', icon: UserCog },
               { id: 'riders', label: 'Motoqueiros', icon: Bike }
             ].map((item) => (
               <button
@@ -729,7 +710,7 @@ export default function AdminDashboard() {
         </div>
       </div>
 
-         {/* Main Content */}
+      {/* Main Content */}
       <div style={styles.mainContent}>
         {/* Header */}
         <div style={{ backgroundColor: 'white', boxShadow: '0 1px 2px 0 rgba(0,0,0,0.05)', position: 'sticky', top: 0, zIndex: 10 }}>
@@ -749,7 +730,6 @@ export default function AdminDashboard() {
                   {activeTab === 'assign' && 'Atribuir Placas a Operadores'}
                   {activeTab === 'orders' && 'Pedidos'}
                   {activeTab === 'plates' && 'Placas'}
-                  {activeTab === 'bosses' && 'Chefes'}
                   {activeTab === 'riders' && 'Motoqueiros'}
                 </h1>
               </div>
@@ -767,11 +747,10 @@ export default function AdminDashboard() {
                     style={{ padding: '0.5rem 0.5rem 0.5rem 2rem', border: '1px solid #e5e7eb', borderRadius: '0.5rem', width: isMobile ? '100%' : '16rem' }}
                   />
                 </div>
-                {(activeTab === 'associations' || activeTab === 'bosses' || activeTab === 'plates' || activeTab === 'operadores' || activeTab === 'riders') && (
+                {(activeTab === 'associations' || activeTab === 'plates' || activeTab === 'operadores' || activeTab === 'riders') && (
                   <button 
                     onClick={() => {
                       if (activeTab === 'associations') setShowAddAssociation(true)
-                      else if (activeTab === 'bosses') setShowAddBoss(true)
                       else if (activeTab === 'plates') setShowAddPlate(true)
                       else if (activeTab === 'operadores') setShowAddOperador(true)
                       else if (activeTab === 'riders') setShowAddRider(true)
@@ -793,7 +772,6 @@ export default function AdminDashboard() {
               <div style={styles.card}><p style={{ fontSize: '0.75rem', color: '#6b7280' }}>Associações</p><p style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>{stats.totalAssociations}</p></div>
               <div style={styles.card}><p style={{ fontSize: '0.75rem', color: '#6b7280' }}>Operadores</p><p style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>{stats.totalOperadores}</p><p style={{ fontSize: '0.75rem', color: '#059669' }}>{stats.activeOperadores} ativos</p></div>
               <div style={styles.card}><p style={{ fontSize: '0.75rem', color: '#6b7280' }}>Placas</p><p style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>{stats.totalPlates}</p><p style={{ fontSize: '0.75rem', color: '#059669' }}>{stats.activePlates} ativas</p><p style={{ fontSize: '0.75rem', color: '#4f46e5' }}>{stats.assignedPlates} atribuídas</p></div>
-              <div style={styles.card}><p style={{ fontSize: '0.75rem', color: '#6b7280' }}>Chefes</p><p style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>{stats.totalBosses}</p></div>
               <div style={styles.card}><p style={{ fontSize: '0.75rem', color: '#6b7280' }}>Motoqueiros</p><p style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>{stats.totalRiders}</p><p style={{ fontSize: '0.75rem', color: '#059669' }}>{stats.onlineRiders} online</p><p style={{ fontSize: '0.75rem', color: '#d97706' }}>{riders.filter(r => r.is_frozen).length} congelados</p></div>
               <div style={styles.card}><p style={{ fontSize: '0.75rem', color: '#6b7280' }}>Pedidos</p><p style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>{stats.totalOrders}</p></div>
               <div style={{ ...styles.card, background: 'linear-gradient(135deg, #4f46e5, #4338ca)', color: 'white' }}>
@@ -1197,7 +1175,10 @@ export default function AdminDashboard() {
                               <div>
                                 <p style={{ fontWeight: 600, fontSize: '16px' }}>{plate.plate_number}</p>
                                 <p style={{ fontSize: '12px', color: '#6b7280' }}>
-                                  Chefe: {plate.boss?.name || 'Não definido'} | Taxa: {plate.weekly_fee?.toLocaleString()} Kz
+                                  Taxa: {plate.weekly_fee?.toLocaleString()} Kz
+                                </p>
+                                <p style={{ fontSize: '12px', color: '#6b7280' }}>
+                                  Motoqueiros: {riders.filter(r => r.plate_id === plate.id).length} / {plate.max_riders || 20}
                                 </p>
                                 {plate.operador_id && plate.operador_id !== selectedOperador && (
                                   <p style={{ fontSize: '11px', color: '#ef4444', marginTop: '2px' }}>⚠️ Atribuída a outro operador</p>
@@ -1245,196 +1226,82 @@ export default function AdminDashboard() {
           </div>
         )}
 
- {/* Placas - COM BOTÃO EDITAR */}
-{activeTab === 'plates' && (
-  <div style={{ padding: '1.5rem', overflowX: 'auto' }}>
-    <div style={{ backgroundColor: 'white', borderRadius: '0.75rem', overflow: 'auto' }}>
-      <table style={styles.table}>
-        <thead>
-          <tr>
-            <th style={styles.th}>Placa</th>
-            <th style={styles.th}>Chefe</th>
-            <th style={styles.th}>Taxa</th>
-            <th style={styles.th}>Motoqueiros</th>
-            <th style={styles.th}>Operador</th>
-            <th style={styles.th}>Status</th>
-            <th style={styles.th}>Ações</th>
-          </tr>
-        </thead>
-        <tbody>
-          {filteredPlates.map((plate) => {
-            const assignedOperador = operadores.find(o => o.id === plate.operador_id)
-            return (
-              <tr key={plate.id}>
-                <td style={styles.td}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <Store size={16} color="#3b82f6" />
-                    {plate.plate_number}
-                  </div>
-                </td>
-                <td style={styles.td}>{plate.boss?.name || '-'}</td>
-                <td style={styles.td}>{plate.weekly_fee?.toLocaleString()} Kz </td>
-                <td style={styles.td}>{riders.filter(r => r.plate_id === plate.id).length} / {plate.max_riders || 20}</td>
-                <td style={styles.td}>
-                  {assignedOperador ? 
-                    <span style={{ backgroundColor: '#fef3c7', color: '#d97706', padding: '2px 8px', borderRadius: '20px', fontSize: '12px' }}>{assignedOperador.name}</span> : 
-                    <span style={{ color: '#9ca3af', fontSize: '12px' }}>Não atribuído</span>
-                  }
-                </td>
-                <td style={styles.td}>
-                  <button onClick={() => togglePlateStatus(plate.id, plate.is_active)} style={plate.is_active ? styles.badgeActive : styles.badgeInactive}>
-                    {plate.is_active ? 'Ativo' : 'Inativo'}
-                  </button>
-                </td>
-                <td style={styles.td}>
-                  <div style={{ display: 'flex', gap: '8px' }}>
-                    <button 
-                      onClick={() => {
-                        setSelectedPlate(plate)
-                        setShowEditPlateModal(true)
-                      }} 
-                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#3b82f6' }} 
-                      title="Editar Placa"
-                    >
-                      <Edit size={16} />
-                    </button>
-                    <button onClick={() => deleteItem('plates', plate.id, plate.plate_number)} style={styles.buttonDanger}>
-                      <Trash2 size={16} />
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            )
-          })}
-          {filteredPlates.length === 0 && (
-            <tr>
-              <td colSpan={7} style={{ padding: '2rem', textAlign: 'center', color: '#6b7280' }}>
-                Nenhuma placa encontrada
-              </td>
-            </tr>
-          )}
-        </tbody>
-      </table>
-    </div>
-  </div>
-)}
-
-{/* Pedidos */}
-{activeTab === 'orders' && (
-  <div style={{ padding: '1.5rem', overflowX: 'auto' }}>
-    <div style={{ backgroundColor: 'white', borderRadius: '0.75rem', overflow: 'auto' }}>
-      <table style={styles.table}>
-        <thead>
-          <tr>
-            <th style={styles.th}>Cliente</th>
-            <th style={styles.th}>Telefone</th>
-            <th style={styles.th}>Motoqueiro</th>
-            <th style={styles.th}>Tel. Motoqueiro</th>
-            <th style={styles.th}>Valor</th>
-            <th style={styles.th}>Status</th>
-            <th style={styles.th}>Data</th>
-            <th style={styles.th}>Ações</th>
-          </tr>
-        </thead>
-        <tbody>
-          {filteredOrders.map((order) => (
-            <tr key={order.id}>
-              <td style={styles.td}>{order.customer_name || '-'}</td>
-              <td style={styles.td}>{order.customer_phone || '-'}</td>
-              <td style={styles.td}>
-                {order.rider ? (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <span>{order.rider.name}</span>
-                    {order.rider.is_online ? 
-                      <span style={{ fontSize: '0.7rem', color: '#10b981' }}>● Online</span> : 
-                      <span style={{ fontSize: '0.7rem', color: '#ef4444' }}>● Offline</span>
-                    }
-                  </div>
-                ) : <span style={{ color: '#9ca3af' }}>Não atribuído</span>}
-              </td>
-              <td style={styles.td}>
-                {order.rider?.phone ? (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <span>{order.rider.phone}</span>
-                    <button onClick={() => callRider(order.rider!.phone, order.rider!.name)} style={styles.buttonCall}>
-                      <Phone size={12} /> Ligar
-                    </button>
-                  </div>
-                ) : <span>-</span>}
-              </td>
-              <td style={styles.td}>{order.price?.toLocaleString()} Kz</td>
-              <td style={styles.td}>
-                <span style={{ 
-                  padding: '0.25rem 0.5rem', borderRadius: '9999px', fontSize: '0.75rem', 
-                  backgroundColor: order.status === 'completed' ? '#d1fae5' : order.status === 'pending' ? '#fef3c7' : order.status === 'accepted' ? '#dbeafe' : '#fee2e2', 
-                  color: order.status === 'completed' ? '#065f46' : order.status === 'pending' ? '#92400e' : order.status === 'accepted' ? '#1e40af' : '#991b1b' 
-                }}>
-                  {order.status === 'completed' ? 'Concluído' : order.status === 'pending' ? 'Pendente' : order.status === 'accepted' ? 'Aceito' : 'Cancelado'}
-                </span>
-              </td>
-              <td style={styles.td}>{new Date(order.created_at).toLocaleDateString('pt-AO')}</td>
-              <td style={styles.td}>
-                <button onClick={() => deleteItem('orders', order.id, `pedido de ${order.customer_name}`)} style={styles.buttonDanger}>
-                  <Trash2 size={16} />
-                </button>
-              </td>
-            </tr>
-          ))}
-          {filteredOrders.length === 0 && (
-            <tr>
-              <td colSpan={8} style={{ padding: '2rem', textAlign: 'center', color: '#6b7280' }}>
-                Nenhum pedido encontrado
-              </td>
-            </tr>
-          )}
-        </tbody>
-      </table>
-    </div>
-  </div>
-)}
-
-        {/* Chefes - COM BOTÃO EDITAR */}
-        {activeTab === 'bosses' && (
+        {/* Placas - SEM CHEFE */}
+        {activeTab === 'plates' && (
           <div style={{ padding: '1.5rem', overflowX: 'auto' }}>
             <div style={{ backgroundColor: 'white', borderRadius: '0.75rem', overflow: 'auto' }}>
               <table style={styles.table}>
                 <thead>
                   <tr>
-                    <th style={styles.th}>Nome</th>
-                    <th style={styles.th}>Email</th>
-                    <th style={styles.th}>Telefone</th>
                     <th style={styles.th}>Placa</th>
+                    <th style={styles.th}>Taxa</th>
+                    <th style={styles.th}>Motoqueiros</th>
+                    <th style={styles.th}>Operador</th>
+                    <th style={styles.th}>Status</th>
+                    <th style={styles.th}>Localização</th>
                     <th style={styles.th}>Ações</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredBosses.map((boss) => (
-                    <tr key={boss.id}>
-                      <td style={styles.td}>{boss.name}</td>
-                      <td style={styles.td}>{boss.email}</td>
-                      <td style={styles.td}>{boss.phone}</td>
-                      <td style={styles.td}>{plates.find(p => p.boss_id === boss.id)?.plate_number || '-'}</td>
-                      <td style={styles.td}>
-                        <div style={{ display: 'flex', gap: '8px' }}>
-                          <button 
-                            onClick={() => {
-                              setSelectedBoss(boss)
-                              setShowEditBossModal(true)
-                            }} 
-                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#3b82f6' }} 
-                            title="Editar Chefe"
-                          >
-                            <Edit size={16} />
+                  {filteredPlates.map((plate) => {
+                    const assignedOperador = operadores.find(o => o.id === plate.operador_id)
+                    return (
+                      <tr key={plate.id}>
+                        <td style={styles.td}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <Store size={16} color="#3b82f6" />
+                            {plate.plate_number}
+                          </div>
+                        </td>
+                        <td style={styles.td}>{plate.weekly_fee?.toLocaleString()} Kz</td>
+                        <td style={styles.td}>{riders.filter(r => r.plate_id === plate.id).length} / {plate.max_riders || 20}</td>
+                        <td style={styles.td}>
+                          {assignedOperador ? 
+                            <span style={{ backgroundColor: '#fef3c7', color: '#d97706', padding: '2px 8px', borderRadius: '20px', fontSize: '12px' }}>{assignedOperador.name}</span> : 
+                            <span style={{ color: '#9ca3af', fontSize: '12px' }}>Não atribuído</span>
+                          }
+                        </td>
+                        <td style={styles.td}>
+                          <button onClick={() => togglePlateStatus(plate.id, plate.is_active)} style={plate.is_active ? styles.badgeActive : styles.badgeInactive}>
+                            {plate.is_active ? 'Ativo' : 'Inativo'}
                           </button>
-                          <button onClick={() => deleteItem('bosses', boss.id, boss.name)} style={styles.buttonDanger}>
-                            <Trash2 size={16} />
-                          </button>
-                        </div>
+                        </td>
+                        <td style={styles.td}>
+                          {plate.provincia_nome && plate.municipio_nome ? (
+                            <span style={{ backgroundColor: '#e0e7ff', color: '#3730a3', padding: '2px 8px', borderRadius: '12px', fontSize: '11px' }}>
+                              <MapPin size={10} style={{ display: 'inline', marginRight: '4px' }} />
+                              {plate.provincia_nome}, {plate.municipio_nome}
+                            </span>
+                          ) : (
+                            <span style={{ color: '#9ca3af', fontSize: '11px' }}>Não definida</span>
+                          )}
+                        </td>
+                        <td style={styles.td}>
+                          <div style={{ display: 'flex', gap: '8px' }}>
+                            <button 
+                              onClick={() => {
+                                setSelectedPlate(plate)
+                                setShowEditPlateModal(true)
+                              }} 
+                              style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#3b82f6' }} 
+                              title="Editar Placa"
+                            >
+                              <Edit size={16} />
+                            </button>
+                            <button onClick={() => deleteItem('plates', plate.id, plate.plate_number)} style={styles.buttonDanger}>
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
+                        </td>
+                       </tr>
+                    )
+                  })}
+                  {filteredPlates.length === 0 && (
+                    <tr>
+                      <td colSpan={7} style={{ padding: '2rem', textAlign: 'center', color: '#6b7280' }}>
+                        Nenhuma placa encontrada
                       </td>
                     </tr>
-                  ))}
-                  {filteredBosses.length === 0 && (
-                    <tr><td colSpan={5} style={{ padding: '2rem', textAlign: 'center', color: '#6b7280' }}>Nenhum chefe encontrado</td></tr>
                   )}
                 </tbody>
               </table>
@@ -1442,7 +1309,81 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* Motoqueiros - COM BOTÃO EDITAR */}
+        {/* Pedidos */}
+        {activeTab === 'orders' && (
+          <div style={{ padding: '1.5rem', overflowX: 'auto' }}>
+            <div style={{ backgroundColor: 'white', borderRadius: '0.75rem', overflow: 'auto' }}>
+              <table style={styles.table}>
+                <thead>
+                  <tr>
+                    <th style={styles.th}>Cliente</th>
+                    <th style={styles.th}>Telefone</th>
+                    <th style={styles.th}>Motoqueiro</th>
+                    <th style={styles.th}>Tel. Motoqueiro</th>
+                    <th style={styles.th}>Valor</th>
+                    <th style={styles.th}>Status</th>
+                    <th style={styles.th}>Data</th>
+                    <th style={styles.th}>Ações</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredOrders.map((order) => (
+                    <tr key={order.id}>
+                      <td style={styles.td}>{order.customer_name || '-'}</td>
+                      <td style={styles.td}>{order.customer_phone || '-'}</td>
+                      <td style={styles.td}>
+                        {order.rider ? (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <span>{order.rider.name}</span>
+                            {order.rider.is_online ? 
+                              <span style={{ fontSize: '0.7rem', color: '#10b981' }}>● Online</span> : 
+                              <span style={{ fontSize: '0.7rem', color: '#ef4444' }}>● Offline</span>
+                            }
+                          </div>
+                        ) : <span style={{ color: '#9ca3af' }}>Não atribuído</span>}
+                      </td>
+                      <td style={styles.td}>
+                        {order.rider?.phone ? (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <span>{order.rider.phone}</span>
+                            <button onClick={() => callRider(order.rider!.phone, order.rider!.name)} style={styles.buttonCall}>
+                              <Phone size={12} /> Ligar
+                            </button>
+                          </div>
+                        ) : <span>-</span>}
+                      </td>
+                      <td style={styles.td}>{order.price?.toLocaleString()} Kz</td>
+                      <td style={styles.td}>
+                        <span style={{ 
+                          padding: '0.25rem 0.5rem', borderRadius: '9999px', fontSize: '0.75rem', 
+                          backgroundColor: order.status === 'completed' ? '#d1fae5' : order.status === 'pending' ? '#fef3c7' : order.status === 'accepted' ? '#dbeafe' : '#fee2e2', 
+                          color: order.status === 'completed' ? '#065f46' : order.status === 'pending' ? '#92400e' : order.status === 'accepted' ? '#1e40af' : '#991b1b' 
+                        }}>
+                          {order.status === 'completed' ? 'Concluído' : order.status === 'pending' ? 'Pendente' : order.status === 'accepted' ? 'Aceito' : 'Cancelado'}
+                        </span>
+                      </td>
+                      <td style={styles.td}>{new Date(order.created_at).toLocaleDateString('pt-AO')}</td>
+                      <td style={styles.td}>
+                        <button onClick={() => deleteItem('orders', order.id, `pedido de ${order.customer_name}`)} style={styles.buttonDanger}>
+                          <Trash2 size={16} />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                  {filteredOrders.length === 0 && (
+                    <tr>
+                      <td colSpan={8} style={{ padding: '2rem', textAlign: 'center', color: '#6b7280' }}>
+                        Nenhum pedido encontrado
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* Motoqueiros */}
         {activeTab === 'riders' && (
           <div style={{ padding: '1.5rem', overflowX: 'auto' }}>
             <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', flexWrap: 'wrap' }}>
@@ -1489,7 +1430,7 @@ export default function AdminDashboard() {
                             Motivo: {rider.frozen_reason}
                           </div>
                         )}
-                      </td>
+                       </td>
                       <td style={styles.td}>{rider.phone}</td>
                       <td style={styles.td}>{rider.bi}</td>
                       <td style={styles.td}>{rider.plate?.plate_number || '-'}</td>
@@ -1497,7 +1438,7 @@ export default function AdminDashboard() {
                         <span style={rider.is_frozen ? styles.badgeWarning : (rider.status === 'active' ? styles.badgeActive : styles.badgeInactive)}>
                           {rider.is_frozen ? '❄️ Congelado' : (rider.status === 'active' ? '✅ Ativo' : '⭕ Inativo')}
                         </span>
-                      </td>
+                       </td>
                       <td style={styles.td}>
                         <span style={rider.is_online ? { ...styles.badgeActive, backgroundColor: '#dbeafe', color: '#1e40af' } : styles.badgeInactive}>
                           {rider.is_online ? '🟢 Online' : '⚫ Offline'}
@@ -1510,7 +1451,7 @@ export default function AdminDashboard() {
                             Forçar Offline
                           </button>
                         )}
-                      </td>
+                       </td>
                       <td style={styles.td}>
                         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                           <button 
@@ -1537,7 +1478,7 @@ export default function AdminDashboard() {
                             <Trash2 size={16} />
                           </button>
                         </div>
-                      </td>
+                       </td>
                     </tr>
                   ))}
                   {filteredRiders.length === 0 && (
@@ -1550,39 +1491,10 @@ export default function AdminDashboard() {
         )}
       </div>
 
-      {/* Modal de Editar Chefe */}
-      {showEditBossModal && selectedBoss && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 }}>
-          <div style={{ backgroundColor: 'white', borderRadius: '1rem', maxWidth: '28rem', width: '90%', maxHeight: '90vh', overflow: 'auto' }}>
-            <div style={{ background: 'linear-gradient(135deg, #4f46e5, #4338ca)', padding: '1rem', borderRadius: '1rem 1rem 0 0', display: 'flex', justifyContent: 'space-between', color: 'white' }}>
-              <h3 style={{ fontWeight: 'bold' }}>Editar Chefe</h3>
-              <button onClick={() => setShowEditBossModal(false)} style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer', fontSize: '1.25rem' }}>✕</button>
-            </div>
-            <form onSubmit={async (e) => {
-              e.preventDefault()
-              const form = e.target as HTMLFormElement
-              const name = (form.elements.namedItem('name') as HTMLInputElement).value
-              const email = (form.elements.namedItem('email') as HTMLInputElement).value
-              const phone = (form.elements.namedItem('phone') as HTMLInputElement).value
-              const password = (form.elements.namedItem('password') as HTMLInputElement).value
-              
-              const success = await handleEditBoss(selectedBoss.id, { name, email, phone, password })
-              if (success) setShowEditBossModal(false)
-            }} style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              <input type="text" name="name" defaultValue={selectedBoss.name} required placeholder="Nome" style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} />
-              <input type="email" name="email" defaultValue={selectedBoss.email} required placeholder="Email" style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} />
-              <input type="tel" name="phone" defaultValue={selectedBoss.phone} required placeholder="Telefone" style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} />
-              <input type="text" name="password" placeholder="Nova Senha (deixe em branco para manter)" style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem', backgroundColor: '#f9fafb' }} />
-              <button type="submit" style={{ backgroundColor: '#4f46e5', color: 'white', padding: '0.75rem', borderRadius: '0.5rem', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}>Salvar Alterações</button>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Modal de Editar Placa */}
+      {/* Modal de Editar Placa - SEM CHEFE */}
       {showEditPlateModal && selectedPlate && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 }}>
-          <div style={{ backgroundColor: 'white', borderRadius: '1rem', maxWidth: '28rem', width: '90%', maxHeight: '90vh', overflow: 'auto' }}>
+          <div style={{ backgroundColor: 'white', borderRadius: '1rem', maxWidth: '32rem', width: '90%', maxHeight: '90vh', overflow: 'auto' }}>
             <div style={{ background: 'linear-gradient(135deg, #4f46e5, #4338ca)', padding: '1rem', borderRadius: '1rem 1rem 0 0', display: 'flex', justifyContent: 'space-between', color: 'white' }}>
               <h3 style={{ fontWeight: 'bold' }}>Editar Placa</h3>
               <button onClick={() => setShowEditPlateModal(false)} style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer', fontSize: '1.25rem' }}>✕</button>
@@ -1591,20 +1503,60 @@ export default function AdminDashboard() {
               e.preventDefault()
               const form = e.target as HTMLFormElement
               const plate_number = (form.elements.namedItem('plate_number') as HTMLInputElement).value
-              const boss_id = (form.elements.namedItem('boss_id') as HTMLSelectElement).value
               const weekly_fee = parseInt((form.elements.namedItem('weekly_fee') as HTMLInputElement).value)
               const max_riders = parseInt((form.elements.namedItem('max_riders') as HTMLInputElement).value)
+              const provincia_nome = (form.elements.namedItem('provincia_nome') as HTMLSelectElement).value
+              const municipio_nome = (form.elements.namedItem('municipio_nome') as HTMLSelectElement).value
               
-              const success = await handleEditPlate(selectedPlate.id, { plate_number, boss_id, weekly_fee, max_riders })
-              if (success) setShowEditPlateModal(false)
+              const updateData: any = {
+                plate_number,
+                weekly_fee,
+                max_riders,
+                total_weekly_fee: max_riders * 300
+              }
+              
+              if (provincia_nome) updateData.provincia_nome = provincia_nome
+              if (municipio_nome) updateData.municipio_nome = municipio_nome
+              
+              const { error } = await supabase
+                .from('plates')
+                .update(updateData)
+                .eq('id', selectedPlate.id)
+              
+              if (!error) {
+                alert('✅ Placa atualizada com sucesso!')
+                loadAllData()
+                setShowEditPlateModal(false)
+                setSelectedPlate(null)
+              } else {
+                alert('Erro ao atualizar placa: ' + error.message)
+              }
             }} style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               <input type="text" name="plate_number" defaultValue={selectedPlate.plate_number} required placeholder="Número da Placa" maxLength={20} style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} />
-              <select name="boss_id" defaultValue={selectedPlate.boss_id || ''} style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }}>
-                <option value="">Nenhum chefe</option>
-                {bosses.map((boss: Boss) => <option key={boss.id} value={boss.id}>{boss.name}</option>)}
-              </select>
               <input type="number" name="weekly_fee" defaultValue={selectedPlate.weekly_fee} required placeholder="Taxa Semanal" style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} />
               <input type="number" name="max_riders" defaultValue={selectedPlate.max_riders} required placeholder="Máximo de Motoqueiros" style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} />
+              
+              <div style={{ marginTop: '8px' }}>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, marginBottom: '6px' }}>Província</label>
+                <select 
+                  name="provincia_nome" 
+                  defaultValue={selectedPlate.provincia_nome || ''}
+                  onChange={(e) => loadMunicipios(e.target.value)}
+                  style={{ width: '100%', padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }}
+                >
+                  <option value="">Selecione a província</option>
+                  {provincias.map((prov) => <option key={prov.id} value={prov.nome}>{prov.nome}</option>)}
+                </select>
+              </div>
+              
+              <div>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, marginBottom: '6px' }}>Município</label>
+                <select name="municipio_nome" defaultValue={selectedPlate.municipio_nome || ''} style={{ width: '100%', padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }}>
+                  <option value="">Selecione o município</option>
+                  {municipios.map((mun) => <option key={mun.id} value={mun.nome}>{mun.nome}</option>)}
+                </select>
+              </div>
+              
               <button type="submit" style={{ backgroundColor: '#4f46e5', color: 'white', padding: '0.75rem', borderRadius: '0.5rem', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}>Salvar Alterações</button>
             </form>
           </div>
@@ -1647,8 +1599,7 @@ export default function AdminDashboard() {
 
       {/* Modais de Criação */}
       {showAddAssociation && <AddAssociationModal onClose={() => setShowAddAssociation(false)} onSuccess={() => { setShowAddAssociation(false); loadAllData() }} />}
-      {showAddBoss && <AddBossModal onClose={() => setShowAddBoss(false)} onSuccess={() => { setShowAddBoss(false); loadAllData() }} />}
-      {showAddPlate && <AddPlateModal bosses={bosses} onClose={() => setShowAddPlate(false)} onSuccess={() => { setShowAddPlate(false); loadAllData() }} />}
+      {showAddPlate && <AddPlateModal onClose={() => setShowAddPlate(false)} onSuccess={() => { setShowAddPlate(false); loadAllData() }} provincias={provincias} />}
       {showAddOperador && <AddOperadorModal onClose={() => setShowAddOperador(false)} onSuccess={() => { setShowAddOperador(false); loadAllData() }} adminId={admin?.id} />}
       {showAddRider && <AddRiderModal plates={plates} onClose={() => setShowAddRider(false)} onSuccess={() => { setShowAddRider(false); loadAllData() }} />}
     </div>
@@ -1692,50 +1643,43 @@ function AddAssociationModal({ onClose, onSuccess }: { onClose: () => void; onSu
   )
 }
 
-function AddBossModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
-  const [formData, setFormData] = useState({ name: '', email: '', phone: '', password: 'senha123' })
+function AddPlateModal({ onClose, onSuccess, provincias }: { onClose: () => void; onSuccess: () => void; provincias: Provincia[] }) {
+  const [formData, setFormData] = useState({ 
+    plate_number: '', 
+    weekly_fee: 75000, 
+    max_riders: 20, 
+    fee_per_rider: 300,
+    provincia_nome: '',
+    municipio_nome: ''
+  })
+  const [municipios, setMunicipios] = useState<Municipio[]>([])
   const [loading, setLoading] = useState(false)
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault(); setLoading(true)
-    const { error } = await supabase.from('bosses').insert({ ...formData, created_at: new Date().toISOString() })
-    if (!error) onSuccess(); else alert('Erro: ' + error.message)
-    setLoading(false)
+  const loadMunicipios = async (provinciaNome: string) => {
+    const { data: provinciaData } = await supabase.from('provincias').select('id').eq('nome', provinciaNome).single()
+    if (provinciaData) {
+      const { data } = await supabase
+        .from('municipios')
+        .select('*')
+        .eq('provincia_id', provinciaData.id)
+        .order('nome')
+      setMunicipios(data || [])
+    }
   }
-
-  return (
-    <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 }}>
-      <div style={{ backgroundColor: 'white', borderRadius: '1rem', maxWidth: '28rem', width: '90%' }}>
-        <div style={{ background: 'linear-gradient(135deg, #4f46e5, #4338ca)', padding: '1rem', borderRadius: '1rem 1rem 0 0', display: 'flex', justifyContent: 'space-between', color: 'white' }}>
-          <h3 style={{ fontWeight: 'bold' }}>Novo Chefe</h3>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer', fontSize: '1.25rem' }}>✕</button>
-        </div>
-        <form onSubmit={handleSubmit} style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          <input type="text" required placeholder="Nome" value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} />
-          <input type="email" required placeholder="Email" value={formData.email} onChange={(e) => setFormData({...formData, email: e.target.value})} style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} />
-          <input type="tel" required placeholder="Telefone" value={formData.phone} onChange={(e) => setFormData({...formData, phone: e.target.value})} style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} />
-          <input type="text" placeholder="Senha" value={formData.password} onChange={(e) => setFormData({...formData, password: e.target.value})} style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem', backgroundColor: '#f9fafb' }} />
-          <button type="submit" disabled={loading} style={{ backgroundColor: '#4f46e5', color: 'white', padding: '0.75rem', borderRadius: '0.5rem', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}>
-            {loading ? 'Cadastrando...' : 'Cadastrar'}
-          </button>
-        </form>
-      </div>
-    </div>
-  )
-}
-
-function AddPlateModal({ bosses, onClose, onSuccess }: { bosses: Boss[]; onClose: () => void; onSuccess: () => void }) {
-  const [formData, setFormData] = useState({ plate_number: '', boss_id: '', weekly_fee: 75000, max_riders: 20, fee_per_rider: 300 })
-  const [loading, setLoading] = useState(false)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault(); setLoading(true)
     const totalFee = formData.max_riders * formData.fee_per_rider
     const { error } = await supabase.from('plates').insert({
-      plate_number: formData.plate_number, boss_id: formData.boss_id || null,
-      weekly_fee: formData.weekly_fee, max_riders: formData.max_riders,
-      fee_per_rider: formData.fee_per_rider, total_weekly_fee: totalFee,
-      is_active: true, created_at: new Date().toISOString()
+      plate_number: formData.plate_number,
+      weekly_fee: formData.weekly_fee,
+      max_riders: formData.max_riders,
+      fee_per_rider: formData.fee_per_rider,
+      total_weekly_fee: totalFee,
+      is_active: true,
+      provincia_nome: formData.provincia_nome || null,
+      municipio_nome: formData.municipio_nome || null,
+      created_at: new Date().toISOString()
     })
     if (!error) onSuccess(); else alert('Erro: ' + error.message)
     setLoading(false)
@@ -1743,19 +1687,44 @@ function AddPlateModal({ bosses, onClose, onSuccess }: { bosses: Boss[]; onClose
 
   return (
     <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 }}>
-      <div style={{ backgroundColor: 'white', borderRadius: '1rem', maxWidth: '28rem', width: '90%' }}>
+      <div style={{ backgroundColor: 'white', borderRadius: '1rem', maxWidth: '32rem', width: '90%', maxHeight: '90vh', overflow: 'auto' }}>
         <div style={{ background: 'linear-gradient(135deg, #4f46e5, #4338ca)', padding: '1rem', borderRadius: '1rem 1rem 0 0', display: 'flex', justifyContent: 'space-between', color: 'white' }}>
           <h3 style={{ fontWeight: 'bold' }}>Nova Placa</h3>
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer', fontSize: '1.25rem' }}>✕</button>
         </div>
         <form onSubmit={handleSubmit} style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
           <input type="text" required placeholder="Número da Placa" value={formData.plate_number} onChange={(e) => setFormData({...formData, plate_number: e.target.value})} style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} />
-          <select value={formData.boss_id} onChange={(e) => setFormData({...formData, boss_id: e.target.value})} style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }}>
-            <option value="">Nenhum chefe</option>
-            {bosses.map((boss: Boss) => <option key={boss.id} value={boss.id}>{boss.name}</option>)}
-          </select>
           <input type="number" placeholder="Taxa Semanal" value={formData.weekly_fee} onChange={(e) => setFormData({...formData, weekly_fee: parseInt(e.target.value)})} style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} />
           <input type="number" placeholder="Máximo de Motoqueiros" value={formData.max_riders} onChange={(e) => setFormData({...formData, max_riders: parseInt(e.target.value)})} style={{ padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }} />
+          
+          <div>
+            <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, marginBottom: '6px' }}>Província</label>
+            <select 
+              value={formData.provincia_nome}
+              onChange={(e) => {
+                setFormData({...formData, provincia_nome: e.target.value, municipio_nome: ''})
+                loadMunicipios(e.target.value)
+              }}
+              style={{ width: '100%', padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }}
+            >
+              <option value="">Selecione a província</option>
+              {provincias.map((prov) => <option key={prov.id} value={prov.nome}>{prov.nome}</option>)}
+            </select>
+          </div>
+          
+          <div>
+            <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, marginBottom: '6px' }}>Município</label>
+            <select 
+              value={formData.municipio_nome}
+              onChange={(e) => setFormData({...formData, municipio_nome: e.target.value})}
+              style={{ width: '100%', padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }}
+              disabled={!formData.provincia_nome}
+            >
+              <option value="">Selecione o município</option>
+              {municipios.map((mun) => <option key={mun.id} value={mun.nome}>{mun.nome}</option>)}
+            </select>
+          </div>
+          
           <button type="submit" disabled={loading} style={{ backgroundColor: '#4f46e5', color: 'white', padding: '0.75rem', borderRadius: '0.5rem', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}>
             {loading ? 'Cadastrando...' : 'Cadastrar'}
           </button>

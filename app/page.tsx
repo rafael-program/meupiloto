@@ -1,9 +1,23 @@
-// app/page.tsx - Versão totalmente responsiva
 'use client'
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase/client'
-import { Bike, Users, MapPin, Search, Star, Wifi, WifiOff, Shield, UserCog, User, Building2, Sparkles, Menu, X } from 'lucide-react'
+import { 
+  Bike, Users, MapPin, Search, Star, Wifi, WifiOff, Shield, 
+  UserCog, User, Building2, Sparkles, Menu, X, ChevronRight, 
+  CheckCircle, ArrowLeft
+} from 'lucide-react'
 import Link from 'next/link'
+
+type Provincia = {
+  id: string
+  nome: string
+}
+
+type Municipio = {
+  id: string
+  nome: string
+  provincia_id: string
+}
 
 export default function Home() {
   const [plates, setPlates] = useState<any[]>([])
@@ -12,6 +26,16 @@ export default function Home() {
   const [favorites, setFavorites] = useState<string[]>([])
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [isMobile, setIsMobile] = useState(false)
+  
+  // Estados para localização
+  const [showLocationModal, setShowLocationModal] = useState(false)
+  const [provincias, setProvincias] = useState<Provincia[]>([])
+  const [municipios, setMunicipios] = useState<Municipio[]>([])
+  const [selectedProvincia, setSelectedProvincia] = useState<string | null>(null)
+  const [selectedMunicipio, setSelectedMunicipio] = useState<string | null>(null)
+  const [step, setStep] = useState<'provincia' | 'municipio'>('provincia')
+  const [selectedProvinciaNome, setSelectedProvinciaNome] = useState<string | null>(null)
+  const [selectedMunicipioNome, setSelectedMunicipioNome] = useState<string | null>(null)
 
   useEffect(() => {
     const checkMobile = () => {
@@ -26,18 +50,58 @@ export default function Home() {
   }, [])
 
   useEffect(() => {
-    loadPlates()
-    const savedFavorites = localStorage.getItem('favoritePlates')
-    if (savedFavorites) {
-      setFavorites(JSON.parse(savedFavorites))
-    }
+    loadProvincias()
+    checkSavedLocation()
+    loadFavorites()
   }, [])
 
-  const loadPlates = async () => {
-    const { data } = await supabase
+  const loadProvincias = async () => {
+    const { data, error } = await supabase.from('provincias').select('*').order('nome')
+    if (error) console.error('❌ Erro:', error)
+    setProvincias(data || [])
+  }
+
+  const loadMunicipios = async (provinciaId: string) => {
+    const { data, error } = await supabase
+      .from('municipios')
+      .select('*')
+      .eq('provincia_id', provinciaId)
+      .order('nome')
+    
+    if (error) console.error('❌ Erro:', error)
+    setMunicipios(data || [])
+  }
+
+  const checkSavedLocation = async () => {
+    const savedProvincia = localStorage.getItem('user_provincia')
+    const savedMunicipio = localStorage.getItem('user_municipio')
+    
+    if (savedProvincia && savedMunicipio) {
+      setSelectedProvincia(savedProvincia)
+      setSelectedMunicipio(savedMunicipio)
+      setSelectedProvinciaNome(savedProvincia)
+      setSelectedMunicipioNome(savedMunicipio)
+      loadPlates(savedProvincia, savedMunicipio)
+    } else {
+      setShowLocationModal(true)
+    }
+  }
+
+  const loadPlates = async (provinciaNome?: string, municipioNome?: string) => {
+    setLoading(true)
+    
+    let query = supabase
       .from('plates')
       .select('*, boss:bosses(*), riders:riders(*)')
       .eq('is_active', true)
+    
+    if (provinciaNome && municipioNome) {
+      query = query
+        .eq('provincia_nome', provinciaNome)
+        .eq('municipio_nome', municipioNome)
+    }
+    
+    const { data } = await query
     
     const platesWithStats = (data || []).map(plate => ({
       ...plate,
@@ -49,6 +113,13 @@ export default function Home() {
     setLoading(false)
   }
 
+  const loadFavorites = () => {
+    const savedFavorites = localStorage.getItem('favoritePlates')
+    if (savedFavorites) {
+      setFavorites(JSON.parse(savedFavorites))
+    }
+  }
+
   const toggleFavorite = (plateId: string) => {
     let newFavorites: string[]
     if (favorites.includes(plateId)) {
@@ -58,6 +129,34 @@ export default function Home() {
     }
     setFavorites(newFavorites)
     localStorage.setItem('favoritePlates', JSON.stringify(newFavorites))
+  }
+
+  const handleSelectProvincia = async (provincia: Provincia) => {
+    setSelectedProvincia(provincia.id)
+    setSelectedProvinciaNome(provincia.nome)
+    await loadMunicipios(provincia.id)
+    setStep('municipio')
+  }
+
+  const handleSelectMunicipio = async (municipio: Municipio) => {
+    setSelectedMunicipio(municipio.id)
+    setSelectedMunicipioNome(municipio.nome)
+    
+    localStorage.setItem('user_provincia', selectedProvinciaNome!)
+    localStorage.setItem('user_municipio', municipio.nome)
+    
+    setShowLocationModal(false)
+    setLoading(true)
+    await loadPlates(selectedProvinciaNome!, municipio.nome)
+  }
+
+  const handleBack = () => {
+    if (step === 'municipio') {
+      setStep('provincia')
+      setSelectedProvincia(null)
+      setSelectedProvinciaNome(null)
+      setMunicipios([])
+    }
   }
 
   const filteredPlates = plates.filter(plate =>
@@ -112,7 +211,7 @@ export default function Home() {
     }
   }
 
-  if (loading) {
+  if (loading && !showLocationModal) {
     return (
       <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, #fffbeb, #fff0f0)' }}>
         <div style={{ textAlign: 'center', padding: '20px' }}>
@@ -125,6 +224,188 @@ export default function Home() {
 
   return (
     <main style={styles.container}>
+{/* Modal de Seleção de Localização - Estilo iOS 26 */}
+{showLocationModal && (
+  <div style={{
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    zIndex: 9999,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backdropFilter: 'blur(10px)',
+    WebkitBackdropFilter: 'blur(10px)'
+  }}>
+    <div style={{
+      backgroundColor: 'white',
+      borderRadius: '32px',
+      width: '90%',
+      maxWidth: '450px',
+      maxHeight: '80%',
+      overflow: 'hidden',
+      boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)',
+      border: '1px solid rgba(255,255,255,0.2)',
+      animation: 'scaleIn 0.3s ease-out'
+    }}>
+      {/* Header do Modal */}
+      <div style={{ 
+        padding: '24px 20px',
+        textAlign: 'center',
+        borderBottom: '1px solid #f0f0f0',
+        backgroundColor: 'white'
+      }}>
+        <div style={{ 
+          width: '56px', 
+          height: '56px', 
+          backgroundColor: '#fef3c7', 
+          borderRadius: '28px', 
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'center', 
+          margin: '0 auto 12px' 
+        }}>
+          <MapPin size={28} color="#f59e0b" />
+        </div>
+        <h2 style={{ fontSize: '22px', fontWeight: 600, color: '#1e293b', marginBottom: '4px' }}>
+          {step === 'provincia' && 'Selecione sua Província'}
+          {step === 'municipio' && 'Selecione seu Município'}
+        </h2>
+        <p style={{ fontSize: '14px', color: '#64748b' }}>
+          {step === 'provincia' 
+            ? 'Escolha sua província para começar' 
+            : `Municípios de ${selectedProvinciaNome}`}
+        </p>
+      </div>
+
+      {/* Lista de Opções */}
+      <div style={{ 
+        padding: '12px 16px',
+        maxHeight: '50vh',
+        overflowY: 'auto',
+        scrollbarWidth: 'thin'
+      }}>
+        {step === 'provincia' && provincias.map((provincia) => (
+          <button
+            key={provincia.id}
+            onClick={() => handleSelectProvincia(provincia)}
+            style={{
+              width: '100%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '14px',
+              backgroundColor: '#f8fafc',
+              border: 'none',
+              borderRadius: '14px',
+              cursor: 'pointer',
+              transition: 'all 0.2s ease',
+              marginBottom: '8px'
+            }}
+            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#fef3c7'}
+            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div style={{ 
+                width: '44px', 
+                height: '44px', 
+                backgroundColor: '#f59e0b20', 
+                borderRadius: '12px', 
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'center' 
+              }}>
+                <MapPin size={20} color="#f59e0b" />
+              </div>
+              <div style={{ textAlign: 'left' }}>
+                <p style={{ fontWeight: 600, color: '#1e293b', fontSize: '15px' }}>{provincia.nome}</p>
+              </div>
+            </div>
+            <ChevronRight size={18} color="#cbd5e1" />
+          </button>
+        ))}
+
+        {step === 'municipio' && municipios.map((municipio) => (
+          <button
+            key={municipio.id}
+            onClick={() => handleSelectMunicipio(municipio)}
+            style={{
+              width: '100%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '14px',
+              backgroundColor: '#f8fafc',
+              border: 'none',
+              borderRadius: '14px',
+              cursor: 'pointer',
+              transition: 'all 0.2s ease',
+              marginBottom: '8px'
+            }}
+            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#dbeafe'}
+            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div style={{ 
+                width: '44px', 
+                height: '44px', 
+                backgroundColor: '#3b82f620', 
+                borderRadius: '12px', 
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'center' 
+              }}>
+                <Building2 size={20} color="#3b82f6" />
+              </div>
+              <div>
+                <p style={{ fontWeight: 600, color: '#1e293b', fontSize: '15px' }}>{municipio.nome}</p>
+              </div>
+            </div>
+            <ChevronRight size={18} color="#cbd5e1" />
+          </button>
+        ))}
+      </div>
+
+      {/* Footer com Botão Voltar */}
+      {step !== 'provincia' && (
+        <div style={{ 
+          padding: '16px 20px', 
+          borderTop: '1px solid #f0f0f0',
+          backgroundColor: 'white'
+        }}>
+          <button
+            onClick={handleBack}
+            style={{
+              width: '100%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '8px',
+              padding: '12px',
+              backgroundColor: '#f1f5f9',
+              border: 'none',
+              borderRadius: '12px',
+              cursor: 'pointer',
+              color: '#64748b',
+              fontWeight: 600,
+              fontSize: '14px',
+              transition: 'all 0.2s ease'
+            }}
+            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#e2e8f0'}
+            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#f1f5f9'}
+          >
+            <ArrowLeft size={16} />
+            Voltar
+          </button>
+        </div>
+      )}
+    </div>
+  </div>
+)}
+
       {/* Overlay do menu mobile */}
       <div style={styles.overlay} onClick={() => setMobileMenuOpen(false)} />
 
@@ -140,6 +421,12 @@ export default function Home() {
           </button>
         </div>
         <div style={{ padding: '16px' }}>
+          <div style={{ marginBottom: '16px', padding: '12px', backgroundColor: '#fef3c7', borderRadius: '12px' }}>
+            <p style={{ fontSize: '12px', color: '#d97706', marginBottom: '4px' }}>📍 Sua região</p>
+            <p style={{ fontSize: '14px', fontWeight: 'bold', color: '#92400e' }}>
+              {selectedMunicipioNome ? `${selectedMunicipioNome}, ${selectedProvinciaNome}` : 'Não selecionada'}
+            </p>
+          </div>
           <Link href="/login/motoqueiro">
             <button style={{ width: '100%', padding: '12px', textAlign: 'left', display: 'flex', alignItems: 'center', gap: '12px', border: 'none', background: 'none', cursor: 'pointer', borderRadius: '8px', marginBottom: '8px' }}>
               <User size={20} color="#6b7280" />
@@ -170,6 +457,23 @@ export default function Home() {
               <span>Admin</span>
             </button>
           </Link>
+          <button
+            onClick={() => {
+              setStep('provincia')
+              setSelectedProvincia(null)
+              setSelectedMunicipio(null)
+              setSelectedProvinciaNome(null)
+              setSelectedMunicipioNome(null)
+              setMunicipios([])
+              loadProvincias()
+              setShowLocationModal(true)
+              setMobileMenuOpen(false)
+            }}
+            style={{ width: '100%', padding: '12px', textAlign: 'left', display: 'flex', alignItems: 'center', gap: '12px', border: 'none', background: 'none', cursor: 'pointer', borderRadius: '8px', marginTop: '8px', borderTop: '1px solid #f0f0f0', paddingTop: '16px' }}
+          >
+            <MapPin size={20} color="#f59e0b" />
+            <span>Trocar região</span>
+          </button>
         </div>
       </div>
 
@@ -195,6 +499,34 @@ export default function Home() {
                 style={{ width: '100%', padding: '10px 12px 10px 36px', backgroundColor: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: '9999px', fontSize: '14px', outline: 'none' }}
               />
             </div>
+
+            {/* Badge da região */}
+            {selectedMunicipioNome && (
+              <div style={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: '6px', 
+                padding: '6px 12px', 
+                backgroundColor: '#fef3c7', 
+                borderRadius: '30px',
+                cursor: 'pointer'
+              }}
+              onClick={() => {
+                setStep('provincia')
+                setSelectedProvincia(null)
+                setSelectedMunicipio(null)
+                setSelectedProvinciaNome(null)
+                setSelectedMunicipioNome(null)
+                setMunicipios([])
+                loadProvincias()
+                setShowLocationModal(true)
+              }}
+              >
+                <MapPin size={14} color="#d97706" />
+                <span style={{ fontSize: '12px', color: '#92400e' }}>{selectedMunicipioNome}, {selectedProvinciaNome}</span>
+                <X size={12} color="#d97706" />
+              </div>
+            )}
 
             {/* Links de Acesso - Desktop */}
             {!isMobile && (
@@ -295,10 +627,24 @@ export default function Home() {
           </div>
         </div>
 
-        {filteredPlates.length === 0 && (
+        {filteredPlates.length === 0 && !loading && (
           <div style={{ textAlign: 'center', padding: '48px 20px' }}>
             <Bike size={64} color="#d1d5db" style={{ margin: '0 auto 16px' }} />
-            <p style={{ color: '#6b7280' }}>Nenhuma placa encontrada</p>
+            <p style={{ color: '#6b7280' }}>Nenhuma placa encontrada na sua região</p>
+            <button
+              onClick={() => {
+                setStep('provincia')
+                setSelectedProvincia(null)
+                setSelectedMunicipio(null)
+                setSelectedProvinciaNome(null)
+                setSelectedMunicipioNome(null)
+                loadProvincias()
+                setShowLocationModal(true)
+              }}
+              style={{ marginTop: '16px', padding: '10px 20px', backgroundColor: '#f59e0b', color: 'white', border: 'none', borderRadius: '30px', cursor: 'pointer' }}
+            >
+              Trocar região
+            </button>
           </div>
         )}
       </div>
@@ -315,10 +661,41 @@ export default function Home() {
           from { transform: rotate(0deg); }
           to { transform: rotate(360deg); }
         }
+          @keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+        @keyframes slideIn {
+          from {
+            opacity: 0;
+            transform: translateY(-20px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
         @media (max-width: 768px) {
           button:hover {
             transform: none;
           }
+        }
+        ::-webkit-scrollbar {
+          width: 4px;
+        }
+        ::-webkit-scrollbar-track {
+          background: #f1f1f1;
+          border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb {
+          background: #cbd5e1;
+          border-radius: 4px;
         }
       `}</style>
     </main>
@@ -328,15 +705,6 @@ export default function Home() {
 // Componente Card da Placa - Versão Responsiva
 function PlateCard({ plate, isFavorite, onToggleFavorite, isMobile }: any) {
   const [isHovered, setIsHovered] = useState(false)
-
-  const cardStyle: React.CSSProperties = {
-    backgroundColor: 'white',
-    borderRadius: '16px',
-    boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
-    border: '1px solid #f0f0f0',
-    overflow: 'hidden',
-    transition: 'all 0.3s ease'
-  }
 
   const buttonStyle: React.CSSProperties = {
     width: '100%',
@@ -355,20 +723,20 @@ function PlateCard({ plate, isFavorite, onToggleFavorite, isMobile }: any) {
   }
 
   return (
-    <div style={cardStyle}>
+    <div style={{ backgroundColor: 'white', borderRadius: '20px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)', border: '1px solid #f0f0f0', overflow: 'hidden', transition: 'all 0.3s ease' }}>
       <div style={{ padding: isMobile ? '14px' : '16px', borderBottom: '1px solid #f0f0f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? '10px' : '12px', flex: 1, minWidth: 0 }}>
           <div style={{ 
-            width: isMobile ? '36px' : '40px', 
-            height: isMobile ? '36px' : '40px', 
+            width: isMobile ? '44px' : '48px', 
+            height: isMobile ? '44px' : '48px', 
             background: 'linear-gradient(135deg, #f59e0b, #ea580c)', 
-            borderRadius: '50%', 
+            borderRadius: '14px', 
             display: 'flex', 
             alignItems: 'center', 
             justifyContent: 'center',
             flexShrink: 0
           }}>
-            <Bike size={isMobile ? 18 : 20} color="white" />
+            <Bike size={isMobile ? 20 : 22} color="white" />
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
@@ -390,7 +758,7 @@ function PlateCard({ plate, isFavorite, onToggleFavorite, isMobile }: any) {
           style={{ padding: '4px', background: 'none', border: 'none', borderRadius: '50%', cursor: 'pointer', flexShrink: 0 }}
           aria-label={isFavorite ? 'Remover dos favoritos' : 'Adicionar aos favoritos'}
         >
-          <Star size={isMobile ? 18 : 20} fill={isFavorite ? '#f59e0b' : 'none'} color={isFavorite ? '#f59e0b' : '#9ca3af'} />
+          <Star size={isMobile ? 20 : 22} fill={isFavorite ? '#f59e0b' : 'none'} color={isFavorite ? '#f59e0b' : '#9ca3af'} />
         </button>
       </div>
 
