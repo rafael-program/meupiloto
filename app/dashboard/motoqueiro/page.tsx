@@ -10,8 +10,6 @@ import {
 import dynamic from 'next/dynamic'
 import 'leaflet/dist/leaflet.css'
 
-
-// Importar componentes do mapa dinamicamente
 const MapContainer = dynamic(
   () => import('react-leaflet').then((mod) => mod.MapContainer),
   { ssr: false }
@@ -29,7 +27,6 @@ const Popup = dynamic(
   { ssr: false }
 )
 
-// Configurar ícones do Leaflet
 if (typeof window !== 'undefined') {
   const L = require('leaflet')
   delete (L.Icon.Default.prototype as any)._getIconUrl
@@ -61,6 +58,12 @@ export default function RiderDashboard() {
   const [isMobile, setIsMobile] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   
+  // States para alteração de preço
+  const [showPriceModal, setShowPriceModal] = useState(false)
+  const [selectedOrderForPrice, setSelectedOrderForPrice] = useState<any>(null)
+  const [newPrice, setNewPrice] = useState<number>(0)
+  const [priceReason, setPriceReason] = useState('')
+  
   // Pagamento states
   const [showPaymentModal, setShowPaymentModal] = useState(false)
   const [paymentMethod, setPaymentMethod] = useState<'unitel' | 'bank'>('unitel')
@@ -75,7 +78,6 @@ export default function RiderDashboard() {
   const [nextPaymentDate, setNextPaymentDate] = useState<Date | null>(null)
   const [paymentProgress, setPaymentProgress] = useState(0)
   
-  // Modal de conta congelada
   const [showFrozenModal, setShowFrozenModal] = useState(false)
   const [frozenReason, setFrozenReason] = useState('')
   
@@ -121,6 +123,52 @@ export default function RiderDashboard() {
       clearTimeout(timer)
     }
   }, [])
+
+  // FUNÇÃO PARA ALTERAR PREÇO
+  const handlePriceChange = async () => {
+    if (!selectedOrderForPrice || !rider) return
+    
+    if (newPrice <= 0) {
+      alert('⚠️ O preço deve ser maior que 0')
+      return
+    }
+
+    try {
+      const { error } = await supabase
+        .from('orders')
+        .update({ 
+          price: newPrice,
+          price_updated_by_rider: true,
+          original_price: selectedOrderForPrice.price,
+          price_change_reason: priceReason || 'Ajuste de preço',
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', selectedOrderForPrice.id)
+
+      if (error) throw error
+
+      setPendingOrders(prev => prev.map(o => 
+        o.id === selectedOrderForPrice.id 
+          ? { ...o, price: newPrice, price_updated_by_rider: true }
+          : o
+      ))
+
+      await addNotification(
+        '💰 Preço Atualizado', 
+        `Você ajustou o preço da corrida para ${newPrice.toLocaleString()} Kz`, 
+        'info'
+      )
+
+      setShowPriceModal(false)
+      setSelectedOrderForPrice(null)
+      setNewPrice(0)
+      setPriceReason('')
+      
+      alert('✅ Preço atualizado com sucesso! O cliente será notificado.')
+    } catch (err) {
+      alert('❌ Erro ao atualizar preço: ' + (err as Error).message)
+    }
+  }
 
   const loadPaymentHistory = async (riderId: string) => {
     const { data } = await supabase
@@ -305,14 +353,10 @@ export default function RiderDashboard() {
     const { data } = await supabase.from('riders').select('*, plate:plates(plate_number)').eq('id', riderId).single()
     if (data) { 
       setRider(data)
-      
-      // Verificar se está congelado
       if (data.is_frozen) {
         setIsOnline(false)
         setFrozenReason(data.frozen_reason || 'Pagamento da taxa semanal pendente')
         setShowFrozenModal(true)
-        
-        // Garantir que no banco também está offline
         if (data.is_online) {
           await supabase.from('riders').update({ is_online: false }).eq('id', riderId)
         }
@@ -363,14 +407,11 @@ export default function RiderDashboard() {
 
   const toggleOnline = async () => {
     if (!rider?.id) return
-    
-    // Verificar se está congelado
     if (rider.is_frozen) {
       setFrozenReason(rider.frozen_reason || 'Pagamento da taxa semanal pendente')
       setShowFrozenModal(true)
       return
     }
-    
     const newStatus = !isOnline
     const { error } = await supabase.from('riders').update({ is_online: newStatus }).eq('id', rider.id)
     if (!error) {
@@ -769,7 +810,6 @@ export default function RiderDashboard() {
             </div>
           </div>
 
-          {/* Status de Pagamento com Cronômetro - Só mostra se NÃO estiver congelado */}
           {!rider?.is_frozen && (
             <div style={{ 
               marginTop: '16px', 
@@ -833,7 +873,6 @@ export default function RiderDashboard() {
                 )}
               </div>
 
-              {/* Barra de progresso e cronômetro - só mostra se tem pagamento aprovado */}
               {paymentHistory.some(p => p.status === 'approved') && (
                 <div>
                   <div style={{ marginBottom: '12px' }}>
@@ -1003,12 +1042,69 @@ export default function RiderDashboard() {
                     </p>
                   </div>
                   
-                  <div style={{ display: 'flex', gap: '12px' }}>
-                    <button onClick={() => acceptOrder(order)} disabled={!isOnline || rider?.is_frozen} style={{ flex: 1, background: (isOnline && !rider?.is_frozen) ? 'linear-gradient(135deg, #f59e0b, #ea580c)' : '#d1d5db', color: 'white', padding: '14px', border: 'none', borderRadius: '12px', fontWeight: 'bold', cursor: (isOnline && !rider?.is_frozen) ? 'pointer' : 'not-allowed', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                  <div style={{ display: 'flex', gap: '12px', flexDirection: isMobile ? 'column' : 'row' }}>
+                    <button 
+                      onClick={() => {
+                        setSelectedOrderForPrice(order)
+                        setNewPrice(order.price)
+                        setShowPriceModal(true)
+                      }} 
+                      disabled={!isOnline || rider?.is_frozen} 
+                      style={{ 
+                        flex: 1,
+                        background: (isOnline && !rider?.is_frozen) ? 'linear-gradient(135deg, #3b82f6, #2563eb)' : '#d1d5db', 
+                        color: 'white', 
+                        padding: '14px', 
+                        border: 'none', 
+                        borderRadius: '12px', 
+                        fontWeight: 'bold', 
+                        cursor: (isOnline && !rider?.is_frozen) ? 'pointer' : 'not-allowed', 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        justifyContent: 'center', 
+                        gap: '8px' 
+                      }}
+                    >
+                      <Edit size={18} /> Alterar Preço
+                    </button>
+                    <button 
+                      onClick={() => acceptOrder(order)} 
+                      disabled={!isOnline || rider?.is_frozen} 
+                      style={{ 
+                        flex: 1, 
+                        background: (isOnline && !rider?.is_frozen) ? 'linear-gradient(135deg, #10b981, #059669)' : '#d1d5db', 
+                        color: 'white', 
+                        padding: '14px', 
+                        border: 'none', 
+                        borderRadius: '12px', 
+                        fontWeight: 'bold', 
+                        cursor: (isOnline && !rider?.is_frozen) ? 'pointer' : 'not-allowed', 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        justifyContent: 'center', 
+                        gap: '8px' 
+                      }}
+                    >
                       <CheckCircle size={18} /> Aceitar
                     </button>
-                    <button onClick={() => cancelOrder(order)} style={{ flex: 1, background: '#ef4444', color: 'white', padding: '14px', border: 'none', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
-                      <XCircle size={18} /> Recusar
+                    <button 
+                      onClick={() => cancelOrder(order)} 
+                      style={{ 
+                        flex: 0.5, 
+                        background: '#ef4444', 
+                        color: 'white', 
+                        padding: '14px', 
+                        border: 'none', 
+                        borderRadius: '12px', 
+                        fontWeight: 'bold', 
+                        cursor: 'pointer', 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        justifyContent: 'center', 
+                        gap: '8px' 
+                      }}
+                    >
+                      <XCircle size={18} />
                     </button>
                   </div>
                 </div>
@@ -1064,7 +1160,200 @@ export default function RiderDashboard() {
         )}
       </div>
 
-      {/* Modal de Conta Congelada */}
+      {/* MODAL DE ALTERAÇÃO DE PREÇO */}
+      {showPriceModal && selectedOrderForPrice && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.7)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 10000,
+          padding: '20px',
+          backdropFilter: 'blur(4px)'
+        }}>
+          <div style={{
+            backgroundColor: 'white',
+            borderRadius: '24px',
+            maxWidth: '480px',
+            width: '100%',
+            maxHeight: '90vh',
+            overflow: 'auto',
+            animation: 'slideIn 0.3s ease-out'
+          }}>
+            <div style={{
+              background: 'linear-gradient(135deg, #f59e0b, #ea580c)',
+              padding: '24px',
+              borderRadius: '24px 24px 0 0',
+              color: 'white'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <h3 style={{ fontWeight: 'bold', fontSize: '20px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Edit size={22} />
+                    Alterar Preço
+                  </h3>
+                  <p style={{ fontSize: '13px', opacity: 0.9, marginTop: '4px' }}>
+                    {selectedOrderForPrice.customer_name || 'Cliente'} - Valor atual: {selectedOrderForPrice.price.toLocaleString()} Kz
+                  </p>
+                </div>
+                <button 
+                  onClick={() => {
+                    setShowPriceModal(false)
+                    setSelectedOrderForPrice(null)
+                    setNewPrice(0)
+                    setPriceReason('')
+                  }} 
+                  style={{ 
+                    background: 'rgba(255,255,255,0.2)', 
+                    border: 'none', 
+                    color: 'white', 
+                    width: '36px', 
+                    height: '36px', 
+                    borderRadius: '50%', 
+                    cursor: 'pointer', 
+                    fontSize: '20px' 
+                  }}
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+
+            <div style={{ padding: '24px' }}>
+              <div style={{ marginBottom: '20px' }}>
+                <label style={{ display: 'block', fontSize: '14px', fontWeight: 600, marginBottom: '8px', color: '#374151' }}>
+                  💰 Novo Preço (Kz)
+                </label>
+                <div style={{ position: 'relative' }}>
+                  <span style={{ 
+                    position: 'absolute', 
+                    left: '14px', 
+                    top: '50%', 
+                    transform: 'translateY(-50%)', 
+                    fontWeight: 600, 
+                    color: '#6b7280' 
+                  }}>
+                    Kz
+                  </span>
+                  <input
+                    type="number"
+                    value={newPrice}
+                    onChange={(e) => setNewPrice(parseInt(e.target.value) || 0)}
+                    min="100"
+                    step="50"
+                    placeholder="Digite o novo valor"
+                    style={{
+                      width: '100%',
+                      padding: '14px 14px 14px 48px',
+                      border: '1px solid #e5e7eb',
+                      borderRadius: '12px',
+                      fontSize: '18px',
+                      fontWeight: 'bold',
+                      outline: 'none',
+                      transition: 'border-color 0.3s'
+                    }}
+                    onFocus={(e) => e.target.style.borderColor = '#f59e0b'}
+                    onBlur={(e) => e.target.style.borderColor = '#e5e7eb'}
+                    autoFocus
+                  />
+                </div>
+                <p style={{ fontSize: '12px', color: '#9ca3af', marginTop: '8px' }}>
+                  💡 Sugestão: {Math.round(selectedOrderForPrice.price * 0.9).toLocaleString()} - {Math.round(selectedOrderForPrice.price * 1.2).toLocaleString()} Kz
+                </p>
+              </div>
+
+              <div style={{ marginBottom: '24px' }}>
+                <label style={{ display: 'block', fontSize: '14px', fontWeight: 600, marginBottom: '8px', color: '#374151' }}>
+                  📝 Motivo da Alteração (opcional)
+                </label>
+                <input
+                  type="text"
+                  value={priceReason}
+                  onChange={(e) => setPriceReason(e.target.value)}
+                  placeholder="Ex: Trânsito, distância maior, etc."
+                  style={{
+                    width: '100%',
+                    padding: '12px',
+                    border: '1px solid #e5e7eb',
+                    borderRadius: '12px',
+                    fontSize: '14px',
+                    outline: 'none',
+                    transition: 'border-color 0.3s'
+                  }}
+                  onFocus={(e) => e.target.style.borderColor = '#f59e0b'}
+                  onBlur={(e) => e.target.style.borderColor = '#e5e7eb'}
+                />
+              </div>
+
+              <div style={{ 
+                backgroundColor: '#fef3c7', 
+                padding: '12px 16px', 
+                borderRadius: '12px', 
+                marginBottom: '20px',
+                borderLeft: '4px solid #f59e0b'
+              }}>
+                <p style={{ fontSize: '12px', color: '#92400e', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <AlertCircle size={14} />
+                  Ao alterar o preço, o cliente receberá uma notificação com o novo valor
+                </p>
+              </div>
+
+              <div style={{ display: 'flex', gap: '12px' }}>
+                <button
+                  onClick={() => {
+                    setShowPriceModal(false)
+                    setSelectedOrderForPrice(null)
+                    setNewPrice(0)
+                    setPriceReason('')
+                  }}
+                  style={{
+                    flex: 1,
+                    padding: '14px',
+                    background: '#f3f4f6',
+                    color: '#374151',
+                    border: 'none',
+                    borderRadius: '12px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    fontSize: '14px'
+                  }}
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handlePriceChange}
+                  disabled={newPrice <= 0}
+                  style={{
+                    flex: 1,
+                    padding: '14px',
+                    background: newPrice > 0 ? 'linear-gradient(135deg, #f59e0b, #ea580c)' : '#d1d5db',
+                    color: newPrice > 0 ? 'white' : '#6b7280',
+                    border: 'none',
+                    borderRadius: '12px',
+                    fontWeight: 600,
+                    cursor: newPrice > 0 ? 'pointer' : 'not-allowed',
+                    fontSize: '14px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px'
+                  }}
+                >
+                  <CheckCircle size={18} />
+                  Confirmar Alteração
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE CONTA CONGELADA */}
       {showFrozenModal && (
         <div style={{
           position: 'fixed',
@@ -1230,7 +1519,7 @@ export default function RiderDashboard() {
         </div>
       )}
 
-      {/* Modal de Editar Perfil */}
+      {/* MODAL DE EDIÇÃO DE PERFIL */}
       {showEditProfile && !rider?.is_frozen && (
         <div style={{
           position: 'fixed',
@@ -1346,7 +1635,7 @@ export default function RiderDashboard() {
         </div>
       )}
 
-      {/* Modal de Pagamento */}
+      {/* MODAL DE PAGAMENTO */}
       {showPaymentModal && (
         <div style={{
           position: 'fixed',
@@ -1583,7 +1872,7 @@ export default function RiderDashboard() {
         </div>
       )}
 
-      {/* Modal de Histórico de Pagamentos */}
+      {/* MODAL DE HISTÓRICO DE PAGAMENTOS */}
       {showPaymentHistory && (
         <div style={{
           position: 'fixed',
@@ -1751,7 +2040,6 @@ export default function RiderDashboard() {
   )
 }
 
-// Funções auxiliares
 function isNotificationSupported() {
   return typeof window !== 'undefined' && 'Notification' in window
 }

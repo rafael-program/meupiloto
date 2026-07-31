@@ -11,7 +11,6 @@ import {
 } from 'lucide-react'
 import 'leaflet/dist/leaflet.css'
 
-// Importar componentes do mapa dinamicamente
 const MapContainer = dynamic(
   () => import('react-leaflet').then((mod) => mod.MapContainer),
   { 
@@ -86,6 +85,21 @@ export default function PlateRiders() {
   const [hoverRating, setHoverRating] = useState(0)
   const [expiresAt, setExpiresAt] = useState<Date | null>(null)
 
+  // State para notificação de alteração de preço
+  const [priceUpdateNotification, setPriceUpdateNotification] = useState<{ 
+    show: boolean; 
+    newPrice: number; 
+    riderName: string; 
+    reason: string;
+    originalPrice: number;
+  }>({ 
+    show: false, 
+    newPrice: 0, 
+    riderName: '',
+    reason: '',
+    originalPrice: 0
+  })
+
   useEffect(() => {
     const checkMobile = () => {
       setIsMobile(window.innerWidth < 768)
@@ -100,35 +114,19 @@ export default function PlateRiders() {
     loadPriceConfig()
   }, [id])
 
-  // Carregar configuração de preços
   const loadPriceConfig = async () => {
     const { data } = await supabase.from('price_config').select('*').single()
     if (data) setPriceConfig(data)
   }
 
-  // Calcular distância baseada nos endereços (simulação)
-  const calculateDistanceFromAddresses = () => {
+  const calculateDistanceFromAddresses = async () => {
     if (!formData.pickupAddress || !formData.dropoffAddress) return
     
     setCalculatingPrice(true)
     
-    // Simular cálculo de distância baseada no comprimento do texto
-    const textLength = formData.pickupAddress.length + formData.dropoffAddress.length
-    let estimatedKm = 1.8
-    
-    if (textLength > 100) {
-      estimatedKm = 15
-    } else if (textLength > 70) {
-      estimatedKm = 10
-    } else if (textLength > 50) {
-      estimatedKm = 5
-    } else if (textLength > 30) {
-      estimatedKm = 2.5
-    } else {
-      estimatedKm = 1.8
-    }
-    
+    const estimatedKm = Math.min(20, Math.max(0.5, (formData.pickupAddress.length + formData.dropoffAddress.length) / 50))
     const roundedKm = Math.round(estimatedKm * 10) / 10
+    
     setCalculatedDistance(roundedKm)
     
     if (priceConfig) {
@@ -145,19 +143,18 @@ export default function PlateRiders() {
     setCalculatingPrice(false)
   }
 
-  // Debounce para calcular distância quando endereços mudam
   useEffect(() => {
     const timer = setTimeout(() => {
-      if (formData.pickupAddress && formData.dropoffAddress && priceConfig) {
+      if (formData.pickupAddress && formData.dropoffAddress) {
         calculateDistanceFromAddresses()
       } else {
         setCalculatedDistance(null)
       }
-    }, 800)
+    }, 1000)
     return () => clearTimeout(timer)
   }, [formData.pickupAddress, formData.dropoffAddress, priceConfig])
 
-  // Carregar pedido ativo do localStorage ao iniciar
+  // Carregar pedido ativo do localStorage
   useEffect(() => {
     const savedOrderId = localStorage.getItem('active_order_id')
     const savedOrderStatus = localStorage.getItem('active_order_status')
@@ -170,6 +167,7 @@ export default function PlateRiders() {
     const savedCustomerPhone = localStorage.getItem('customer_phone')
     const savedExpiresAt = localStorage.getItem('order_expires_at')
     const savedTimeLeft = localStorage.getItem('order_time_left')
+    const savedRiderId = localStorage.getItem('active_rider_id')
     
     if (savedOrderId && savedOrderStatus === 'accepted') {
       setOrderId(savedOrderId)
@@ -182,6 +180,12 @@ export default function PlateRiders() {
       if (savedPrice) setFormData(prev => ({ ...prev, price: parseInt(savedPrice) }))
       if (savedCustomerName) setFormData(prev => ({ ...prev, customerName: savedCustomerName }))
       if (savedCustomerPhone) setFormData(prev => ({ ...prev, customerPhone: savedCustomerPhone }))
+      if (savedRiderId) {
+        // Carregar dados do rider
+        supabase.from('riders').select('*').eq('id', savedRiderId).single().then(({ data }) => {
+          if (data) setSelectedRider(data)
+        })
+      }
     } else if (savedOrderId && savedOrderStatus === 'pending') {
       setOrderId(savedOrderId)
       setOrderStatus('pending')
@@ -202,12 +206,13 @@ export default function PlateRiders() {
     }
   }, [])
 
-  // Salvar estado no localStorage quando mudar
+  // Salvar estado no localStorage
   useEffect(() => {
     if (orderId) {
       localStorage.setItem('active_order_id', orderId)
       localStorage.setItem('active_order_status', orderStatus)
       if (selectedRider?.name) localStorage.setItem('active_order_rider', selectedRider.name)
+      if (selectedRider?.id) localStorage.setItem('active_rider_id', selectedRider.id)
       if (customerLocation) localStorage.setItem('customer_location', JSON.stringify(customerLocation))
       if (formData.pickupAddress) localStorage.setItem('pickup_address', formData.pickupAddress)
       if (formData.dropoffAddress) localStorage.setItem('dropoff_address', formData.dropoffAddress)
@@ -220,6 +225,7 @@ export default function PlateRiders() {
       localStorage.removeItem('active_order_id')
       localStorage.removeItem('active_order_status')
       localStorage.removeItem('active_order_rider')
+      localStorage.removeItem('active_rider_id')
       localStorage.removeItem('order_expires_at')
       localStorage.removeItem('order_time_left')
     }
@@ -254,7 +260,7 @@ export default function PlateRiders() {
     }
   }, [showWaitingModal, timeLeft, orderStatus])
 
-  // SUBSCRIÇÃO EM TEMPO REAL
+  // SUBSCRIÇÃO PARA ATUALIZAÇÕES DO PEDIDO
   useEffect(() => {
     if (!orderId) return
 
@@ -263,7 +269,7 @@ export default function PlateRiders() {
     const fetchCurrentOrder = async () => {
       const { data } = await supabase
         .from('orders')
-        .select('status, rider_location, expires_at')
+        .select('status, rider_location, expires_at, price, price_updated_by_rider, original_price, price_change_reason')
         .eq('id', orderId)
         .single()
       
@@ -291,6 +297,18 @@ export default function PlateRiders() {
           setShowMap(false)
           setShowThankYouModal(true)
         }
+        
+        // Verificar se o preço foi alterado
+        if (data.price_updated_by_rider && data.price !== formData.price) {
+          setPriceUpdateNotification({
+            show: true,
+            newPrice: data.price,
+            riderName: selectedRider?.name || 'Motoqueiro',
+            reason: data.price_change_reason || 'Ajuste de preço',
+            originalPrice: data.original_price || formData.price
+          })
+          setFormData(prev => ({ ...prev, price: data.price }))
+        }
       }
     }
     
@@ -307,39 +325,60 @@ export default function PlateRiders() {
           filter: `id=eq.${orderId}`
         },
         (payload) => {
-          const newStatus = payload.new.status
-          const newRiderLocation = payload.new.rider_location
+          const newData = payload.new as any
+          const oldData = payload.old as any
           
           console.log('🔄 Pedido atualizado:', { 
             id: orderId, 
-            novoStatus: newStatus, 
-            statusAnterior: orderStatus 
+            novoStatus: newData.status, 
+            statusAnterior: orderStatus,
+            priceChanged: newData.price !== oldData.price
           })
           
-          setOrderStatus(newStatus)
-          localStorage.setItem('active_order_status', newStatus)
+          // Verificar alteração de preço
+          if (newData.price_updated_by_rider && newData.price !== oldData.price) {
+            console.log('💰 Preço alterado pelo motoqueiro!')
+            setPriceUpdateNotification({
+              show: true,
+              newPrice: newData.price,
+              riderName: selectedRider?.name || 'Motoqueiro',
+              reason: newData.price_change_reason || 'Ajuste de preço',
+              originalPrice: oldData.price || formData.price
+            })
+            setFormData(prev => ({ ...prev, price: newData.price }))
+            
+            // Mostrar alerta para o cliente
+            alert(`💰 O motoqueiro ${selectedRider?.name || 'Motoqueiro'} alterou o preço da corrida!\n\n` +
+              `Preço anterior: ${(oldData.price || 0).toLocaleString()} Kz\n` +
+              `Novo preço: ${newData.price.toLocaleString()} Kz\n` +
+              `Motivo: ${newData.price_change_reason || 'Ajuste de preço'}\n\n` +
+              `O novo valor já foi atualizado.`)
+          }
           
-          if (newStatus === 'accepted') {
+          setOrderStatus(newData.status)
+          localStorage.setItem('active_order_status', newData.status)
+          
+          if (newData.status === 'accepted') {
             console.log('✅ Pedido ACEITO! Fechando modal e abrindo mapa...')
             setShowWaitingModal(false)
             setShowMap(true)
             
-            if (newRiderLocation) {
+            if (newData.rider_location) {
               try {
-                const location = JSON.parse(newRiderLocation)
+                const location = JSON.parse(newData.rider_location)
                 setRiderLocation(location)
               } catch (e) {
                 console.error('Erro ao parsear localização:', e)
               }
             }
-          } else if (newStatus === 'cancelled') {
+          } else if (newData.status === 'cancelled') {
             console.log('❌ Pedido CANCELADO!')
             setShowWaitingModal(false)
             alert('❌ O pedido foi cancelado pelo motoqueiro.')
             setOrderId(null)
             localStorage.removeItem('active_order_id')
             localStorage.removeItem('active_order_status')
-          } else if (newStatus === 'completed') {
+          } else if (newData.status === 'completed') {
             console.log('🎉 Pedido CONCLUÍDO! Mostrando modal de agradecimento...')
             setShowMap(false)
             setShowThankYouModal(true)
@@ -354,7 +393,7 @@ export default function PlateRiders() {
       console.log('📡 Removendo subscription para pedido:', orderId)
       subscription.unsubscribe()
     }
-  }, [orderId, orderStatus, expiresAt])
+  }, [orderId, orderStatus, expiresAt, selectedRider])
 
   // Subscription para localização do motoqueiro
   useEffect(() => {
@@ -470,7 +509,9 @@ export default function PlateRiders() {
         notification_sent: false,
         created_at: new Date().toISOString(),
         customer_lat: customerLat,
-        customer_lng: customerLng
+        customer_lng: customerLng,
+        price_updated_by_rider: false,
+        original_price: formData.price
       })
       .select()
       .single()
@@ -511,6 +552,7 @@ export default function PlateRiders() {
       localStorage.removeItem('active_order_id')
       localStorage.removeItem('active_order_status')
       localStorage.removeItem('active_order_rider')
+      localStorage.removeItem('active_rider_id')
       localStorage.removeItem('order_expires_at')
       localStorage.removeItem('order_time_left')
       
@@ -926,6 +968,11 @@ export default function PlateRiders() {
                   <div>
                     <p style={{ fontSize: '11px', color: '#6b7280', marginBottom: '4px' }}>💰 Valor</p>
                     <p style={{ fontSize: isMobile ? '18px' : '20px', fontWeight: 'bold', color: '#f59e0b' }}>{formData.price?.toLocaleString()} Kz</p>
+                    {priceUpdateNotification.show && priceUpdateNotification.newPrice !== priceUpdateNotification.originalPrice && (
+                      <p style={{ fontSize: '10px', color: '#dc2626', textDecoration: 'line-through' }}>
+                        Antes: {priceUpdateNotification.originalPrice.toLocaleString()} Kz
+                      </p>
+                    )}
                   </div>
                   {showCallButtons && (
                     <div style={{ display: 'flex', gap: '8px' }}>
@@ -1041,16 +1088,76 @@ export default function PlateRiders() {
       <div style={styles.modalOverlay}>
         <div style={styles.waitingModalContent}>
           <div style={{ marginBottom: '20px' }}>
-            <div style={{ width: isMobile ? '60px' : '80px', height: isMobile ? '60px' : '80px', background: 'linear-gradient(135deg, #f59e0b, #ea580c)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', animation: 'pulse 1.5s infinite' }}>
-              <Clock size={isMobile ? 32 : 40} color="white" />
+            <div style={{ 
+              width: isMobile ? '80px' : '100px', 
+              height: isMobile ? '80px' : '100px', 
+              background: 'linear-gradient(135deg, #f59e0b, #ea580c)', 
+              borderRadius: '50%', 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'center', 
+              margin: '0 auto 16px',
+              animation: 'pulse 1.5s infinite'
+            }}>
+              {selectedRider?.photo_url ? (
+                <img 
+                  src={selectedRider.photo_url} 
+                  alt={selectedRider.name} 
+                  style={{ 
+                    width: '100%', 
+                    height: '100%', 
+                    borderRadius: '50%', 
+                    objectFit: 'cover',
+                    border: '3px solid white'
+                  }} 
+                />
+              ) : (
+                <User size={isMobile ? 32 : 40} color="white" />
+              )}
             </div>
-            <h2 style={{ fontSize: isMobile ? '20px' : '24px', fontWeight: 'bold', marginBottom: '8px', color: '#111827' }}>Aguardando Motoqueiro</h2>
-            <p style={{ color: '#6b7280', marginBottom: '16px', fontSize: isMobile ? '13px' : '14px' }}>
-              {selectedRider?.name} foi notificado sobre seu pedido
+            
+            <h2 style={{ fontSize: isMobile ? '20px' : '24px', fontWeight: 'bold', color: '#111827' }}>
+              {selectedRider?.name || 'Motoqueiro'} está a caminho! 🏍️
+            </h2>
+            
+            <p style={{ color: '#6b7280', marginTop: '8px', fontSize: isMobile ? '14px' : '16px' }}>
+              Você vai pagar <strong style={{ color: '#f59e0b', fontSize: isMobile ? '18px' : '20px' }}>
+                {formData.price.toLocaleString()} Kz
+              </strong>
             </p>
+            
+            {priceUpdateNotification.show && (
+              <div style={{ 
+                marginTop: '12px', 
+                padding: '12px', 
+                backgroundColor: '#fef3c7', 
+                borderRadius: '12px',
+                border: '1px solid #fde68a'
+              }}>
+                <p style={{ fontSize: '13px', color: '#92400e' }}>
+                  <AlertCircle size={14} style={{ display: 'inline', marginRight: '6px' }} />
+                  <strong>Preço atualizado:</strong> {priceUpdateNotification.newPrice.toLocaleString()} Kz
+                  {priceUpdateNotification.originalPrice > 0 && priceUpdateNotification.originalPrice !== priceUpdateNotification.newPrice && (
+                    <span style={{ display: 'block', fontSize: '11px', color: '#dc2626', textDecoration: 'line-through' }}>
+                      Antes: {priceUpdateNotification.originalPrice.toLocaleString()} Kz
+                    </span>
+                  )}
+                  {priceUpdateNotification.reason && (
+                    <span style={{ display: 'block', fontSize: '12px', marginTop: '4px', color: '#78350f' }}>
+                      📝 Motivo: {priceUpdateNotification.reason}
+                    </span>
+                  )}
+                </p>
+              </div>
+            )}
           </div>
 
-          <div style={{ position: 'relative', width: isMobile ? '120px' : '140px', height: isMobile ? '120px' : '140px', margin: '0 auto 20px' }}>
+          <div style={{ 
+            position: 'relative', 
+            width: isMobile ? '120px' : '140px', 
+            height: isMobile ? '120px' : '140px', 
+            margin: '0 auto 20px' 
+          }}>
             <svg style={{ transform: 'rotate(-90deg)', width: '100%', height: '100%' }}>
               <circle cx="50%" cy="50%" r="45%" fill="none" stroke="#e5e7eb" strokeWidth="8" />
               <circle
@@ -1058,42 +1165,84 @@ export default function PlateRiders() {
                 cy="50%"
                 r="45%"
                 fill="none"
-                stroke="#f59e0b"
+                stroke={timeLeft < 300 ? '#ef4444' : '#f59e0b'}
                 strokeWidth="8"
                 strokeDasharray={`${2 * Math.PI * 45}px`}
-                strokeDashoffset={`${2 * Math.PI * 45 * (1 - progressPercent / 100)}px`}
+                strokeDashoffset={`${2 * Math.PI * 45 * (1 - (timeLeft / 900))}px`}
                 style={{ transition: 'stroke-dashoffset 1s linear' }}
               />
             </svg>
-            <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', textAlign: 'center' }}>
-              <p style={{ fontSize: isMobile ? '24px' : '28px', fontWeight: 'bold', color: '#f59e0b', fontFamily: 'monospace' }}>
+            <div style={{ 
+              position: 'absolute', 
+              top: '50%', 
+              left: '50%', 
+              transform: 'translate(-50%, -50%)', 
+              textAlign: 'center' 
+            }}>
+              <p style={{ fontSize: isMobile ? '28px' : '32px', fontWeight: 'bold', color: timeLeft < 300 ? '#ef4444' : '#f59e0b', fontFamily: 'monospace' }}>
                 {formatTime(timeLeft)}
               </p>
+              <p style={{ fontSize: '10px', color: '#6b7280', marginTop: '4px' }}>tempo restante</p>
             </div>
           </div>
 
-          <div style={{ backgroundColor: '#fef3c7', borderRadius: '16px', padding: '16px', marginBottom: '20px' }}>
-            <p style={{ fontSize: '12px', color: '#92400e', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'center' }}>
-              <AlertCircle size={14} /> Aguardando resposta do motoqueiro
+          <div style={{ 
+            backgroundColor: timeLeft < 300 ? '#fee2e2' : '#fef3c7', 
+            borderRadius: '16px', 
+            padding: '16px', 
+            marginBottom: '20px' 
+          }}>
+            <p style={{ fontSize: '13px', color: timeLeft < 300 ? '#991b1b' : '#92400e', display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'center' }}>
+              <Clock size={16} />
+              {timeLeft < 300 ? '⏰ Tempo quase esgotado!' : 'Aguardando confirmação do motoqueiro'}
             </p>
-            <div style={{ height: '4px', backgroundColor: '#fde68a', borderRadius: '2px', overflow: 'hidden' }}>
-              <div style={{ width: `${progressPercent}%`, height: '100%', backgroundColor: '#f59e0b', transition: 'width 1s linear' }} />
+            <div style={{ 
+              height: '4px', 
+              backgroundColor: timeLeft < 300 ? '#fecaca' : '#fde68a', 
+              borderRadius: '2px', 
+              overflow: 'hidden',
+              marginTop: '8px'
+            }}>
+              <div style={{ 
+                width: `${(timeLeft / 900) * 100}%`, 
+                height: '100%', 
+                backgroundColor: timeLeft < 300 ? '#ef4444' : '#f59e0b',
+                transition: 'width 1s linear' 
+              }} />
             </div>
           </div>
 
           <button 
             onClick={() => {
-              setShowWaitingModal(false)
-              setOrderId(null)
-              localStorage.removeItem('active_order_id')
-              localStorage.removeItem('active_order_status')
-              localStorage.removeItem('order_expires_at')
-              localStorage.removeItem('order_time_left')
+              if (confirm('Tem certeza que deseja cancelar o pedido?')) {
+                setShowWaitingModal(false)
+                setOrderId(null)
+                localStorage.removeItem('active_order_id')
+                localStorage.removeItem('active_order_status')
+                localStorage.removeItem('active_order_rider')
+                localStorage.removeItem('active_rider_id')
+                localStorage.removeItem('order_expires_at')
+                localStorage.removeItem('order_time_left')
+              }
             }}
-            style={{ width: '100%', backgroundColor: '#ef4444', color: 'white', padding: '14px', borderRadius: '12px', border: 'none', fontWeight: 'bold', cursor: 'pointer', fontSize: isMobile ? '14px' : '16px' }}
+            style={{ 
+              width: '100%', 
+              backgroundColor: '#ef4444', 
+              color: 'white', 
+              padding: '14px', 
+              borderRadius: '12px', 
+              border: 'none', 
+              fontWeight: 'bold', 
+              cursor: 'pointer', 
+              fontSize: isMobile ? '14px' : '16px' 
+            }}
           >
             Cancelar Pedido
           </button>
+          
+          <p style={{ fontSize: '10px', color: '#9ca3af', marginTop: '12px' }}>
+            ⏱️ O pedido expira em {formatTime(timeLeft)}. Se o motoqueiro não aceitar, você pode tentar novamente.
+          </p>
         </div>
       </div>
     )
@@ -1548,6 +1697,29 @@ export default function PlateRiders() {
                   <CreditCard size={12} />
                   💡 Você também pode digitar um valor personalizado acima
                 </p>
+              </div>
+
+              {/* Motoqueiro selecionado */}
+              <div style={{ 
+                backgroundColor: '#eff6ff', 
+                padding: '14px', 
+                borderRadius: '14px', 
+                marginTop: '4px',
+                border: '1px solid #bfdbfe',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px'
+              }}>
+                <Bike size={20} color="#2563eb" />
+                <div>
+                  <p style={{ fontSize: '12px', color: '#1e40af' }}>Motoqueiro selecionado</p>
+                  <p style={{ fontSize: '15px', fontWeight: 'bold', color: '#1e3a8a' }}>{selectedRider.name}</p>
+                  {selectedRider.phone && (
+                    <p style={{ fontSize: '11px', color: '#3b82f6' }}>
+                      📞 {selectedRider.phone}
+                    </p>
+                  )}
+                </div>
               </div>
 
               <div style={{ 
