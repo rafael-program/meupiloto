@@ -7,7 +7,7 @@ import {
   ArrowLeft, Phone, User, XCircle, Navigation, Bike, Shield, 
   Wifi, Clock, CheckCircle, Star, Heart, Menu, MapPin, 
   DollarSign, Calendar, Send, CreditCard, AlertCircle, Sun, Moon, 
-  ClipboardList, Calculator, TrendingUp
+  ClipboardList, Calculator, TrendingUp, RefreshCw
 } from 'lucide-react'
 import 'leaflet/dist/leaflet.css'
 
@@ -84,6 +84,7 @@ export default function PlateRiders() {
   const [rating, setRating] = useState(0)
   const [hoverRating, setHoverRating] = useState(0)
   const [expiresAt, setExpiresAt] = useState<Date | null>(null)
+  const [isCheckingPrice, setIsCheckingPrice] = useState(false)
 
   // State para notificação de alteração de preço
   const [priceUpdateNotification, setPriceUpdateNotification] = useState<{ 
@@ -92,12 +93,14 @@ export default function PlateRiders() {
     riderName: string; 
     reason: string;
     originalPrice: number;
+    timestamp: string;
   }>({ 
     show: false, 
     newPrice: 0, 
     riderName: '',
     reason: '',
-    originalPrice: 0
+    originalPrice: 0,
+    timestamp: ''
   })
 
   useEffect(() => {
@@ -168,6 +171,7 @@ export default function PlateRiders() {
     const savedExpiresAt = localStorage.getItem('order_expires_at')
     const savedTimeLeft = localStorage.getItem('order_time_left')
     const savedRiderId = localStorage.getItem('active_rider_id')
+    const savedPriceNotification = localStorage.getItem('price_notification')
     
     if (savedOrderId && savedOrderStatus === 'accepted') {
       setOrderId(savedOrderId)
@@ -181,10 +185,15 @@ export default function PlateRiders() {
       if (savedCustomerName) setFormData(prev => ({ ...prev, customerName: savedCustomerName }))
       if (savedCustomerPhone) setFormData(prev => ({ ...prev, customerPhone: savedCustomerPhone }))
       if (savedRiderId) {
-        // Carregar dados do rider
         supabase.from('riders').select('*').eq('id', savedRiderId).single().then(({ data }) => {
           if (data) setSelectedRider(data)
         })
+      }
+      if (savedPriceNotification) {
+        try {
+          const notification = JSON.parse(savedPriceNotification)
+          setPriceUpdateNotification(notification)
+        } catch (e) {}
       }
     } else if (savedOrderId && savedOrderStatus === 'pending') {
       setOrderId(savedOrderId)
@@ -200,6 +209,14 @@ export default function PlateRiders() {
         setExpiresAt(expires)
       } else if (savedTimeLeft) {
         setTimeLeft(parseInt(savedTimeLeft))
+      }
+      
+      if (savedPriceNotification) {
+        try {
+          const notification = JSON.parse(savedPriceNotification)
+          setPriceUpdateNotification(notification)
+          setFormData(prev => ({ ...prev, price: notification.newPrice }))
+        } catch (e) {}
       }
     } else if (savedOrderId && savedOrderStatus === 'completed') {
       setShowThankYouModal(true)
@@ -221,6 +238,9 @@ export default function PlateRiders() {
       if (formData.customerPhone) localStorage.setItem('customer_phone', formData.customerPhone)
       if (expiresAt) localStorage.setItem('order_expires_at', expiresAt.toISOString())
       localStorage.setItem('order_time_left', timeLeft.toString())
+      if (priceUpdateNotification.show) {
+        localStorage.setItem('price_notification', JSON.stringify(priceUpdateNotification))
+      }
     } else {
       localStorage.removeItem('active_order_id')
       localStorage.removeItem('active_order_status')
@@ -228,8 +248,9 @@ export default function PlateRiders() {
       localStorage.removeItem('active_rider_id')
       localStorage.removeItem('order_expires_at')
       localStorage.removeItem('order_time_left')
+      localStorage.removeItem('price_notification')
     }
-  }, [orderId, orderStatus, selectedRider, customerLocation, formData, expiresAt, timeLeft])
+  }, [orderId, orderStatus, selectedRider, customerLocation, formData, expiresAt, timeLeft, priceUpdateNotification])
 
   // Timer com persistência
   useEffect(() => {
@@ -247,6 +268,7 @@ export default function PlateRiders() {
               setOrderId(null)
               localStorage.removeItem('active_order_id')
               localStorage.removeItem('active_order_status')
+              localStorage.removeItem('price_notification')
             }
             return 0
           }
@@ -267,53 +289,76 @@ export default function PlateRiders() {
     console.log('📡 Iniciando subscription para pedido:', orderId)
 
     const fetchCurrentOrder = async () => {
-      const { data } = await supabase
-        .from('orders')
-        .select('status, rider_location, expires_at, price, price_updated_by_rider, original_price, price_change_reason')
-        .eq('id', orderId)
-        .single()
-      
-      if (data) {
-        console.log('📦 Status atual do pedido:', data.status)
-        if (data.expires_at && !expiresAt) {
-          const expires = new Date(data.expires_at)
-          const now = new Date()
-          const diffSeconds = Math.max(0, Math.floor((expires.getTime() - now.getTime()) / 1000))
-          setTimeLeft(diffSeconds)
-          setExpiresAt(expires)
-        }
-        if (data.status === 'accepted' && orderStatus !== 'accepted') {
-          setOrderStatus('accepted')
-          setShowWaitingModal(false)
-          setShowMap(true)
-          if (data.rider_location) {
-            try {
-              const location = JSON.parse(data.rider_location)
-              setRiderLocation(location)
-            } catch (e) {}
-          }
-        } else if (data.status === 'completed' && orderStatus !== 'completed') {
-          setOrderStatus('completed')
-          setShowMap(false)
-          setShowThankYouModal(true)
+      try {
+        const { data, error } = await supabase
+          .from('orders')
+          .select('status, rider_location, expires_at, price, price_updated_by_rider, original_price, price_change_reason, rider_id')
+          .eq('id', orderId)
+          .single()
+        
+        if (error) {
+          console.error('Erro ao buscar pedido:', error)
+          return
         }
         
-        // Verificar se o preço foi alterado
-        if (data.price_updated_by_rider && data.price !== formData.price) {
-          setPriceUpdateNotification({
-            show: true,
-            newPrice: data.price,
-            riderName: selectedRider?.name || 'Motoqueiro',
-            reason: data.price_change_reason || 'Ajuste de preço',
-            originalPrice: data.original_price || formData.price
-          })
-          setFormData(prev => ({ ...prev, price: data.price }))
+        if (data) {
+          console.log('📦 Status atual do pedido:', data.status)
+          
+          if (data.expires_at && !expiresAt) {
+            const expires = new Date(data.expires_at)
+            const now = new Date()
+            const diffSeconds = Math.max(0, Math.floor((expires.getTime() - now.getTime()) / 1000))
+            setTimeLeft(diffSeconds)
+            setExpiresAt(expires)
+          }
+          
+          // Verificar alteração de preço
+          if (data.price_updated_by_rider && data.price !== formData.price) {
+            console.log('💰 Preço alterado detectado na carga inicial!')
+            const notification = {
+              show: true,
+              newPrice: data.price,
+              riderName: selectedRider?.name || 'Motoqueiro',
+              reason: data.price_change_reason || 'Ajuste de preço',
+              originalPrice: data.original_price || formData.price,
+              timestamp: new Date().toISOString()
+            }
+            setPriceUpdateNotification(notification)
+            setFormData(prev => ({ ...prev, price: data.price }))
+            
+            // Mostrar alerta
+            setTimeout(() => {
+              alert(`💰 O motoqueiro alterou o preço da corrida!\n\n` +
+                `Preço anterior: ${(data.original_price || formData.price).toLocaleString()} Kz\n` +
+                `Novo preço: ${data.price.toLocaleString()} Kz\n` +
+                `Motivo: ${data.price_change_reason || 'Ajuste de preço'}`)
+            }, 500)
+          }
+          
+          if (data.status === 'accepted' && orderStatus !== 'accepted') {
+            setOrderStatus('accepted')
+            setShowWaitingModal(false)
+            setShowMap(true)
+            if (data.rider_location) {
+              try {
+                const location = JSON.parse(data.rider_location)
+                setRiderLocation(location)
+              } catch (e) {}
+            }
+          } else if (data.status === 'completed' && orderStatus !== 'completed') {
+            setOrderStatus('completed')
+            setShowMap(false)
+            setShowThankYouModal(true)
+          }
         }
+      } catch (error) {
+        console.error('Erro ao buscar pedido:', error)
       }
     }
     
     fetchCurrentOrder()
 
+    // Subscription para mudanças em tempo real
     const subscription = supabase
       .channel(`order_updates_${orderId}`)
       .on(
@@ -332,20 +377,30 @@ export default function PlateRiders() {
             id: orderId, 
             novoStatus: newData.status, 
             statusAnterior: orderStatus,
-            priceChanged: newData.price !== oldData.price
+            priceChanged: newData.price !== oldData.price,
+            newPrice: newData.price,
+            oldPrice: oldData.price,
+            priceUpdatedByRider: newData.price_updated_by_rider
           })
           
-          // Verificar alteração de preço
+          // 🔥 VERIFICAR ALTERAÇÃO DE PREÇO
           if (newData.price_updated_by_rider && newData.price !== oldData.price) {
-            console.log('💰 Preço alterado pelo motoqueiro!')
-            setPriceUpdateNotification({
+            console.log('💰 PREÇO ALTERADO PELO MOTOQUEIRO!')
+            console.log('Novo preço:', newData.price)
+            console.log('Preço antigo:', oldData.price)
+            
+            const notification = {
               show: true,
               newPrice: newData.price,
               riderName: selectedRider?.name || 'Motoqueiro',
               reason: newData.price_change_reason || 'Ajuste de preço',
-              originalPrice: oldData.price || formData.price
-            })
+              originalPrice: oldData.price || formData.price,
+              timestamp: new Date().toISOString()
+            }
+            
+            setPriceUpdateNotification(notification)
             setFormData(prev => ({ ...prev, price: newData.price }))
+            setIsCheckingPrice(true)
             
             // Mostrar alerta para o cliente
             alert(`💰 O motoqueiro ${selectedRider?.name || 'Motoqueiro'} alterou o preço da corrida!\n\n` +
@@ -353,35 +408,41 @@ export default function PlateRiders() {
               `Novo preço: ${newData.price.toLocaleString()} Kz\n` +
               `Motivo: ${newData.price_change_reason || 'Ajuste de preço'}\n\n` +
               `O novo valor já foi atualizado.`)
+            
+            setTimeout(() => setIsCheckingPrice(false), 1000)
           }
           
-          setOrderStatus(newData.status)
-          localStorage.setItem('active_order_status', newData.status)
-          
-          if (newData.status === 'accepted') {
-            console.log('✅ Pedido ACEITO! Fechando modal e abrindo mapa...')
-            setShowWaitingModal(false)
-            setShowMap(true)
+          // Verificar mudança de status
+          if (newData.status !== oldData.status) {
+            setOrderStatus(newData.status)
+            localStorage.setItem('active_order_status', newData.status)
             
-            if (newData.rider_location) {
-              try {
-                const location = JSON.parse(newData.rider_location)
-                setRiderLocation(location)
-              } catch (e) {
-                console.error('Erro ao parsear localização:', e)
+            if (newData.status === 'accepted') {
+              console.log('✅ Pedido ACEITO! Fechando modal e abrindo mapa...')
+              setShowWaitingModal(false)
+              setShowMap(true)
+              
+              if (newData.rider_location) {
+                try {
+                  const location = JSON.parse(newData.rider_location)
+                  setRiderLocation(location)
+                } catch (e) {
+                  console.error('Erro ao parsear localização:', e)
+                }
               }
+            } else if (newData.status === 'cancelled') {
+              console.log('❌ Pedido CANCELADO!')
+              setShowWaitingModal(false)
+              alert('❌ O pedido foi cancelado pelo motoqueiro.')
+              setOrderId(null)
+              localStorage.removeItem('active_order_id')
+              localStorage.removeItem('active_order_status')
+              localStorage.removeItem('price_notification')
+            } else if (newData.status === 'completed') {
+              console.log('🎉 Pedido CONCLUÍDO! Mostrando modal de agradecimento...')
+              setShowMap(false)
+              setShowThankYouModal(true)
             }
-          } else if (newData.status === 'cancelled') {
-            console.log('❌ Pedido CANCELADO!')
-            setShowWaitingModal(false)
-            alert('❌ O pedido foi cancelado pelo motoqueiro.')
-            setOrderId(null)
-            localStorage.removeItem('active_order_id')
-            localStorage.removeItem('active_order_status')
-          } else if (newData.status === 'completed') {
-            console.log('🎉 Pedido CONCLUÍDO! Mostrando modal de agradecimento...')
-            setShowMap(false)
-            setShowThankYouModal(true)
           }
         }
       )
@@ -393,7 +454,7 @@ export default function PlateRiders() {
       console.log('📡 Removendo subscription para pedido:', orderId)
       subscription.unsubscribe()
     }
-  }, [orderId, orderStatus, expiresAt, selectedRider])
+  }, [orderId, orderStatus, expiresAt, selectedRider, formData.price])
 
   // Subscription para localização do motoqueiro
   useEffect(() => {
@@ -502,6 +563,7 @@ export default function PlateRiders() {
         pickup_address: formData.pickupAddress,
         dropoff_address: formData.dropoffAddress,
         price: formData.price,
+        original_price: formData.price,
         distance_km: calculatedDistance,
         status: orderType === 'call' ? 'pending_call' : 'pending',
         is_call_order: orderType === 'call',
@@ -510,8 +572,7 @@ export default function PlateRiders() {
         created_at: new Date().toISOString(),
         customer_lat: customerLat,
         customer_lng: customerLng,
-        price_updated_by_rider: false,
-        original_price: formData.price
+        price_updated_by_rider: false
       })
       .select()
       .single()
@@ -532,6 +593,15 @@ export default function PlateRiders() {
       } else {
         setTimeLeft(900)
         setShowWaitingModal(true)
+        // Resetar notificação de preço
+        setPriceUpdateNotification({
+          show: false,
+          newPrice: 0,
+          riderName: '',
+          reason: '',
+          originalPrice: 0,
+          timestamp: ''
+        })
       }
     }
   }
@@ -555,6 +625,7 @@ export default function PlateRiders() {
       localStorage.removeItem('active_rider_id')
       localStorage.removeItem('order_expires_at')
       localStorage.removeItem('order_time_left')
+      localStorage.removeItem('price_notification')
       
       setShowThankYouModal(false)
       router.push('/')
@@ -751,6 +822,7 @@ export default function PlateRiders() {
               setShowCallButtons(false)
               localStorage.removeItem('active_order_id')
               localStorage.removeItem('active_order_status')
+              localStorage.removeItem('price_notification')
               router.push('/')
             }} style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#6b7280', background: 'none', border: 'none', cursor: 'pointer', marginBottom: isMobile ? '12px' : '16px', fontSize: isMobile ? '13px' : '14px' }}>
               <ArrowLeft size={18} />
@@ -985,6 +1057,13 @@ export default function PlateRiders() {
                     </div>
                   )}
                 </div>
+                {priceUpdateNotification.show && priceUpdateNotification.reason && (
+                  <div style={{ marginTop: '8px', padding: '8px', background: '#fef3c7', borderRadius: '8px' }}>
+                    <p style={{ fontSize: '11px', color: '#92400e' }}>
+                      📝 Motivo: {priceUpdateNotification.reason}
+                    </p>
+                  </div>
+                )}
               </div>
               
               <div style={{ marginTop: '16px' }}>
@@ -1060,6 +1139,7 @@ export default function PlateRiders() {
               setShowCallButtons(false)
               localStorage.removeItem('active_order_id')
               localStorage.removeItem('active_order_status')
+              localStorage.removeItem('price_notification')
               router.push('/')
             }} style={{ background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer', fontSize: isMobile ? '13px' : '14px', padding: '12px' }}>
               ← Ir para página inicial
@@ -1081,6 +1161,7 @@ export default function PlateRiders() {
     )
   }
 
+  // MODAL DE ESPERA - ATUALIZADO COM NOTIFICAÇÃO DE PREÇO
   if (showWaitingModal) {
     const progressPercent = (timeLeft / 900) * 100
     
@@ -1126,32 +1207,51 @@ export default function PlateRiders() {
               </strong>
             </p>
             
+            {/* NOTIFICAÇÃO DE PREÇO ATUALIZADO - DESTAQUE */}
             {priceUpdateNotification.show && (
               <div style={{ 
-                marginTop: '12px', 
-                padding: '12px', 
+                marginTop: '16px', 
+                padding: '16px', 
                 backgroundColor: '#fef3c7', 
-                borderRadius: '12px',
-                border: '1px solid #fde68a'
+                borderRadius: '16px',
+                border: '2px solid #f59e0b',
+                animation: 'slideIn 0.5s ease, pulseGlow 2s ease infinite',
+                boxShadow: '0 4px 12px rgba(245, 158, 11, 0.3)'
               }}>
-                <p style={{ fontSize: '13px', color: '#92400e' }}>
-                  <AlertCircle size={14} style={{ display: 'inline', marginRight: '6px' }} />
-                  <strong>Preço atualizado:</strong> {priceUpdateNotification.newPrice.toLocaleString()} Kz
-                  {priceUpdateNotification.originalPrice > 0 && priceUpdateNotification.originalPrice !== priceUpdateNotification.newPrice && (
-                    <span style={{ display: 'block', fontSize: '11px', color: '#dc2626', textDecoration: 'line-through' }}>
-                      Antes: {priceUpdateNotification.originalPrice.toLocaleString()} Kz
-                    </span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                  <AlertCircle size={18} color="#d97706" />
+                  <span style={{ fontSize: '14px', fontWeight: 'bold', color: '#92400e' }}>
+                    💰 Preço Atualizado!
+                  </span>
+                  {isCheckingPrice && (
+                    <RefreshCw size={14} color="#d97706" style={{ animation: 'spin 1s linear infinite' }} />
                   )}
-                  {priceUpdateNotification.reason && (
-                    <span style={{ display: 'block', fontSize: '12px', marginTop: '4px', color: '#78350f' }}>
-                      📝 Motivo: {priceUpdateNotification.reason}
-                    </span>
-                  )}
+                </div>
+                
+                <p style={{ fontSize: '24px', fontWeight: 'bold', color: '#d97706', marginBottom: '4px' }}>
+                  {priceUpdateNotification.newPrice.toLocaleString()} Kz
+                </p>
+                
+                {priceUpdateNotification.originalPrice > 0 && priceUpdateNotification.originalPrice !== priceUpdateNotification.newPrice && (
+                  <p style={{ fontSize: '14px', color: '#dc2626', textDecoration: 'line-through', marginBottom: '4px' }}>
+                    Antes: {priceUpdateNotification.originalPrice.toLocaleString()} Kz
+                  </p>
+                )}
+                
+                {priceUpdateNotification.reason && (
+                  <p style={{ fontSize: '13px', color: '#78350f', marginTop: '4px', background: 'white', padding: '8px', borderRadius: '8px' }}>
+                    📝 {priceUpdateNotification.reason}
+                  </p>
+                )}
+                
+                <p style={{ fontSize: '11px', color: '#92400e', marginTop: '8px' }}>
+                  ✅ O novo valor já está atualizado no sistema
                 </p>
               </div>
             )}
           </div>
 
+          {/* CONTAGEM REGRESSIVA */}
           <div style={{ 
             position: 'relative', 
             width: isMobile ? '120px' : '140px', 
@@ -1223,6 +1323,7 @@ export default function PlateRiders() {
                 localStorage.removeItem('active_rider_id')
                 localStorage.removeItem('order_expires_at')
                 localStorage.removeItem('order_time_left')
+                localStorage.removeItem('price_notification')
               }
             }}
             style={{ 
@@ -1348,7 +1449,7 @@ export default function PlateRiders() {
         )}
       </div>
 
-      {/* Formulário de Pedido com Calculadora de Preço */}
+      {/* Formulário de Pedido */}
       {showForm && selectedRider && (
         <div style={styles.modalOverlay} onClick={() => setShowForm(false)}>
           <div style={styles.modalContent} onClick={(e) => e.stopPropagation()}>
@@ -1790,6 +1891,24 @@ export default function PlateRiders() {
         @keyframes pulse {
           0%, 100% { opacity: 1; }
           50% { opacity: 0.5; }
+        }
+        @keyframes slideIn {
+          from {
+            opacity: 0;
+            transform: translateY(-20px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+        @keyframes pulseGlow {
+          0%, 100% { 
+            box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);
+          }
+          50% { 
+            box-shadow: 0 4px 24px rgba(245, 158, 11, 0.6);
+          }
         }
         @media (max-width: 768px) {
           input, button {
