@@ -7,6 +7,7 @@ import {
   CheckCircle, ArrowLeft
 } from 'lucide-react'
 import Link from 'next/link'
+import RideNegotiationModal from '@/components/RideNegotiationModal'
 
 type Provincia = {
   id: string
@@ -26,6 +27,10 @@ export default function Home() {
   const [favorites, setFavorites] = useState<string[]>([])
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [isMobile, setIsMobile] = useState(false)
+  
+  // Estado para Modal de Negociação de Corrida
+  const [showNegotiationModal, setShowNegotiationModal] = useState(false)
+  const [selectedRiderForRide, setSelectedRiderForRide] = useState<any>(null)
   
   // Estados para localização
   const [showLocationModal, setShowLocationModal] = useState(false)

@@ -1,4 +1,6 @@
 // app/layout.tsx
+import ChatWidget from '@/components/ChatWidget'
+
 export const metadata = {
   title: 'MeuPiloto!',
   description: 'Sua corrida com segurança - Plataforma de transporte por moto',

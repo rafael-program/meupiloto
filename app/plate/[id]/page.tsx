@@ -357,6 +357,7 @@ export default function PlateRiders() {
     }
     
     fetchCurrentOrder()
+    const pollTimer = setInterval(fetchCurrentOrder, 2500)
 
     // Subscription para mudanças em tempo real
     const subscription = supabase
@@ -386,8 +387,6 @@ export default function PlateRiders() {
           // 🔥 VERIFICAR ALTERAÇÃO DE PREÇO
           if (newData.price_updated_by_rider && newData.price !== oldData.price) {
             console.log('💰 PREÇO ALTERADO PELO MOTOQUEIRO!')
-            console.log('Novo preço:', newData.price)
-            console.log('Preço antigo:', oldData.price)
             
             const notification = {
               show: true,
@@ -401,14 +400,6 @@ export default function PlateRiders() {
             setPriceUpdateNotification(notification)
             setFormData(prev => ({ ...prev, price: newData.price }))
             setIsCheckingPrice(true)
-            
-            // Mostrar alerta para o cliente
-            alert(`💰 O motoqueiro ${selectedRider?.name || 'Motoqueiro'} alterou o preço da corrida!\n\n` +
-              `Preço anterior: ${(oldData.price || 0).toLocaleString()} Kz\n` +
-              `Novo preço: ${newData.price.toLocaleString()} Kz\n` +
-              `Motivo: ${newData.price_change_reason || 'Ajuste de preço'}\n\n` +
-              `O novo valor já foi atualizado.`)
-            
             setTimeout(() => setIsCheckingPrice(false), 1000)
           }
           
@@ -451,7 +442,8 @@ export default function PlateRiders() {
       })
 
     return () => {
-      console.log('📡 Removendo subscription para pedido:', orderId)
+      console.log('📡 Removendo subscription e polling para pedido:', orderId)
+      clearInterval(pollTimer)
       subscription.unsubscribe()
     }
   }, [orderId, orderStatus, expiresAt, selectedRider, formData.price])
@@ -1207,139 +1199,195 @@ export default function PlateRiders() {
               </strong>
             </p>
             
-            {/* NOTIFICAÇÃO DE PREÇO ATUALIZADO - DESTAQUE */}
-            {priceUpdateNotification.show && (
+            {/* NOTIFICAÇÃO DE PREÇO ATUALIZADO - ALERTA & BOTÕES DE ACEITAÇÃO (SIM / CANCELAR) */}
+            {priceUpdateNotification.show ? (
               <div style={{ 
                 marginTop: '16px', 
-                padding: '16px', 
-                backgroundColor: '#fef3c7', 
-                borderRadius: '16px',
+                padding: '20px', 
+                backgroundColor: '#fffbeb', 
+                borderRadius: '20px',
                 border: '2px solid #f59e0b',
-                animation: 'slideIn 0.5s ease, pulseGlow 2s ease infinite',
-                boxShadow: '0 4px 12px rgba(245, 158, 11, 0.3)'
+                animation: 'scaleIn 0.3s ease-out',
+                boxShadow: '0 8px 20px rgba(245, 158, 11, 0.25)',
+                textAlign: 'center'
               }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-                  <AlertCircle size={18} color="#d97706" />
-                  <span style={{ fontSize: '14px', fontWeight: 'bold', color: '#92400e' }}>
-                    💰 Preço Atualizado!
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'center', marginBottom: '8px' }}>
+                  <AlertCircle size={24} color="#d97706" />
+                  <span style={{ fontSize: '16px', fontWeight: 'bold', color: '#92400e' }}>
+                    ⚠️ O Motoqueiro Alterou o Preço!
                   </span>
-                  {isCheckingPrice && (
-                    <RefreshCw size={14} color="#d97706" style={{ animation: 'spin 1s linear infinite' }} />
-                  )}
                 </div>
-                
-                <p style={{ fontSize: '24px', fontWeight: 'bold', color: '#d97706', marginBottom: '4px' }}>
-                  {priceUpdateNotification.newPrice.toLocaleString()} Kz
+
+                <p style={{ fontSize: isMobile ? '13px' : '15px', color: '#374151', marginBottom: '12px', lineHeight: '1.5' }}>
+                  O motoqueiro <strong>{priceUpdateNotification.riderName || selectedRider?.name || 'Motoqueiro'}</strong> alterou o valor da corrida.<br/>
+                  Vais pagar <strong style={{ color: '#d97706', fontSize: isMobile ? '18px' : '20px' }}>{priceUpdateNotification.newPrice.toLocaleString()} Kz</strong>
+                  {priceUpdateNotification.reason && (
+                    <span> pelo motivo: <em style={{ color: '#78350f' }}>"{priceUpdateNotification.reason}"</em></span>
+                  )}.
                 </p>
-                
+
                 {priceUpdateNotification.originalPrice > 0 && priceUpdateNotification.originalPrice !== priceUpdateNotification.newPrice && (
-                  <p style={{ fontSize: '14px', color: '#dc2626', textDecoration: 'line-through', marginBottom: '4px' }}>
-                    Antes: {priceUpdateNotification.originalPrice.toLocaleString()} Kz
+                  <p style={{ fontSize: '12px', color: '#dc2626', textDecoration: 'line-through', marginBottom: '12px' }}>
+                    Preço anterior: {priceUpdateNotification.originalPrice.toLocaleString()} Kz
                   </p>
                 )}
-                
-                {priceUpdateNotification.reason && (
-                  <p style={{ fontSize: '13px', color: '#78350f', marginTop: '4px', background: 'white', padding: '8px', borderRadius: '8px' }}>
-                    📝 {priceUpdateNotification.reason}
-                  </p>
-                )}
-                
-                <p style={{ fontSize: '11px', color: '#92400e', marginTop: '8px' }}>
-                  ✅ O novo valor já está atualizado no sistema
+
+                <p style={{ fontSize: '13px', fontWeight: 600, color: '#1f2937', marginBottom: '16px' }}>
+                  Queres continuar com o pedido por {priceUpdateNotification.newPrice.toLocaleString()} Kz?
                 </p>
+
+                {/* BOTÕES: SIM (ACEITAR) E CANCELAR */}
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  <button
+                    onClick={async () => {
+                      if (confirm('Tem certeza que deseja cancelar o pedido?')) {
+                        if (orderId) {
+                          await supabase.from('orders').update({ status: 'cancelled' }).eq('id', orderId)
+                        }
+                        setShowWaitingModal(false)
+                        setOrderId(null)
+                        setPriceUpdateNotification({ show: false, newPrice: 0, riderName: '', reason: '', originalPrice: 0, timestamp: '' })
+                        localStorage.removeItem('active_order_id')
+                        localStorage.removeItem('active_order_status')
+                        localStorage.removeItem('price_notification')
+                      }
+                    }}
+                    style={{
+                      flex: 1,
+                      padding: '12px',
+                      backgroundColor: '#ef4444',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '12px',
+                      fontWeight: 'bold',
+                      fontSize: '14px',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Cancelar Pedido
+                  </button>
+
+                  <button
+                    onClick={async () => {
+                      setFormData(prev => ({ ...prev, price: priceUpdateNotification.newPrice }))
+                      if (orderId) {
+                        await supabase.from('orders').update({ price: priceUpdateNotification.newPrice, customer_accepted_price: true }).eq('id', orderId)
+                      }
+                      setPriceUpdateNotification(prev => ({ ...prev, show: false }))
+                    }}
+                    style={{
+                      flex: 1,
+                      padding: '12px',
+                      background: 'linear-gradient(135deg, #10b981, #059669)',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '12px',
+                      fontWeight: 'bold',
+                      fontSize: '14px',
+                      cursor: 'pointer',
+                      boxShadow: '0 4px 12px rgba(16, 185, 129, 0.3)'
+                    }}
+                  >
+                    Sim, Continuar!
+                  </button>
+                </div>
               </div>
-            )}
+            ) : null}
           </div>
 
-          {/* CONTAGEM REGRESSIVA */}
-          <div style={{ 
-            position: 'relative', 
-            width: isMobile ? '120px' : '140px', 
-            height: isMobile ? '120px' : '140px', 
-            margin: '0 auto 20px' 
-          }}>
-            <svg style={{ transform: 'rotate(-90deg)', width: '100%', height: '100%' }}>
-              <circle cx="50%" cy="50%" r="45%" fill="none" stroke="#e5e7eb" strokeWidth="8" />
-              <circle
-                cx="50%"
-                cy="50%"
-                r="45%"
-                fill="none"
-                stroke={timeLeft < 300 ? '#ef4444' : '#f59e0b'}
-                strokeWidth="8"
-                strokeDasharray={`${2 * Math.PI * 45}px`}
-                strokeDashoffset={`${2 * Math.PI * 45 * (1 - (timeLeft / 900))}px`}
-                style={{ transition: 'stroke-dashoffset 1s linear' }}
-              />
-            </svg>
-            <div style={{ 
-              position: 'absolute', 
-              top: '50%', 
-              left: '50%', 
-              transform: 'translate(-50%, -50%)', 
-              textAlign: 'center' 
-            }}>
-              <p style={{ fontSize: isMobile ? '28px' : '32px', fontWeight: 'bold', color: timeLeft < 300 ? '#ef4444' : '#f59e0b', fontFamily: 'monospace' }}>
-                {formatTime(timeLeft)}
-              </p>
-              <p style={{ fontSize: '10px', color: '#6b7280', marginTop: '4px' }}>tempo restante</p>
-            </div>
-          </div>
-
-          <div style={{ 
-            backgroundColor: timeLeft < 300 ? '#fee2e2' : '#fef3c7', 
-            borderRadius: '16px', 
-            padding: '16px', 
-            marginBottom: '20px' 
-          }}>
-            <p style={{ fontSize: '13px', color: timeLeft < 300 ? '#991b1b' : '#92400e', display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'center' }}>
-              <Clock size={16} />
-              {timeLeft < 300 ? '⏰ Tempo quase esgotado!' : 'Aguardando confirmação do motoqueiro'}
-            </p>
-            <div style={{ 
-              height: '4px', 
-              backgroundColor: timeLeft < 300 ? '#fecaca' : '#fde68a', 
-              borderRadius: '2px', 
-              overflow: 'hidden',
-              marginTop: '8px'
-            }}>
+          {/* CONTAGEM REGRESSIVA E STATUS DE ESPERA */}
+          {!priceUpdateNotification.show && (
+            <>
               <div style={{ 
-                width: `${(timeLeft / 900) * 100}%`, 
-                height: '100%', 
-                backgroundColor: timeLeft < 300 ? '#ef4444' : '#f59e0b',
-                transition: 'width 1s linear' 
-              }} />
-            </div>
-          </div>
+                position: 'relative', 
+                width: isMobile ? '120px' : '140px', 
+                height: isMobile ? '120px' : '140px', 
+                margin: '0 auto 20px' 
+              }}>
+                <svg style={{ transform: 'rotate(-90deg)', width: '100%', height: '100%' }}>
+                  <circle cx="50%" cy="50%" r="45%" fill="none" stroke="#e5e7eb" strokeWidth="8" />
+                  <circle
+                    cx="50%"
+                    cy="50%"
+                    r="45%"
+                    fill="none"
+                    stroke={timeLeft < 300 ? '#ef4444' : '#f59e0b'}
+                    strokeWidth="8"
+                    strokeDasharray={`${2 * Math.PI * 45}px`}
+                    strokeDashoffset={`${2 * Math.PI * 45 * (1 - (timeLeft / 900))}px`}
+                    style={{ transition: 'stroke-dashoffset 1s linear' }}
+                  />
+                </svg>
+                <div style={{ 
+                  position: 'absolute', 
+                  top: '50%', 
+                  left: '50%', 
+                  transform: 'translate(-50%, -50%)', 
+                  textAlign: 'center' 
+                }}>
+                  <p style={{ fontSize: isMobile ? '28px' : '32px', fontWeight: 'bold', color: timeLeft < 300 ? '#ef4444' : '#f59e0b', fontFamily: 'monospace' }}>
+                    {formatTime(timeLeft)}
+                  </p>
+                  <p style={{ fontSize: '10px', color: '#6b7280', marginTop: '4px' }}>tempo restante</p>
+                </div>
+              </div>
 
-          <button 
-            onClick={() => {
-              if (confirm('Tem certeza que deseja cancelar o pedido?')) {
-                setShowWaitingModal(false)
-                setOrderId(null)
-                localStorage.removeItem('active_order_id')
-                localStorage.removeItem('active_order_status')
-                localStorage.removeItem('active_order_rider')
-                localStorage.removeItem('active_rider_id')
-                localStorage.removeItem('order_expires_at')
-                localStorage.removeItem('order_time_left')
-                localStorage.removeItem('price_notification')
-              }
-            }}
-            style={{ 
-              width: '100%', 
-              backgroundColor: '#ef4444', 
-              color: 'white', 
-              padding: '14px', 
-              borderRadius: '12px', 
-              border: 'none', 
-              fontWeight: 'bold', 
-              cursor: 'pointer', 
-              fontSize: isMobile ? '14px' : '16px' 
-            }}
-          >
-            Cancelar Pedido
-          </button>
+              <div style={{ 
+                backgroundColor: timeLeft < 300 ? '#fee2e2' : '#fef3c7', 
+                borderRadius: '16px', 
+                padding: '16px', 
+                marginBottom: '20px' 
+              }}>
+                <p style={{ fontSize: '13px', color: timeLeft < 300 ? '#991b1b' : '#92400e', display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'center' }}>
+                  <Clock size={16} />
+                  {timeLeft < 300 ? '⏰ Tempo quase esgotado!' : 'Motoqueiro a caminho...'}
+                </p>
+                <div style={{ 
+                  height: '4px', 
+                  backgroundColor: timeLeft < 300 ? '#fecaca' : '#fde68a', 
+                  borderRadius: '2px', 
+                  overflow: 'hidden',
+                  marginTop: '8px'
+                }}>
+                  <div style={{ 
+                    width: `${(timeLeft / 900) * 100}%`, 
+                    height: '100%', 
+                    backgroundColor: timeLeft < 300 ? '#ef4444' : '#f59e0b',
+                    transition: 'width 1s linear' 
+                  }} />
+                </div>
+              </div>
+
+              <button 
+                onClick={() => {
+                  if (confirm('Tem certeza que deseja cancelar o pedido?')) {
+                    setShowWaitingModal(false)
+                    setOrderId(null)
+                    localStorage.removeItem('active_order_id')
+                    localStorage.removeItem('active_order_status')
+                    localStorage.removeItem('active_order_rider')
+                    localStorage.removeItem('active_rider_id')
+                    localStorage.removeItem('order_expires_at')
+                    localStorage.removeItem('order_time_left')
+                    localStorage.removeItem('price_notification')
+                  }
+                }}
+                style={{ 
+                  width: '100%', 
+                  backgroundColor: '#ef4444', 
+                  color: 'white', 
+                  padding: '14px', 
+                  borderRadius: '12px', 
+                  border: 'none', 
+                  fontWeight: 'bold', 
+                  cursor: 'pointer', 
+                  fontSize: isMobile ? '14px' : '16px' 
+                }}
+              >
+                Cancelar Pedido
+              </button>
+            </>
+          )}
           
           <p style={{ fontSize: '10px', color: '#9ca3af', marginTop: '12px' }}>
             ⏱️ O pedido expira em {formatTime(timeLeft)}. Se o motoqueiro não aceitar, você pode tentar novamente.

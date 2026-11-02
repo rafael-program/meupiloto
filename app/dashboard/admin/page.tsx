@@ -453,31 +453,38 @@ export default function AdminDashboard() {
 
   // Funções de Atribuição de Placas
   const handleAssignPlates = async () => {
-    if (!selectedOperador || selectedPlates.size === 0) return
-    
-    setAssignLoading(true)
-    setAssignMessage(null)
-    
-    const results = []
-    for (const plateId of selectedPlates) {
-      const { error } = await supabase
-        .from('plates')
-        .update({ operador_id: selectedOperador, assigned_at: new Date().toISOString() })
-        .eq('id', plateId)
-      results.push(!error)
+  if (!selectedOperador || selectedPlates.size === 0) return
+  
+  setAssignLoading(true)
+  setAssignMessage(null)
+  
+  const results = []
+  let lastError = null;
+
+  for (const plateId of selectedPlates) {
+    const { error } = await supabase
+      .from('plates')
+      .update({ operador_id: selectedOperador, assigned_at: new Date().toISOString() })
+      .eq('id', plateId)
+      
+    if (error) {
+      lastError = error;
     }
-    
-    const successCount = results.filter(r => r).length
-    if (successCount > 0) {
-      setAssignMessage({ type: 'success', text: `${successCount} placa(s) atribuída(s) com sucesso!` })
-      setSelectedPlates(new Set())
-      loadAllData()
-      setTimeout(() => setAssignMessage(null), 3000)
-    } else {
-      setAssignMessage({ type: 'error', text: 'Erro ao atribuir placas' })
-    }
-    setAssignLoading(false)
+    results.push(!error)
   }
+  
+  const successCount = results.filter(r => r).length
+  if (successCount > 0) {
+    setAssignMessage({ type: 'success', text: `${successCount} placa(s) atribuída(s) com sucesso!` })
+    setSelectedPlates(new Set())
+    loadAllData()
+    setTimeout(() => setAssignMessage(null), 3000)
+  } else {
+    // 🔥 MOSTRAR O ERRO REAL SE FALHAR
+    setAssignMessage({ type: 'error', text: 'Erro ao atribuir placas: ' + (lastError?.message || 'Desconhecido') })
+  }
+  setAssignLoading(false)
+}
 
   const handleUnassignPlate = async (plateId: string, plateNumber: string) => {
     if (!confirm(`Remover atribuição da placa ${plateNumber}?`)) return

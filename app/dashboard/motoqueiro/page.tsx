@@ -134,18 +134,26 @@ export default function RiderDashboard() {
     }
 
     try {
-      const { error } = await supabase
+      // Tentar atualizar com todos os campos
+      let { error } = await supabase
         .from('orders')
         .update({ 
           price: newPrice,
           price_updated_by_rider: true,
           original_price: selectedOrderForPrice.price,
-          price_change_reason: priceReason || 'Ajuste de preço',
-          updated_at: new Date().toISOString()
+          price_change_reason: priceReason || 'Ajuste de preço'
         })
         .eq('id', selectedOrderForPrice.id)
 
-      if (error) throw error
+      // Se falhar devido a colunas ausentes, tentar atualizar apenas o preço
+      if (error) {
+        console.warn('Tentando fallback para atualizar apenas preço no Supabase...')
+        const fallback = await supabase
+          .from('orders')
+          .update({ price: newPrice })
+          .eq('id', selectedOrderForPrice.id)
+        if (fallback.error) throw fallback.error
+      }
 
       setPendingOrders(prev => prev.map(o => 
         o.id === selectedOrderForPrice.id 
@@ -166,6 +174,7 @@ export default function RiderDashboard() {
       
       alert('✅ Preço atualizado com sucesso! O cliente será notificado.')
     } catch (err) {
+      console.error('Erro ao atualizar preço:', err)
       alert('❌ Erro ao atualizar preço: ' + (err as Error).message)
     }
   }
@@ -467,20 +476,33 @@ export default function RiderDashboard() {
     startLocationTracking()
     
     try {
-      const { data, error } = await supabase.from('orders').update({ status: 'accepted' }).eq('id', order.id).eq('rider_id', rider.id).select()
-      if (error) throw error
-      if (!data || data.length === 0) throw new Error('Nenhum pedido atualizado')
+      const { error } = await supabase
+        .from('orders')
+        .update({ status: 'accepted', accepted_at: new Date().toISOString() })
+        .eq('id', order.id)
+
+      if (error) {
+        console.error('Erro ao aceitar pedido:', error)
+        alert('Erro ao aceitar pedido: ' + error.message)
+        return
+      }
+
       setPendingOrders(prev => prev.filter(o => o.id !== order.id))
       await addNotification('Pedido Aceito ✅', `Você aceitou a corrida de ${order.customer_name}`, 'success')
     } catch (err) {
-      alert('Erro ao aceitar pedido')
+      console.error('Erro geral ao aceitar:', err)
+      alert('Erro ao aceitar pedido: ' + (err as Error).message)
     }
   }
 
   const completeOrder = async (order: any) => {
     if (!rider?.id) return
     if (confirm(`✅ Confirmar conclusão da entrega para ${order.customer_name}?`)) {
-      const { error } = await supabase.from('orders').update({ status: 'completed' }).eq('id', order.id).eq('rider_id', rider.id)
+      const { error } = await supabase
+        .from('orders')
+        .update({ status: 'completed', completed_at: new Date().toISOString() })
+        .eq('id', order.id)
+
       if (!error) {
         setCompletedOrders(prev => prev.map(o => o.id === order.id ? { ...o, status: 'completed' } : o))
         setStats(prev => ({ ...prev, totalEarnings: prev.totalEarnings + (order.price || 0), totalRides: prev.totalRides + 1 }))
@@ -490,6 +512,8 @@ export default function RiderDashboard() {
         setSelectedOrder(null)
         setCustomerLocation(null)
         setRiderLocation(null)
+      } else {
+        alert('Erro ao concluir corrida: ' + error.message)
       }
     }
   }
@@ -497,7 +521,7 @@ export default function RiderDashboard() {
   const cancelOrder = async (order: any) => {
     if (!rider?.id) return
     if (confirm(`❌ Cancelar pedido de ${order.customer_name}?`)) {
-      await supabase.from('orders').update({ status: 'cancelled' }).eq('id', order.id).eq('rider_id', rider.id)
+      await supabase.from('orders').update({ status: 'cancelled' }).eq('id', order.id)
       setPendingOrders(prev => prev.filter(o => o.id !== order.id))
       await addNotification('Pedido Cancelado ❌', `Pedido de ${order.customer_name} foi cancelado`, 'alert')
       if (selectedOrder?.id === order.id) {
